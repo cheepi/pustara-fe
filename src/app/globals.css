@@ -1,0 +1,92 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400&family=Outfit:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ══════════════════════════════════════════
+   DARK MODE (default)
+══════════════════════════════════════════ */
+:root {
+  --bg:         #0D1829;
+  --surface:    #111F35;
+  --surface2:   #172944;
+  --border:     #1E3456;
+  --text:       #F0EDE8;
+  --muted:      #64748B;
+  --gold:       #C9A84C;
+  --gold-light: #E2C06A;
+}
+
+/* ══════════════════════════════════════════
+   LIGHT MODE
+══════════════════════════════════════════ */
+.light {
+  --bg:         #FAFAF8;
+  --surface:    #FFFFFF;
+  --surface2:   #F0EDE8;
+  --border:     #E8E4DC;
+  --text:       #1A1A2E;
+  --muted:      #6B7280;
+  --gold:       #C9A84C;
+  --gold-light: #E2C06A;
+}
+
+/* ══════════════════════════════════════════
+   BASE
+══════════════════════════════════════════ */
+@layer base {
+  * { box-sizing: border-box; }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-navy-500 rounded-full; }
+}
+
+/* ══════════════════════════════════════════
+   COMPONENT CLASSES
+══════════════════════════════════════════ */
+@layer components {
+  /* Card */
+  .p-card {
+    background-color: var(--surface);
+    border: 1px solid var(--border);
+    @apply rounded-2xl;
+  }
+
+  /* Input */
+  .p-input {
+    background-color: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    @apply w-full rounded-xl px-4 py-3 text-sm outline-none transition-all duration-200 focus:ring-2 focus:ring-gold/20;
+  }
+  .p-input::placeholder { color: var(--muted); }
+  .p-input:focus { border-color: var(--gold); }
+
+  /* Gold button */
+  .btn-gold {
+    @apply w-full py-3.5 rounded-xl font-semibold text-[#1a1000]
+           bg-gradient-to-r from-gold to-gold-light
+           transition-opacity duration-200 hover:opacity-90 active:scale-[0.98];
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    background-color: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    @apply w-full py-3.5 rounded-xl font-medium transition-all duration-200;
+  }
+  .btn-ghost:hover {
+    color: var(--text);
+    border-color: rgba(201,168,76,0.4);
+  }
+}
