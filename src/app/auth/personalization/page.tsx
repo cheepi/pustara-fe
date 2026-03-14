@@ -95,8 +95,8 @@ export default function PersonalizationPage() {
         </div>
 
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-xl font-bold text-white">Personalisasi PustarAI</h1>
-          <p className="text-slate-500 text-sm mt-1 leading-relaxed">
+          <h1 className="text-xl font-bold text-navy-800">Personalisasi PustarAI</h1>
+          <p className="text-slate-600 text-sm mt-1 leading-relaxed">
             Bantu sistem rekomendasi AI kami memberikan rekomendasi yang tepat untukmu
           </p>
         </motion.div>
@@ -122,7 +122,7 @@ export default function PersonalizationPage() {
         >
           {/* Gender */}
           <section>
-            <h2 className="font-semibold text-white text-sm mb-3">Jenis Kelamin</h2>
+            <h2 className="font-semibold text-navy-800 text-sm mb-3">Jenis Kelamin</h2>
             <div className="flex flex-col gap-2">
               {(['Laki-Laki', 'Perempuan', 'Tidak ingin diketahui'] as Gender[]).map(g => (
                 <RadioOption key={g} label={g} selected={gender === g} onSelect={() => setGender(g)}
@@ -133,7 +133,7 @@ export default function PersonalizationPage() {
 
           {/* Age */}
           <section>
-            <h2 className="font-semibold text-white text-sm mb-3">Umur</h2>
+            <h2 className="font-semibold text-navy-800 text-sm mb-3">Umur</h2>
             <div className="flex flex-col gap-2">
               {(['< 20 Tahun', '21 - 30 Tahun', '31 - 40 Tahun', '> 40 Tahun'] as AgeRange[]).map(a => (
                 <RadioOption key={a} label={a} selected={age === a} onSelect={() => setAge(a)} />
@@ -143,7 +143,7 @@ export default function PersonalizationPage() {
 
           {/* Genres */}
           <section>
-            <h2 className="font-semibold text-white text-sm mb-3">Genre Favorit</h2>
+            <h2 className="font-semibold text-navy-800 text-sm mb-3">Genre Favorit</h2>
             <div className="grid grid-cols-2 gap-2">
               {GENRES.map(g => (
                 <GenreChip key={g} label={g}
