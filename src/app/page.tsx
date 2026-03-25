@@ -11,14 +11,14 @@ export default function RootPage() {
 
   useEffect(() => {
     if (!loading && !user) {
-      // Belum login → ke catalog
       router.replace('/catalog');
     }
   }, [user, loading, router]);
 
   if (loading || !user) {
     return (
-      <div className="min-h-screen bg-navy-900 flex items-center justify-center">
+      // Pakai var(--bg) supaya loading screen ikut tema dark/light
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg)' }}>
         <div className="flex flex-col items-center gap-4">
           <ComboLogo />
           <div className="flex gap-1.5">

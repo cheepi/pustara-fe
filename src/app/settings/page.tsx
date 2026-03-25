@@ -1,5 +1,5 @@
 'use client';
-import { Moon, Sun, Monitor, ChevronRight, User, Bell, Shield, LogOut } from 'lucide-react';
+import { Moon, Sun, ChevronRight, User, Bell, Shield, LogOut } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
@@ -7,19 +7,19 @@ import { useAuthStore } from '@/store/authStore';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
-
-type ThemeOption = 'dark' | 'light';
+import type { ThemeOption } from '@/types/settings';
 
 const THEME_OPTIONS: { value: ThemeOption; label: string; icon: typeof Moon; desc: string }[] = [
-  { value: 'dark',  label: 'Gelap',  icon: Moon,    desc: 'Navy & gold — mode default' },
-  { value: 'light', label: 'Terang', icon: Sun,      desc: 'Parchment putih & hangat'  },
+  { value: 'dark',  label: 'Gelap',  icon: Moon, desc: 'Navy & gold — mode default'   },
+  { value: 'light', label: 'Terang', icon: Sun,  desc: 'Parchment putih & hangat'      },
 ];
 
 export default function SettingsPage() {
   const { theme, toggle } = useTheme();
-  const { user } = useAuthStore();
-  const router = useRouter();
+  const { user }          = useAuthStore();
+  const router            = useRouter();
 
   function handleThemeSelect(val: ThemeOption) {
     if (val !== theme) toggle();
@@ -45,13 +45,12 @@ export default function SettingsPage() {
         </motion.div>
 
         {/* ── TAMPILAN ── */}
-        <motion.section
-          className="mb-6"
+        <motion.section className="mb-6"
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-        >
+          transition={{ delay: 0.05 }}>
           <SectionLabel>Tampilan</SectionLabel>
-          <div className="rounded-2xl overflow-hidden" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
+          <div className="rounded-2xl overflow-hidden"
+               style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
             <div className="px-4 pt-4 pb-3">
               <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--muted)' }}>
                 Mode Warna
@@ -60,18 +59,12 @@ export default function SettingsPage() {
                 {THEME_OPTIONS.map(({ value, label, icon: Icon, desc }) => {
                   const active = theme === value;
                   return (
-                    <button
-                      key={value}
-                      onClick={() => handleThemeSelect(value)}
+                    <button key={value} onClick={() => handleThemeSelect(value)}
                       className={cn(
                         'relative flex flex-col items-start gap-2 p-3.5 rounded-xl border-2 transition-all text-left',
-                        active
-                          ? 'border-gold bg-gold/10'
-                          : 'border-transparent hover:border-gold/30'
+                        active ? 'border-gold bg-gold/10' : 'border-transparent hover:border-gold/30'
                       )}
-                      style={!active ? { background: 'var(--surface2)' } : undefined}
-                    >
-                      {/* Preview swatch */}
+                      style={!active ? { background: 'var(--surface2)' } : undefined}>
                       <div className={cn(
                         'w-full h-10 rounded-lg flex items-center justify-center',
                         value === 'dark' ? 'bg-navy-800' : 'bg-parchment'
@@ -87,9 +80,7 @@ export default function SettingsPage() {
                           {desc}
                         </p>
                       </div>
-                      {active && (
-                        <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-gold" />
-                      )}
+                      {active && <span className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-gold" />}
                     </button>
                   );
                 })}
@@ -99,11 +90,9 @@ export default function SettingsPage() {
         </motion.section>
 
         {/* ── AKUN ── */}
-        <motion.section
-          className="mb-6"
+        <motion.section className="mb-6"
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
+          transition={{ delay: 0.1 }}>
           <SectionLabel>Akun</SectionLabel>
           <div className="rounded-2xl overflow-hidden divide-y"
                style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderColor: 'var(--border)' }}>
@@ -126,18 +115,16 @@ export default function SettingsPage() {
               </div>
             )}
 
-            <SettingsRow icon={User} label="Profil Saya" />
-            <SettingsRow icon={Bell} label="Notifikasi" />
-            <SettingsRow icon={Shield} label="Privasi & Keamanan" />
+            <SettingsRow icon={User}   label="Profil Saya"        href="/profile"           />
+            <SettingsRow icon={Bell}   label="Notifikasi"         href="/settings/notifications" />
+            <SettingsRow icon={Shield} label="Privasi & Keamanan" href="/settings/privacy"   />
           </div>
         </motion.section>
 
         {/* ── TENTANG ── */}
-        <motion.section
-          className="mb-8"
+        <motion.section className="mb-8"
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
+          transition={{ delay: 0.15 }}>
           <SectionLabel>Tentang</SectionLabel>
           <div className="rounded-2xl overflow-hidden"
                style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
@@ -148,11 +135,9 @@ export default function SettingsPage() {
           </div>
         </motion.section>
 
-        {/* Logout */}
+        {/* ── LOGOUT ── */}
         {user && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
             <button onClick={handleLogout}
               className="w-full py-3.5 rounded-2xl text-sm font-semibold text-red-500
                          border border-red-500/20 hover:bg-red-500/10 transition-all active:scale-[0.98]">
@@ -176,15 +161,16 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function SettingsRow({ icon: Icon, label }: { icon: typeof User; label: string }) {
+function SettingsRow({ icon: Icon, label, href }: { icon: typeof User; label: string; href: string }) {
   return (
-    <button className="w-full flex items-center gap-3 px-4 py-3.5 hover:opacity-80 transition-opacity text-left">
+    <Link href={href}
+      className="w-full flex items-center gap-3 px-4 py-3.5 hover:opacity-80 transition-opacity text-left">
       <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
            style={{ background: 'var(--surface2)' }}>
         <Icon className="w-4 h-4" style={{ color: 'var(--muted)' }} />
       </div>
       <span className="flex-1 text-sm font-medium" style={{ color: 'var(--text)' }}>{label}</span>
       <ChevronRight className="w-4 h-4" style={{ color: 'var(--muted)' }} />
-    </button>
+    </Link>
   );
 }
