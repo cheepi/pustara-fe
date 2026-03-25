@@ -109,7 +109,7 @@ export default function Navbar() {
                 whileTap={{ scale: 0.92 }}
                 transition={{ type: 'spring', stiffness: 420, damping: 18 }}
               />
-              <Wordmark className="hidden md:block h-4 w-auto flex-shrink-0" />
+              <Wordmark isLight={isLight} className="hidden md:block h-4 w-auto flex-shrink-0" />
             </Link>
 
             {/* ── Desktop nav ───────────────────────────────────────────── */}

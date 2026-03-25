@@ -13,10 +13,7 @@ import { useAuthStore } from '@/store/authStore';
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Navbar from '@/components/layout/Navbar';
-
-// ── Types ──────────────────────────────────────────────────────────────────────
-type ToastType = 'success' | 'error' | 'info';
-interface Toast { id: number; msg: string; type: ToastType; }
+import type { Toast, ToastType } from '@/types/settings';
 
 // ── Toggle Switch ──────────────────────────────────────────────────────────────
 function Toggle({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }) {

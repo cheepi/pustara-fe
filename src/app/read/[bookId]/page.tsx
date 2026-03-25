@@ -12,19 +12,11 @@ import {
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import Link from 'next/link';
+import { fetchReaderBook } from '@/lib/reader';
+import type { ReaderBook } from '@/types/reader';
 
 // Setup pdf.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-
-// ── Dummy book data ───────────────────────────────────────────────────────────
-const DUMMY_BOOKS: Record<string, { title: string; author: string; dueDate: string; daysLeft: number; pdfUrl: string }> = {
-  'd1': { title: 'Laskar Pelangi',   author: 'Andrea Hirata',         dueDate: '18 Mar 2026', daysLeft: 0, pdfUrl: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/sample.pdf' },
-  'd2': { title: 'Bumi Manusia',     author: 'Pramoedya Ananta Toer', dueDate: '21 Mar 2026', daysLeft: 3, pdfUrl: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/sample.pdf' },
-  'd3': { title: 'Cantik Itu Luka',  author: 'Eka Kurniawan',         dueDate: '22 Mar 2026', daysLeft: 4, pdfUrl: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/sample.pdf' },
-  'd4': { title: 'Perahu Kertas',    author: 'Dee Lestari',           dueDate: '22 Mar 2026', daysLeft: 4, pdfUrl: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/sample.pdf' },
-  'd5': { title: 'Negeri 5 Menara',  author: 'Ahmad Fuadi',           dueDate: '23 Mar 2026', daysLeft: 5, pdfUrl: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/sample.pdf' },
-  'd6': { title: 'Ayah',             author: 'Andrea Hirata',         dueDate: '24 Mar 2026', daysLeft: 6, pdfUrl: 'https://www.w3.org/WAI/WCAG21/Techniques/pdf/sample.pdf' },
-};
 
 // ── Reader Page ───────────────────────────────────────────────────────────────
 export default function ReadPage() {
@@ -33,8 +25,15 @@ export default function ReadPage() {
   const { user }  = useAuthStore();
 
   const bookKey = params?.bookId as string ?? 'd1';
-  const book    = DUMMY_BOOKS[bookKey] ?? DUMMY_BOOKS['d1'];
+  const [book, setBook] = useState<ReaderBook | null>(null);
+  const [loadingBook, setLoadingBook] = useState(true);
   const userName = user?.displayName || user?.email || 'Pustara User';
+
+  useEffect(() => {
+    fetchReaderBook(bookKey)
+      .then(setBook)
+      .finally(() => setLoadingBook(false));
+  }, [bookKey]);
 
   // PDF state
   const [numPages,    setNumPages]    = useState<number>(0);
@@ -52,8 +51,13 @@ export default function ReadPage() {
   const pageInputRef   = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    if (!book) return;
     document.title = `Pustara | ${book.title}`;
-  }, [book.title]);
+  }, [book]);
+
+  if (loadingBook || !book) {
+    return <div className="flex h-screen items-center justify-center bg-[#1a1a1a] text-white/60">Memuat buku...</div>;
+  }
 
   // Reading timer
   useEffect(() => {

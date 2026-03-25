@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronLeft, ChevronRight, Star, BookOpen, ArrowRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Star, BookOpen, ArrowRight, CalendarRange } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -10,10 +10,12 @@ export interface PopularBook {
   title: string;
   author: string;
   coverId?: number;
+  coverUrl?: string;
   genre?: string[];
   desc?: string;
   year?: string;
   pages?: number;
+  avgRating?: number;
 }
 
 const RATINGS = [4.7, 4.9, 4.6, 4.8, 4.5, 4.7];
@@ -32,6 +34,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
   const desktopRef = useRef<HTMLDivElement>(null);
   const mobileRef  = useRef<HTMLDivElement>(null);
   const total = books.length;
+  const activeIndex = total > 0 ? active % total : 0;
 
   useEffect(() => {
     const handleResize = () => {
@@ -45,11 +48,17 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
     return () => obs.disconnect();
   }, []);
 
-  const prev = () => setActive(i => (i - 1 + total) % total);
-  const next = () => setActive(i => (i + 1) % total);
+  const prev = () => {
+    if (total <= 1) return;
+    setActive(i => (i - 1 + total) % total);
+  };
+  const next = () => {
+    if (total <= 1) return;
+    setActive(i => (i + 1) % total);
+  };
 
   function getPos(i: number) {
-    let d = i - active;
+    let d = i - activeIndex;
     if (d > total / 2)  d -= total;
     if (d < -total / 2) d += total;
     return d;
@@ -75,8 +84,18 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
 
   const arrowBg     = isLight ? 'bg-navy-100 hover:bg-navy-200 text-navy-600' : 'bg-white/10 hover:bg-white/20 text-white/70 hover:text-white';
   const dotInactive = isLight ? 'bg-navy-800/25' : 'bg-white/25';
-  const activeBook  = books[active];
-  const activeRating = RATINGS[active % RATINGS.length];
+  const activeBook  = books[activeIndex];
+  const activeRating = Number.isFinite(activeBook?.avgRating)
+    ? Number(activeBook.avgRating)
+    : RATINGS[activeIndex % RATINGS.length];
+
+  if (total === 0) {
+    return (
+      <div className="select-none px-4 py-8 rounded-2xl mx-4 text-center" style={{ color: 'var(--muted)' }}>
+        Belum ada bacaan populer saat ini.
+      </div>
+    );
+  }
 
   return (
     <div className="select-none">
@@ -92,16 +111,16 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
         {/* LEFT PANEL */}
         <div className="pr-6 flex justify-end">
           <AnimatePresence mode="wait">
-            <motion.div key={`left-${active}`} className="w-full"
+            <motion.div key={`left-${activeIndex}`} className="w-full"
               initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}>
 
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-6 h-6 bg-gold rounded-full flex items-center justify-center shadow-sm">
-                  <span className="text-white font-black text-[11px]">{active + 1}</span>
+                  <span className="text-white font-black text-[11px]">{activeIndex + 1}</span>
                 </div>
                 <span className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: 'var(--muted)' }}>
-                  Trending #{active + 1}
+                  Trending #{activeIndex + 1}
                 </span>
               </div>
 
@@ -143,7 +162,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
               const pos = getPos(i);
               const s = getStyle(pos);
               if (!s) return null;
-              const src = coverUrl(book.coverId, 'L');
+              const src = book.coverUrl || coverUrl(book.coverId, 'L');
               const isSide = pos !== 0;
               return (
                 <motion.div key={book.key} className="absolute cursor-pointer" style={{ zIndex: s.zIndex }}
@@ -175,7 +194,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
                     )}
                     {pos === 0 && (
                       <div className="absolute top-2.5 left-2.5 w-7 h-7 bg-gold rounded-full flex items-center justify-center shadow-lg">
-                        <span className="text-white font-black text-xs">{active + 1}</span>
+                        <span className="text-white font-black text-xs">{activeIndex + 1}</span>
                       </div>
                     )}
                   </div>
@@ -192,7 +211,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
             <div className="flex gap-1.5">
               {books.map((_, i) => (
                 <button key={i} onClick={() => setActive(i)}
-                  className={cn('rounded-full transition-all', i === active ? 'w-5 h-1.5 bg-gold' : `w-1.5 h-1.5 ${dotInactive}`)} />
+                  className={cn('rounded-full transition-all', i === activeIndex ? 'w-5 h-1.5 bg-gold' : `w-1.5 h-1.5 ${dotInactive}`)} />
               ))}
             </div>
             <button onClick={next} className={cn('p-1.5 rounded-full transition-all', arrowBg)}>
@@ -204,14 +223,22 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
         {/* RIGHT PANEL */}
         <div className="pl-6">
           <AnimatePresence mode="wait">
-            <motion.div key={`right-${active}`} className="w-full text-right"
+            <motion.div key={`right-${activeIndex}`} className="w-full text-right"
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}>
 
               {(activeBook.year || activeBook.pages) && (
                 <div className="flex items-center justify-end gap-3 mb-3">
-                  {activeBook.year && <span className="text-xs" style={{ color: 'var(--muted)' }}>📅 {activeBook.year}</span>}
-                  {activeBook.pages && <span className="text-xs" style={{ color: 'var(--muted)' }}>📄 {activeBook.pages} hal.</span>}
+                  {activeBook.year && (
+                    <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
+                      <CalendarRange className="w-4 h-4" /> {activeBook.year}
+                    </span>
+                  )}
+                  {activeBook.pages && (
+                    <span className="inline-flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
+                      <BookOpen className="w-4 h-4" /> {activeBook.pages} hal.
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -222,7 +249,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
               )}
 
               <div className="flex justify-end">
-                <Link href={`/book/${activeBook.key.replace('/works/', '')}`}
+                <Link href={`/book/${activeBook.key}`}
                 className={cn(
                   'inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all group',
                   isLight ? 'bg-navy-800 text-white hover:bg-navy-700' : 'bg-gold text-navy-900 hover:bg-gold-light'
@@ -251,7 +278,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
             const pos = getPos(i);
             const s = getStyle(pos);
             if (!s) return null;
-            const src = coverUrl(book.coverId, 'L');
+            const src = book.coverUrl || coverUrl(book.coverId, 'L');
             return (
               <motion.div key={book.key} className="absolute cursor-pointer" style={{ zIndex: s.zIndex }}
                 animate={{ x: s.translateX, scale: s.scale, opacity: s.opacity, rotateY: pos * -8 }}
@@ -281,7 +308,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
                   )}
                   {pos === 0 && (
                     <div className="absolute top-2.5 left-2.5 w-7 h-7 bg-gold rounded-full flex items-center justify-center shadow-lg">
-                      <span className="text-white font-black text-xs">{active + 1}</span>
+                      <span className="text-white font-black text-xs">{activeIndex + 1}</span>
                     </div>
                   )}
                 </div>
@@ -321,14 +348,14 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
         <div className="flex items-center gap-1.5 mt-3">
           {books.map((_, i) => (
             <button key={i} onClick={() => setActive(i)}
-              className={cn('rounded-full transition-all', i === active ? 'w-5 h-1.5 bg-gold' : `w-1.5 h-1.5 ${dotInactive}`)} />
+              className={cn('rounded-full transition-all', i === activeIndex ? 'w-5 h-1.5 bg-gold' : `w-1.5 h-1.5 ${dotInactive}`)} />
           ))}
         </div>
 
         {/* Mobile info card — slides in when active changes */}
         <div className="w-full px-4 mt-4">
           <AnimatePresence mode="wait">
-            <motion.div key={`mobile-info-${active}`}
+            <motion.div key={`mobile-info-${activeIndex}`}
               className={cn('rounded-2xl border p-4', isLight ? 'bg-white border-parchment-darker' : 'bg-navy-800/60 border-white/8')}
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}>
@@ -338,7 +365,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5 mb-1">
                     <div className="w-5 h-5 bg-gold rounded-full flex items-center justify-center flex-shrink-0">
-                      <span className="text-white font-black text-[10px]">{active + 1}</span>
+                      <span className="text-white font-black text-[10px]">{activeIndex + 1}</span>
                     </div>
                     <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'var(--muted)' }}>
                       Trending

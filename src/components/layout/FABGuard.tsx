@@ -3,7 +3,7 @@ import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 import DraggableFAB from '@/components/layout/DraggableFAB';
 
-const NO_FAB_PATHS = ['/auth', '/not-found'];
+const NO_FAB_PATHS = ['/auth',];
 
 export default function FABGuard() {
   const { user, loading } = useAuthStore();

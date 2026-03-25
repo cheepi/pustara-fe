@@ -15,9 +15,9 @@ interface Person {
 }
 
 const FOLLOWING: Person[] = [
-  { name:'Ameliana Rizki', avatar:'A', loc:'Yogyakarta', books:31, genres:['Sastra','Fiksi'],       bio:'Pecinta sastra Indonesia dan buku sejarah.',           mutual:2 },
-  { name:'Syifa Nuraini',  avatar:'S', loc:'Bandung',    books:19, genres:['Romance','Teenlit'],    bio:'Membaca adalah cara terbaik berkeliling dunia.',       mutual:0 },
-  { name:'Kayana Azzaria', avatar:'K', loc:'Jakarta',    books:27, genres:['Sains','Filsafat'],     bio:'Scientist by day, book lover by night.',               mutual:1 },
+  { name:'Annabeth C.', avatar:'A', loc:'Yogyakarta', books:31, genres:['Sastra','Fiksi'],       bio:'Pecinta sastra Indonesia dan buku sejarah.',           mutual:2 },
+  { name:'Shayla J.',  avatar:'S', loc:'Bandung',    books:19, genres:['Romance','Teenlit'],    bio:'Membaca adalah cara terbaik berkeliling dunia.',       mutual:0 },
+  { name:'Kayla M.', avatar:'K', loc:'Jakarta',    books:27, genres:['Sains','Filsafat'],     bio:'Scientist by day, book lover by night.',               mutual:1 },
   { name:'Dika Pratama',   avatar:'D', loc:'Surabaya',   books:14, genres:['Misteri','Thriller'],   bio:'If it has a plot twist, I have already read it.',      mutual:3 },
   { name:'Maya Kusuma',    avatar:'M', loc:'Medan',      books:22, genres:['Biografi','Sejarah'],   bio:'Belajar dari mereka yang sudah hidup lebih dulu.',     mutual:0 },
 ];
@@ -25,7 +25,7 @@ const FOLLOWING: Person[] = [
 const FOLLOWERS: Person[] = [
   { name:'Reza Firmansyah',avatar:'R', loc:'Makassar',  books:9,  genres:['Fiksi','Drama'],        bio:'Baru mulai suka baca tahun ini, sudah 9 buku!',        isFollowing:true  },
   { name:'Lila Sari',      avatar:'L', loc:'Bali',      books:35, genres:['Sastra','Puisi'],       bio:'Poetry is my first language, prose is my second.',     isFollowing:false },
-  { name:'Anto Budiman',   avatar:'A', loc:'Semarang',  books:18, genres:['Romance','Fiksi'],      bio:'Kalau buku bisa bicara, saya akan mendengarkan.',      isFollowing:true  },
+  { name:'Anto Brandonman',   avatar:'A', loc:'Semarang',  books:18, genres:['Romance','Fiksi'],      bio:'Kalau buku bisa bicara, saya akan mendengarkan.',      isFollowing:true  },
   { name:'Putri Rahayu',   avatar:'P', loc:'Malang',    books:26, genres:['Self-Help','Inspiratif'],bio:'Setiap buku adalah mentor yang diam.',                isFollowing:false },
 ];
 

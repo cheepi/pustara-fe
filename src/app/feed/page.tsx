@@ -13,75 +13,16 @@ import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import { useChatAI } from '@/hooks/useChatAI';
 import { useRecommendations } from '@/hooks/useRecommendations';
-import { fetchOpenLibraryCoverId } from '@/lib/api';
-import type { AiRecommendation } from '@/store/aiStore';
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-type FeedItemType = 'activity' | 'ai_reco' | 'notif' | 'trending';
-
-interface FeedItem {
-  id: string;
-  type: FeedItemType;
-  time: string;
-  user?: string; avatar?: string; loc?: string;
-  action?: string; rating?: number; reviewText?: string;
-  bookKey?: string; bookTitle?: string; bookAuthor?: string; coverId?: number;
-  aiReason?: string;
-  notifTitle?: string; notifBody?: string;
-  rank?: number; reads?: number;
-  // real AI reco
-  aiReco?: AiRecommendation;
-}
+import { fetchOpenLibraryCoverId, type TrendingBook } from '@/lib/api';
+import type { AiRecommendation } from '@/types/ai';
+import type { FeedItem } from '@/types/feed';
+import { STATIC_SOCIAL_FEED } from '@/data/feedFallback';
+import { fetchTrendingFeedItems } from '@/lib/feed';
 
 const pseudo = (n: number, mn: number, mx: number) =>
   mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
 const getRating = (coverId = 0) => (pseudo(coverId + 7, 38, 50) / 10).toFixed(1);
 const getReads  = (coverId = 0) => Math.floor(pseudo(coverId + 1, 1200, 28000));
-
-const STATIC_FEED: FeedItem[] = [
-  {
-    id: 'tr1', type: 'trending', time: '1 jam lalu',
-    bookKey: 'd1', bookTitle: 'Laskar Pelangi', bookAuthor: 'Andrea Hirata',
-    coverId: 8231568, rank: 1, reads: getReads(8231568),
-  },
-  {
-    id: 'ac1', type: 'activity', time: '2 jam lalu',
-    user: 'Ameliana R.', avatar: 'A', loc: 'Yogyakarta',
-    action: 'selesai membaca', rating: 5,
-    reviewText: 'Buku yang benar-benar mengubah cara pandangku. Andrea Hirata membawa kita ke Belitung dengan sangat hidup.',
-    bookKey: 'd1', bookTitle: 'Laskar Pelangi', bookAuthor: 'Andrea Hirata', coverId: 8231568,
-  },
-  {
-    id: 'no1', type: 'notif', time: '3 jam lalu',
-    notifTitle: 'Tenggat Besok!',
-    notifBody: '"Bumi Manusia" harus dikembalikan besok. Perpanjang sekarang.',
-    bookKey: 'd2', coverId: 8750787,
-  },
-  {
-    id: 'ac2', type: 'activity', time: 'Kemarin',
-    user: 'Budi S.', avatar: 'B', loc: 'Jakarta',
-    action: 'sedang membaca',
-    bookKey: 'd2', bookTitle: 'Bumi Manusia', bookAuthor: 'Pramoedya Ananta Toer', coverId: 8750787,
-  },
-  {
-    id: 'tr2', type: 'trending', time: 'Kemarin',
-    bookKey: 'd4', bookTitle: 'Perahu Kertas', bookAuthor: 'Dee Lestari',
-    coverId: 7886745, rank: 4, reads: getReads(7886745),
-  },
-  {
-    id: 'ac3', type: 'activity', time: '2 hari lalu',
-    user: 'Sari A.', avatar: 'S', loc: 'Bandung',
-    action: 'memberikan ulasan', rating: 5,
-    reviewText: 'Realisme magis yang gelap dan indah. Eka Kurniawan memadukan sejarah kelam Indonesia dengan narasi yang memukau.',
-    bookKey: 'd3', bookTitle: 'Cantik Itu Luka', bookAuthor: 'Eka Kurniawan', coverId: 12699828,
-  },
-  {
-    id: 'no2', type: 'notif', time: '3 hari lalu',
-    notifTitle: 'Antrean Tersedia!',
-    notifBody: '"Perahu Kertas" yang kamu antrikan kini tersedia. Pinjam sebelum 24 jam.',
-    bookKey: 'd4', coverId: 7886745,
-  },
-];
 
 const FILTER_TABS = [
   { id: 'all',      label: 'Semua',      icon: null        },
@@ -91,7 +32,7 @@ const FILTER_TABS = [
   { id: 'notif',    label: 'Notifikasi', icon: Bell        },
 ];
 
-// ── Cover hook untuk AI reco card ─────────────────────────────────────────────
+// ── Cover hooks ───────────────────────────────────────────────────────────────
 function useAiCover(reco?: AiRecommendation) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
@@ -103,12 +44,23 @@ function useAiCover(reco?: AiRecommendation) {
   return src;
 }
 
-// ── Card components ───────────────────────────────────────────────────────────
+function useTrendingCover(book?: TrendingBook) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!book) return;
+    if (book.cover_url) { setSrc(book.cover_url); return; }
+    fetchOpenLibraryCoverId(book.title, book.authors).then(id => {
+      if (id) setSrc(`https://covers.openlibrary.org/b/id/${id}-M.jpg`);
+    });
+  }, [book?.title, book?.authors]);
+  return src;
+}
 
+// ── Cover thumb ───────────────────────────────────────────────────────────────
 function CoverThumb({ coverId, src, size = 'sm' }: { coverId?: number; src?: string | null; size?: 'sm' | 'md' | 'lg' }) {
   const dims = { sm: 'w-10 h-14', md: 'w-14 h-20', lg: 'w-20 h-28' };
   const imgSrc = src ?? (coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : null);
-  if (!imgSrc) return null;
+  if (!imgSrc) return <div className={cn('rounded-xl flex-shrink-0 bg-navy-700/40', dims[size])} />;
   return (
     <div className={cn('rounded-xl overflow-hidden shadow-lg flex-shrink-0', dims[size])}>
       <img src={imgSrc} className="w-full h-full object-cover" loading="lazy" alt="" />
@@ -116,6 +68,7 @@ function CoverThumb({ coverId, src, size = 'sm' }: { coverId?: number; src?: str
   );
 }
 
+// ── Card components ───────────────────────────────────────────────────────────
 function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark: boolean; tk: any; liked: boolean; onLike: () => void }) {
   return (
     <div className={cn('rounded-3xl border p-5 transition-all', tk.card)}>
@@ -173,15 +126,14 @@ function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark:
   );
 }
 
-// AIRecoCard — supports both dummy (coverId) and real (AiRecommendation) data
 function AIRecoCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: any }) {
   const aiCoverSrc = useAiCover(item.aiReco);
   const coverSrc = item.aiReco ? aiCoverSrc : (item.coverId ? `https://covers.openlibrary.org/b/id/${item.coverId}-M.jpg` : null);
-  const title    = item.aiReco?.title ?? item.bookTitle ?? '';
-  const author   = item.aiReco?.authors ?? item.bookAuthor ?? '';
-  const reason   = item.aiReco?.reason_primary ?? item.aiReason ?? '';
-  const rating   = item.aiReco?.avg_rating?.toFixed(1) ?? getRating(item.coverId);
-  const href     = item.aiReco ? `/browse?q=${encodeURIComponent(title)}` : `/book/${item.bookKey}`;
+  const title  = item.aiReco?.title ?? item.bookTitle ?? '';
+  const author = item.aiReco?.authors ?? item.bookAuthor ?? '';
+  const reason = item.aiReco?.reason_primary ?? item.aiReason ?? '';
+  const rating = item.aiReco?.avg_rating?.toFixed(1) ?? getRating(item.coverId);
+  const href   = item.aiReco ? `/book/${item.aiReco.book_id}` : `/book/${item.bookKey}`;
 
   return (
     <div className={cn('rounded-3xl border p-5 transition-all relative overflow-hidden', tk.card)}>
@@ -235,13 +187,24 @@ function NotifCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: any 
   );
 }
 
+// TrendingCard — support live TrendingBook data
 function TrendingCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: any }) {
   const RANK_BADGE = ['bg-yellow-400 text-yellow-900', 'bg-slate-300 text-slate-700', 'bg-amber-600 text-amber-100'];
   const badgeCls = item.rank && item.rank <= 3 ? RANK_BADGE[item.rank - 1] : 'bg-black/40 text-white';
+
+  // Pilih sumber data: live trendingBook atau fallback ke field lama
+  const liveCoverSrc = useTrendingCover(item.trendingBook);
+  const title  = item.trendingBook?.title   ?? item.bookTitle  ?? '';
+  const author = item.trendingBook?.authors ?? item.bookAuthor ?? '';
+  const rating = item.trendingBook?.avg_rating?.toFixed(1) ?? getRating(item.coverId);
+  const href = item.trendingBook ? `/book/${item.trendingBook.book_id}` : `/book/${item.bookKey}`;
+
   return (
     <div className={cn('rounded-3xl border p-5 transition-all flex gap-4 items-center', tk.card)}>
       <div className="relative flex-shrink-0">
-        <Link href={`/book/${item.bookKey}`}><CoverThumb coverId={item.coverId} size="md" /></Link>
+        <Link href={href}>
+          <CoverThumb src={liveCoverSrc} coverId={item.coverId} size="md" />
+        </Link>
         <div className={cn('absolute -top-1.5 -left-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg', badgeCls)}>
           #{item.rank}
         </div>
@@ -251,16 +214,17 @@ function TrendingCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: a
           <TrendingUp className="w-3 h-3 text-gold" />
           <span className="text-[10px] font-semibold text-gold uppercase tracking-wider">Trending</span>
         </div>
-        <Link href={`/book/${item.bookKey}`}>
-          <p className={cn('font-serif text-base font-black leading-tight hover:text-gold transition-colors', tk.text)}>{item.bookTitle}</p>
-        </Link>
-        <p className={cn('text-xs mt-0.5', tk.muted)}>{item.bookAuthor}</p>
+        <p className={cn('font-serif text-base font-black leading-tight', tk.text)}>{title}</p>
+        <p className={cn('text-xs mt-0.5', tk.muted)}>{author}</p>
         <div className="flex items-center gap-3 mt-1.5">
           <div className="flex items-center gap-1">
             <Star className="w-3 h-3 text-gold fill-gold" />
-            <span className="text-gold text-xs font-bold">{getRating(item.coverId)}</span>
+            <span className="text-gold text-xs font-bold">{rating}</span>
           </div>
-          <span className={cn('text-xs', tk.muted)}>{item.reads?.toLocaleString()}x dibaca</span>
+          {item.reads && <span className={cn('text-xs', tk.muted)}>{item.reads.toLocaleString()}x dibaca</span>}
+          {item.trendingBook?.trending_score && (
+            <span className={cn('text-xs', tk.muted)}>🔥 skor {Math.round(item.trendingBook.trending_score)}</span>
+          )}
         </div>
       </div>
       <p className={cn('text-[11px] flex-shrink-0', tk.muted)}>{item.time}</p>
@@ -274,10 +238,8 @@ const SIDEBAR_SUGGESTIONS = ['Buku sedih tapi indah', 'Sastra Indonesia', 'Bacaa
 function AISidebarWidget({ dark, tk }: { dark: boolean; tk: any }) {
   const [input, setInput] = useState('');
   const [result, setResult] = useState<AiRecommendation[]>([]);
-  const [loading, setLoading] = useState(false);
   const { sendMessage, chatHistory, chatLoading } = useChatAI();
 
-  // Ambil hasil dari chatHistory entry terakhir yang punya recs
   useEffect(() => {
     const last = [...chatHistory].reverse().find(m => m.role === 'assistant' && m.recommendations?.length);
     if (last?.recommendations) setResult(last.recommendations.slice(0, 3));
@@ -286,9 +248,7 @@ function AISidebarWidget({ dark, tk }: { dark: boolean; tk: any }) {
   async function handleSend(q: string) {
     if (!q.trim() || chatLoading) return;
     setInput('');
-    setLoading(true);
     await sendMessage(q);
-    setLoading(false);
   }
 
   return (
@@ -301,11 +261,10 @@ function AISidebarWidget({ dark, tk }: { dark: boolean; tk: any }) {
       </div>
       <p className={cn('text-xs leading-relaxed mb-3', tk.muted)}>Cari rekomendasi buku yang sempurna untukmu.</p>
 
-      {/* Suggestion chips */}
       <div className="flex flex-wrap gap-1.5 mb-3">
         {SIDEBAR_SUGGESTIONS.map(s => (
           <button key={s}
-            onClick={() => handleSend(s)}
+            onClick={() => { setInput(s); }}
             className={cn('text-[11px] px-2.5 py-1 rounded-full border transition-colors',
               dark ? 'border-white/10 text-white/50 hover:border-gold/30 hover:text-gold'
                    : 'border-slate-200 text-slate-400 hover:border-gold/40 hover:text-gold')}>
@@ -314,35 +273,46 @@ function AISidebarWidget({ dark, tk }: { dark: boolean; tk: any }) {
         ))}
       </div>
 
-      {/* Input */}
       <div className="flex gap-2">
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSend(input)}
           placeholder="Ketik pertanyaan..."
+          disabled={chatLoading}
           className={cn('flex-1 px-3 py-2 rounded-xl border text-xs outline-none transition-all',
-            dark ? 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/40'
-                 : 'bg-slate-50 border-slate-200 text-navy-900 placeholder-slate-400 focus:border-gold')}
+            dark ? 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/40 disabled:opacity-50'
+                 : 'bg-slate-50 border-slate-200 text-navy-900 placeholder-slate-400 focus:border-gold disabled:opacity-50')}
         />
         <button
           onClick={() => handleSend(input)}
           disabled={!input.trim() || chatLoading}
           className="px-3 py-2 rounded-xl bg-gold text-navy-900 text-xs font-bold hover:bg-gold/90 transition-colors disabled:opacity-40">
-          {chatLoading ? '...' : '→'}
+          {chatLoading ? <div className="flex gap-0.5">{[0,1,2].map(i => <div key={i} className="w-1 h-1 rounded-full bg-navy-900 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}</div> : '→'}
         </button>
       </div>
 
-      {/* Results */}
       <AnimatePresence>
         {result.length > 0 && (
           <motion.div
             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }} className="overflow-hidden mt-3 space-y-2">
             {result.map(r => (
-              <SidebarRecoItem key={r.book_id} reco={r} dark={dark} tk={tk} />
+              <Link key={r.book_id} href={`/book/${r.book_id}`}>
+                <motion.div
+                  className={cn('flex items-center gap-2.5 p-2 rounded-xl transition-all cursor-pointer',
+                    dark ? 'hover:bg-white/5' : 'hover:bg-slate-50')}
+                  whileHover={{ x: 3 }}>
+                  <div className={cn('w-8 h-11 rounded-lg overflow-hidden flex-shrink-0', dark ? 'bg-navy-700' : 'bg-parchment-darker')} />
+                  <div className="flex-1 min-w-0">
+                    <p className={cn('text-xs font-semibold line-clamp-1', tk.text)}>{r.title}</p>
+                    <p className={cn('text-[10px] truncate', tk.muted)}>{r.authors}</p>
+                  </div>
+                  <span className="text-[10px] font-bold text-gold flex-shrink-0">★{r.avg_rating.toFixed(1)}</span>
+                </motion.div>
+              </Link>
             ))}
-            <Link href="/recommendations/chat"
+            <Link href="/pustarai/chat"
               className={cn('flex items-center justify-center gap-1 text-xs font-semibold mt-2 pt-2 border-t transition-colors hover:text-gold', tk.muted)}
               style={{ borderColor: 'var(--border)' }}>
               Lihat semua di Chat <ArrowRight className="w-3 h-3" />
@@ -354,68 +324,47 @@ function AISidebarWidget({ dark, tk }: { dark: boolean; tk: any }) {
   );
 }
 
-function SidebarRecoItem({ reco, dark, tk }: { reco: AiRecommendation; dark: boolean; tk: any }) {
-  const coverSrc = useAiCover(reco);
-  return (
-    <Link href={`/browse?q=${encodeURIComponent(reco.title)}`}>
-      <motion.div
-        className={cn('flex items-center gap-2.5 p-2 rounded-xl transition-all cursor-pointer',
-          dark ? 'hover:bg-white/5' : 'hover:bg-slate-50')}
-        whileHover={{ x: 3 }}>
-        <div className={cn('w-8 h-11 rounded-lg overflow-hidden flex-shrink-0', dark ? 'bg-navy-700' : 'bg-parchment-darker')}>
-          {coverSrc && <img src={coverSrc} alt={reco.title} className="w-full h-full object-cover" loading="lazy" />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className={cn('text-xs font-semibold line-clamp-1', tk.text)}>{reco.title}</p>
-          <p className={cn('text-[10px] truncate', tk.muted)}>{reco.authors}</p>
-        </div>
-        <span className="text-[10px] font-bold text-gold flex-shrink-0">★{reco.avg_rating.toFixed(1)}</span>
-      </motion.div>
-    </Link>
-  );
-}
-
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FeedPage() {
   const { ready } = useProtectedRoute();
   const { theme } = useTheme();
   const dark = theme === 'dark';
 
-  // Real AI recs untuk feed items
   const { recommendations: aiRecs, loading: aiLoading } = useRecommendations();
 
-  const [filter, setFilter]           = useState('all');
-  const [liked,  setLiked]            = useState<Set<string>>(new Set());
+  const [filter, setFilter]             = useState('all');
+  const [liked,  setLiked]              = useState<Set<string>>(new Set());
   const [visibleCount, setVisibleCount] = useState(5);
   const [loadingMore, setLoadingMore]   = useState(false);
+  const [trendingItems, setTrendingItems] = useState<FeedItem[]>([]);
   const loaderRef = useRef<HTMLDivElement>(null);
 
-  // Build FEED: sisipkan real AI recs di posisi 0 dan 4
+  // Fetch live trending data
+  useEffect(() => {
+    fetchTrendingFeedItems(5)
+      .then((items) => setTrendingItems(items))
+      .catch(() => setTrendingItems([]));
+  }, []);
+
+  // Build FEED: gabung semua sources
   const FEED: FeedItem[] = (() => {
-    const feed = [...STATIC_FEED];
+    const feed = [...STATIC_SOCIAL_FEED];
+
+    if (trendingItems.length > 0) {
+      feed.splice(0, 0, trendingItems[0]);
+      if (trendingItems.length > 1) feed.splice(3, 0, trendingItems[1]); 
+      if (trendingItems.length > 2) feed.push(trendingItems[2]);   
+    }
+
     if (!aiLoading && aiRecs.length > 0) {
-      // Sisipkan AI reco pertama di index 0
-      feed.unshift({
-        id: `ai_real_0`,
-        type: 'ai_reco',
-        time: 'Baru saja',
-        aiReco: aiRecs[0],
-      });
-      // Sisipkan AI reco kedua di tengah (index 4) kalau ada
-      if (aiRecs.length > 1) {
-        feed.splice(4, 0, {
-          id: `ai_real_1`,
-          type: 'ai_reco',
-          time: '5 jam lalu',
-          aiReco: aiRecs[1],
-        });
-      }
+      feed.unshift({ id: 'ai_real_0', type: 'ai_reco', time: 'Baru saja', aiReco: aiRecs[0] });
+      if (aiRecs.length > 1) feed.splice(5, 0, { id: 'ai_real_1', type: 'ai_reco', time: '5 jam lalu', aiReco: aiRecs[1] });
     }
     return feed;
   })();
 
   const allFiltered = filter === 'all' ? FEED : FEED.filter(i => i.type === filter);
-  const filtered = allFiltered.slice(0, visibleCount);
+  const filtered    = allFiltered.slice(0, visibleCount);
 
   useEffect(() => { setVisibleCount(5); }, [filter]);
 
@@ -509,7 +458,12 @@ export default function FeedPage() {
           <main>
             <div className="flex items-center justify-between mb-5">
               <h1 className={cn('font-serif text-2xl font-black', tk.text)}>Feed</h1>
-              <button className={cn('p-2 rounded-xl transition-colors', tk.muted, 'hover:text-gold', dark ? 'hover:bg-white/5' : 'hover:bg-navy-50')}>
+              <button
+                onClick={() => {
+                  setVisibleCount(5);
+                  fetchTrendingFeedItems(5).then(setTrendingItems).catch(() => setTrendingItems([]));
+                }}
+                className={cn('p-2 rounded-xl transition-colors', tk.muted, 'hover:text-gold', dark ? 'hover:bg-white/5' : 'hover:bg-navy-50')}>
                 <RefreshCw className="w-4 h-4" />
               </button>
             </div>
@@ -571,9 +525,9 @@ export default function FeedPage() {
                 <p className={cn('text-xs font-semibold uppercase tracking-wider mb-4', tk.muted)}>Saran Mengikuti</p>
                 <div className="space-y-4">
                   {[
-                    { name: 'Ameliana R.', loc: 'Yogyakarta', books: 31, avatar: 'A' },
-                    { name: 'Budi S.',     loc: 'Jakarta',    books: 18, avatar: 'B' },
-                    { name: 'Sari A.',     loc: 'Bandung',    books: 24, avatar: 'S' },
+                    { name: 'Anna R.', loc: 'Yogyakarta', books: 31, avatar: 'A' },
+                    { name: 'Brandon S.',     loc: 'Jakarta',    books: 18, avatar: 'B' },
+                    { name: 'Sarah A.',     loc: 'Bandung',    books: 24, avatar: 'S' },
                   ].map(u => (
                     <div key={u.name} className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">{u.avatar}</div>
@@ -591,7 +545,6 @@ export default function FeedPage() {
               </div>
             </div>
           </aside>
-
         </div>
       </div>
     </div>

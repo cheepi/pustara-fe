@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, BookOpen, Heart, Users, Star, CheckCheck, Trash2, BookMarked, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -8,70 +8,9 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
-
-type NotifType = 'borrow' | 'due' | 'like' | 'follow' | 'review' | 'system';
-
-interface Notif {
-  id: string;
-  type: NotifType;
-  title: string;
-  body: string;
-  time: string;
-  read: boolean;
-  avatar?: string;
-  bookCover?: number;
-}
-
-const INITIAL: Notif[] = [
-  {
-    id: 'n1', type: 'due', read: false,
-    title: 'Tenggat Pengembalian Besok',
-    body: '"Laskar Pelangi" harus dikembalikan besok, 21 Mar 2026. Perpanjang sekarang sebelum terlambat.',
-    time: '1 jam lalu', bookCover: 8231568,
-  },
-  {
-    id: 'n2', type: 'borrow', read: false,
-    title: 'Peminjaman Berhasil',
-    body: '"Bumi Manusia" oleh Pramoedya Ananta Toer kini tersedia di rak bacamu. Selamat membaca!',
-    time: '3 jam lalu', bookCover: 8750787,
-  },
-  {
-    id: 'n3', type: 'like', read: false,
-    title: 'Ameliana menyukai ulasanmu',
-    body: 'Ulasanmu tentang "Cantik Itu Luka" mendapat 12 suka baru hari ini.',
-    time: '5 jam lalu', avatar: 'A',
-  },
-  {
-    id: 'n4', type: 'follow', read: false,
-    title: 'Pengikut Baru',
-    body: 'Syifa Nuraini mulai mengikuti aktivitas membacamu.',
-    time: 'Kemarin', avatar: 'S',
-  },
-  {
-    id: 'n5', type: 'review', read: true,
-    title: 'Budi membalas ulasanmu',
-    body: '"Setuju banget! Minke adalah karakter terkompleks dalam sastra Indonesia." — Budi S.',
-    time: '2 hari lalu', avatar: 'B',
-  },
-  {
-    id: 'n6', type: 'borrow', read: true,
-    title: 'Antrean Tersedia',
-    body: '"Perahu Kertas" yang kamu antrikan kini tersedia. Pinjam sebelum 24 jam atau antrean hangus!',
-    time: '3 hari lalu', bookCover: 7886745,
-  },
-  {
-    id: 'n7', type: 'system', read: true,
-    title: 'Fitur Baru: AI Rekomendasi',
-    body: 'Pustara kini punya rekomendasi buku berbasis AI. Coba sekarang dan temukan bacaan berikutnya!',
-    time: '1 minggu lalu',
-  },
-  {
-    id: 'n8', type: 'review', read: true,
-    title: 'Ulasanmu ditampilkan',
-    body: 'Ulasanmu untuk "Negeri 5 Menara" dipilih sebagai ulasan unggulan minggu ini. 🎉',
-    time: '1 minggu lalu', bookCover: 8913924,
-  },
-];
+import type { NotifType, NotificationItem } from '@/types/notifications';
+import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
+import { fetchNotifications } from '@/lib/notifications';
 
 const TABS = [
   { id: 'all',    label: 'Semua'    },
@@ -109,8 +48,12 @@ export default function NotificationsPage() {
   const { theme } = useTheme();
   const dark = theme === 'dark';
 
-  const [notifs, setNotifs] = useState<Notif[]>(INITIAL);
+  const [notifs, setNotifs] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [tab, setTab]       = useState('all');
+
+  useEffect(() => {
+    fetchNotifications().then(setNotifs).catch(() => setNotifs(INITIAL_NOTIFICATIONS));
+  }, []);
 
   if (!ready) return <PageSkeleton />;
 

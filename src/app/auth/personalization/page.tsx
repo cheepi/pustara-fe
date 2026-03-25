@@ -1,237 +1,3 @@
-// 'use client';
-// import { useState } from 'react';
-// import { useRouter } from 'next/navigation';
-// import { motion, AnimatePresence } from 'framer-motion';
-// import { Check } from 'lucide-react';
-// import { cn } from '@/lib/utils';
-// import { useAuth } from '@/hooks/useAuth';
-// import { useTheme } from '@/components/theme/ThemeProvider';
-
-// const GENRES = [
-//   'Fiksi', 'Fiksi Ilmiah', 'Misteri', 'Self-Help',
-//   'Sejarah', 'Nonfiksi', 'Romansa', 'Teenlit',
-//   'Biografi', 'Sains', 'Filsafat', 'Anak',
-// ];
-
-// type Gender = 'Laki-Laki' | 'Perempuan' | 'Tidak ingin diketahui' | '';
-// type AgeRange = '< 20 Tahun' | '21 - 30 Tahun' | '31 - 40 Tahun' | '> 40 Tahun' | '';
-
-// export default function PersonalizationPage() {
-//   const router = useRouter();
-//   const { user }  = useAuth();
-//   const { theme } = useTheme();
-//   const isLight = theme === 'light';
-
-//   const [gender, setGender]   = useState<Gender>('');
-//   const [age, setAge]         = useState<AgeRange>('');
-//   const [genres, setGenres]   = useState<string[]>([]);
-//   const [loading, setLoading] = useState(false);
-//   const [error, setError]     = useState('');
-
-//   function toggleGenre(g: string) {
-//     setGenres(prev => prev.includes(g) ? prev.filter(x => x !== g) : [...prev, g]);
-//   }
-
-//   async function handleNext() {
-//     if (!user) { setError('User tidak valid'); return; }
-//     setLoading(true);
-//     setError('');
-//     try {
-//       const token = await user.getIdToken();
-//       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-//       const response = await fetch(`${apiUrl}/survey/save`, {
-//         method: 'POST',
-//         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-//         body: JSON.stringify({
-//           favoriteGenre: genres.join(',') || null,
-//           age: age || null,
-//           gender: gender || null,
-//         }),
-//       });
-//       const data = await response.json();
-//       if (!data.success) throw new Error(data.error || 'Gagal menyimpan preferensi');
-//       localStorage.setItem('pustara_personalized', 'true');
-//       localStorage.setItem('pustara_prefs', JSON.stringify({ gender, age, genres }));
-//       router.replace('/catalog');
-//     } catch (err) {
-//       setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
-//     } finally {
-//       setLoading(false);
-//     }
-//   }
-
-//   function handleSkip() {
-//     localStorage.setItem('pustara_personalized', 'true');
-//     router.replace('/catalog');
-//   }
-
-//   const canProceed = gender !== '' || age !== '' || genres.length > 0;
-
-//   // ── Token classes ──
-//   const bg       = isLight ? 'bg-white'      : 'bg-navy-900';
-//   const heading  = isLight ? 'text-navy-800'  : 'text-white';
-//   const subText  = isLight ? 'text-slate-600' : 'text-slate-400';
-//   const label    = isLight ? 'text-navy-800'  : 'text-white/80';
-//   const logo     = isLight ? 'bg-navy-800'    : 'bg-navy-700';
-//   const logoText = isLight ? 'text-navy-800 font-bold' : 'text-white/80 font-bold';
-//   const footer   = isLight ? 'bg-white border-slate-100' : 'bg-navy-900 border-white/10';
-
-//   const radioActive   = isLight ? 'border-navy-700 bg-navy-50 text-navy-800'  : 'border-gold bg-gold/10 text-white';
-//   const radioInactive = isLight ? 'border-slate-200 bg-white text-slate-700 hover:border-navy-300' : 'border-white/10 bg-navy-800/60 text-white/70 hover:border-white/25';
-//   const radioDotActive   = isLight ? 'border-navy-700 bg-navy-700' : 'border-gold bg-gold';
-//   const radioDotInactive = isLight ? 'border-slate-300' : 'border-white/25';
-
-//   const chipActive   = isLight ? 'border-navy-700 bg-navy-700 text-white'  : 'border-gold bg-gold/20 text-gold';
-//   const chipInactive = isLight ? 'border-slate-200 bg-white text-slate-700 hover:border-navy-300' : 'border-white/10 bg-navy-800/60 text-white/70 hover:border-white/25';
-//   const chipBoxActive   = isLight ? 'border-white bg-white' : 'border-gold bg-gold';
-//   const chipBoxInactive = isLight ? 'border-slate-300'      : 'border-white/25';
-//   const checkColor  = isLight ? 'text-navy-700' : 'text-navy-900';
-
-//   const skipBtn = isLight
-//     ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
-//     : 'border-white/10 text-white/50 hover:bg-white/5';
-
-//   return (
-//     <main className={cn('min-h-screen max-w-sm mx-auto flex flex-col', bg)}>
-//       {/* Header */}
-//       <div className="px-6 pt-12 pb-4">
-//         <div className="flex items-center gap-3 mb-6">
-//           <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0', logo)}>
-//             <span className="font-serif text-gold font-black text-xs">P</span>
-//           </div>
-//           <span className={cn('font-serif tracking-wider text-sm', logoText)}>PUSTARA</span>
-//         </div>
-
-//         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-//           <h1 className={cn('text-xl font-bold', heading)}>Personalisasi PustarAI</h1>
-//           <p className={cn('text-sm mt-1 leading-relaxed', subText)}>
-//             Bantu sistem rekomendasi AI kami memberikan rekomendasi yang tepat untukmu
-//           </p>
-//         </motion.div>
-
-//         <AnimatePresence>
-//           {error && (
-//             <motion.div
-//               initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-//               className={cn(
-//                 'mt-4 p-3 border rounded-lg text-sm',
-//                 isLight
-//                   ? 'bg-red-50 border-red-200 text-red-600'
-//                   : 'bg-red-900/20 border-red-500/30 text-red-400'
-//               )}>
-//               {error}
-//             </motion.div>
-//           )}
-//         </AnimatePresence>
-//       </div>
-
-//       {/* Scrollable content */}
-//       <div className="flex-1 overflow-y-auto px-6 pb-32">
-//         <motion.div className="space-y-7"
-//           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-
-//           {/* Gender */}
-//           <section>
-//             <h2 className={cn('font-semibold text-sm mb-3', label)}>Jenis Kelamin</h2>
-//             <div className="flex flex-col gap-2">
-//               {(['Laki-Laki', 'Perempuan', 'Tidak ingin diketahui'] as Gender[]).map(g => (
-//                 <button key={g} onClick={() => setGender(g)}
-//                   className={cn(
-//                     'w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all',
-//                     gender === g ? radioActive : radioInactive
-//                   )}>
-//                   <div className={cn(
-//                     'w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all',
-//                     gender === g ? radioDotActive : radioDotInactive
-//                   )}>
-//                     {gender === g && <div className="w-2 h-2 rounded-full bg-white" />}
-//                   </div>
-//                   <span>{g === 'Laki-Laki' ? '👨' : g === 'Perempuan' ? '👩' : '🤐'}</span>
-//                   <span>{g}</span>
-//                 </button>
-//               ))}
-//             </div>
-//           </section>
-
-//           {/* Age */}
-//           <section>
-//             <h2 className={cn('font-semibold text-sm mb-3', label)}>Umur</h2>
-//             <div className="flex flex-col gap-2">
-//               {(['< 20 Tahun', '21 - 30 Tahun', '31 - 40 Tahun', '> 40 Tahun'] as AgeRange[]).map(a => (
-//                 <button key={a} onClick={() => setAge(a)}
-//                   className={cn(
-//                     'w-full flex items-center gap-3 px-4 py-3 rounded-xl border text-sm font-medium transition-all',
-//                     age === a ? radioActive : radioInactive
-//                   )}>
-//                   <div className={cn(
-//                     'w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all',
-//                     age === a ? radioDotActive : radioDotInactive
-//                   )}>
-//                     {age === a && <div className="w-2 h-2 rounded-full bg-white" />}
-//                   </div>
-//                   <span>{a}</span>
-//                 </button>
-//               ))}
-//             </div>
-//           </section>
-
-//           {/* Genres */}
-//           <section>
-//             <h2 className={cn('font-semibold text-sm mb-3', label)}>Genre Favorit</h2>
-//             <div className="grid grid-cols-2 gap-2">
-//               {GENRES.map(g => {
-//                 const sel = genres.includes(g);
-//                 return (
-//                   <button key={g} onClick={() => toggleGenre(g)}
-//                     className={cn(
-//                       'flex items-center gap-2 px-4 py-3 rounded-xl border text-sm font-medium transition-all',
-//                       sel ? chipActive : chipInactive
-//                     )}>
-//                     <div className={cn(
-//                       'w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 transition-all',
-//                       sel ? chipBoxActive : chipBoxInactive
-//                     )}>
-//                       {sel && <Check className={cn('w-3 h-3', checkColor)} />}
-//                     </div>
-//                     {g}
-//                   </button>
-//                 );
-//               })}
-//             </div>
-//           </section>
-//         </motion.div>
-//       </div>
-
-//       {/* Fixed bottom actions */}
-//       <div className={cn(
-//         'fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm border-t px-6 py-4 flex gap-3',
-//         footer
-//       )}>
-//         <button onClick={handleSkip} disabled={loading}
-//           className={cn(
-//             'flex-1 py-3.5 border rounded-xl text-sm font-medium active:scale-[0.98] transition-all disabled:opacity-50',
-//             skipBtn
-//           )}>
-//           Lewati
-//         </button>
-//         <button onClick={handleNext} disabled={!canProceed || loading}
-//           className="flex-1 py-3.5 bg-navy-700 text-white rounded-xl text-sm font-semibold
-//                      hover:bg-navy-600 active:scale-[0.98] transition-all disabled:opacity-40
-//                      disabled:cursor-not-allowed flex items-center justify-center gap-1">
-//           {loading ? (
-//             <>
-//               <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-//               Menyimpan...
-//             </>
-//           ) : (
-//             <>Lanjutkan <span>›</span></>
-//           )}
-//         </button>
-//       </div>
-//     </main>
-//   );
-// }
-
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -241,6 +7,8 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import ComboLogo from '@/components/icons/ComboLogo';
+import { useUserStore } from '@/store/userStore';
+import type { AgeRange, Gender } from '@/types/personalization';
 
 const GENRES = [
   { label: 'Fiksi', emoji: '📖' },
@@ -256,9 +24,6 @@ const GENRES = [
   { label: 'Filsafat', emoji: '🧠' },
   { label: 'Anak', emoji: '🌈' },
 ];
-
-type Gender = 'Laki-Laki' | 'Perempuan' | 'Tidak ingin diketahui' | '';
-type AgeRange = '< 20 Tahun' | '21 - 30 Tahun' | '31 - 40 Tahun' | '> 40 Tahun' | '';
 
 const GENDER_OPTIONS: { value: Gender; emoji: string; label: string }[] = [
   { value: 'Laki-Laki', emoji: '👨', label: 'Laki-Laki' },
@@ -374,8 +139,9 @@ export default function PersonalizationPage() {
   const progressTrack = isLight ? 'bg-slate-200' : 'bg-white/10';
   const progressText = isLight ? 'text-navy-600' : 'text-gold';
 
+  // Note: label variable intentionally kept for potential future use
+
   return (
-    // Outer shell: centers content on desktop, full-width on mobile
     <div className={cn('min-h-screen w-full flex items-start justify-center', bg)}>
       {/* ── Left decorative panel — desktop only ── */}
       <aside className={cn(

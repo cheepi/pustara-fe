@@ -1,19 +1,19 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Sun, Moon, Medal, TrendingUp, X } from 'lucide-react';
+import { Search, Sun, Moon, Medal, TrendingUp, X, SearchX } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import { CTASection } from './CTASection';
 import PopularCarousel, { PopularBook } from '@/components/shared/PopularCarousel';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import Link from 'next/link';
+import { useTrendingBooks } from '@/hooks/useTrendingBooks';
+import { fetchBrowseBooks, fetchTopPustakrew } from '@/lib/browse';
+import { BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';
+import type { BrowseBook } from '@/types/browse';
 
 // ── Types & constants ──────────────────────────────────────────────────────────
-interface Book { key: string; title: string; author: string; coverId?: number; }
-
-const CACHE: Record<string, Book[]> = {};
-
 const coverUrl = (id?: number, s = 'M') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
 
@@ -43,49 +43,33 @@ const RANK_STYLE = [
   { badge: 'bg-amber-600 text-amber-100',   ring: 'ring-amber-500/30',  z: 'z-10', label: '#3' },
 ];
 
-const POPULAR_BOOKS: PopularBook[] = [
-  { key: 'd1', title: 'Laskar Pelangi',  author: 'Andrea Hirata',         coverId: 8231568,  genre: ['Fiksi','Drama'],           desc: 'Kisah persahabatan anak-anak Belitung yang penuh semangat mengejar pendidikan di tengah keterbatasan.',          year: '2005', pages: 529 },
-  { key: 'd2', title: 'Bumi Manusia',    author: 'Pramoedya Ananta Toer', coverId: 8750787,  genre: ['Sastra','Sejarah'],         desc: 'Minke, pemuda pribumi terpelajar di era kolonial Belanda, berjuang menemukan jati diri dan keadilan.',              year: '1980', pages: 368 },
-  { key: 'd3', title: 'Cantik Itu Luka', author: 'Eka Kurniawan',         coverId: 12699828, genre: ['Fiksi','Realisme Magis'],   desc: 'Tiga generasi keluarga dalam lanskap Indonesia yang kacau — antara kecantikan, trauma, dan sejarah yang pelik.',      year: '2002', pages: 505 },
-  { key: 'd4', title: 'Perahu Kertas',   author: 'Dee Lestari',           coverId: 7886745,  genre: ['Romance','Coming-of-age'],  desc: 'Kugy dan Keenan terhubung lewat mimpi dan seni, dalam kisah cinta yang tumbuh perlahan dan menyentuh hati.',          year: '2009', pages: 444 },
-  { key: 'd5', title: 'Negeri 5 Menara', author: 'Ahmad Fuadi',           coverId: 8913924,  genre: ['Inspiratif','Religi'],      desc: 'Alif meninggalkan kampung dan menemukan dunia yang lebih luas di pesantren Gontor bersama sahabat-sahabatnya.',        year: '2009', pages: 423 },
-  { key: 'd6', title: 'Ayah',            author: 'Andrea Hirata',         coverId: 10521865, genre: ['Fiksi','Keluarga'],         desc: 'Sabari mencintai Marlena dengan cara paling tulus — kisah tentang cinta, pengorbanan, dan arti menjadi seorang ayah.', year: '2015', pages: 382 },
-];
-
-// ── Fetch helper ───────────────────────────────────────────────────────────────
-async function fetchBooks(genre: string, limit = 24): Promise<Book[]> {
-  const cacheKey = `${genre}_${limit}`;
-  if (CACHE[cacheKey]) return CACHE[cacheKey];
-  const q = GENRE_QUERIES[genre] || `subject:${genre}`;
-  const url = GENRE_QUERIES[genre]
-    ? `https://openlibrary.org/search.json?${q}&limit=${limit}&fields=key,title,author_name,cover_i`
-    : `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=key,title,author_name,cover_i`;
-  const r = await fetch(url);
-  const d = await r.json();
-  const books = (d.docs || [])
-    .filter((b: any) => b.cover_i)
-    .map((b: any) => ({
-      key: b.key,
-      title: b.title || '?',
-      author: (b.author_name || ['?'])[0],
-      coverId: b.cover_i,
-    }));
-  CACHE[cacheKey] = books;
-  return books;
-}
-
 // ── Main Component ─────────────────────────────────────────────────────────────
 export default function CatalogView() {
   const { theme, toggle } = useTheme();
   const dark = theme === 'dark';
 
   const [genre, setGenre]     = useState('trending');
-  const [books, setBooks]     = useState<Book[]>([]);
-  const [top3, setTop3]       = useState<Book[]>([]);
+  const [books, setBooks]     = useState<BrowseBook[]>([]);
+  const [top3, setTop3]       = useState<BrowseBook[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch]   = useState('');
   const [timer, setTimer]     = useState<ReturnType<typeof setTimeout>>();
 
+  const { books: popularBooks, loading: popularLoading } = useTrendingBooks(6);
+  const popularFallbackBooks: PopularBook[] = BROWSE_POPULAR_BOOKS.map((b) => ({
+    key: b.key,
+    title: b.title,
+    author: b.author,
+    coverUrl: b.coverUrl,
+    coverId: b.coverId,
+    genre: b.genres,
+    desc: b.desc,
+    year: b.year ? String(b.year) : '',
+    pages: b.pages,
+    avgRating: b.rating,
+  }));
+  const popularBooksForCarousel = popularBooks.length > 0 ? popularBooks : popularFallbackBooks;
+  
   // ── Token classes ──
   const tk = {
     text:     dark ? 'text-white'       : 'text-navy-900',
@@ -106,13 +90,14 @@ export default function CatalogView() {
 
   // ── Load top3 on mount ──
   useEffect(() => {
-    fetchBooks('trending', 10).then(b => setTop3(b.slice(0, 3)));
+    fetchTopPustakrew(3).then(setTop3).catch(() => setTop3([]));
   }, []);
 
   // ── Load by genre ──
   const load = useCallback(async (g: string) => {
     setLoading(true);
-    try { setBooks(await fetchBooks(g)); }
+    const query = GENRE_QUERIES[g] || `subject:${g}`;
+    try { setBooks(await fetchBrowseBooks(query)); }
     catch { setBooks([]); }
     finally { setLoading(false); }
   }, []);
@@ -127,29 +112,16 @@ export default function CatalogView() {
     const t = setTimeout(async () => {
       setLoading(true);
       try {
-        const r = await fetch(
-          `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=24&fields=key,title,author_name,cover_i`
-        );
-        const d = await r.json();
-        setBooks(
-          (d.docs || [])
-            .filter((b: any) => b.cover_i)
-            .map((b: any) => ({
-              key: b.key,
-              title: b.title || '?',
-              author: (b.author_name || ['?'])[0],
-              coverId: b.cover_i,
-            }))
-        );
+        setBooks(await fetchBrowseBooks(q));
       } finally { setLoading(false); }
     }, 450);
     setTimer(t);
   }
 
-  const sectionLabel = search
-    ? `Hasil "${search}"`
-    : GENRES.find(g => g.id === genre)?.label ?? '';
-
+  // const sectionLabel = search
+  //   ? `Hasil "${search}"`
+  //   : GENRES.find(g => g.id === genre)?.label ?? '';
+ const sectionLabel = `${search ? `Hasil untuk "${search}"` :''}`;
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
       <Navbar />
@@ -222,18 +194,18 @@ export default function CatalogView() {
 
           {/* ── RIGHT: top 3 fanned covers ── */}
           {top3.length > 0 && (
-            <motion.div className="flex-shrink-0 relative flex justify-center"
+            <motion.div className="flex-shrink-0 relative hidden md:flex justify-center"
               style={{ width: 260, height: 220 }}
               initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.25 }}>
               <div className="absolute top-0 left-1/2 -translate-x-1/2 flex items-center gap-1.5 whitespace-nowrap">
                 <Medal className="w-3 h-3 text-gold" />
-                <span className="text-gold text-[10px] font-semibold uppercase tracking-wider">Top 3 Trending</span>
+                <span className="text-gold text-[10px] font-semibold uppercase tracking-wider">Pustakrew's Top Pick</span>
               </div>
               {[...top3].reverse().map((b, ri) => {
                 const i   = top3.length - 1 - ri;
                 const rs  = RANK_STYLE[i];
-                const src = coverUrl(b.coverId);
+                const src = b.coverUrl || coverUrl(b.coverId);
                 const xOff = [0, -68, 68][i];
                 const yOff = [0, 22, 30][i];
                 const rot  = [0, -9, 10][i];
@@ -281,7 +253,7 @@ export default function CatalogView() {
             Lihat semua →
           </Link>
         </div>
-        <PopularCarousel books={POPULAR_BOOKS} isLight={!dark} />
+        <PopularCarousel books={popularBooksForCarousel} isLight={!dark} />
       </section>
 
       {/* ══════════════════════════════════════════
@@ -314,7 +286,7 @@ export default function CatalogView() {
           )}
         </div>
 
-        {/* Genre chips */}
+        {/* Genre chips
         <div className="flex gap-2 overflow-x-auto pb-1 mb-5" style={{ scrollbarWidth: 'none' }}>
           {GENRES.map(g => (
             <button key={g.id}
@@ -326,7 +298,7 @@ export default function CatalogView() {
               <span>{g.emoji}</span> {g.label}
             </button>
           ))}
-        </div>
+        </div> */}
       </section>
 
       {/* ══════════════════════════════════════════
@@ -334,7 +306,7 @@ export default function CatalogView() {
       ══════════════════════════════════════════ */}
       <section className="max-w-7xl mx-auto px-4 pb-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className={cn('font-serif text-lg font-bold', tk.text)}>
+          <h3 className={cn('font-serif text-lg font-bold')}>
             {sectionLabel}
           </h3>
           {!loading && books.length > 0 && (
@@ -359,7 +331,7 @@ export default function CatalogView() {
             <motion.div key="empty"
               className={cn('text-center py-20', tk.muted)}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-              <p className="text-4xl mb-3">🔍</p>
+              <SearchX className="w-16 h-16 mx-auto mb-3" />
               <p className="font-semibold">Buku tidak ditemukan</p>
               <p className="text-sm mt-1">Coba kata kunci yang berbeda</p>
             </motion.div>
@@ -376,7 +348,7 @@ export default function CatalogView() {
       </section>
 
       {/* ══════════════════════════════════════════
-          CTA SECTION — daftar / login prompt
+          CTA SECTION 
       ══════════════════════════════════════════ */}
       <CTASection dark={dark} />
     </div>
@@ -387,9 +359,9 @@ export default function CatalogView() {
 function BookCard({
   book, index, dark, cardCls,
 }: {
-  book: Book; index: number; dark: boolean; cardCls: string;
+  book: BrowseBook; index: number; dark: boolean; cardCls: string;
 }) {
-  const src = coverUrl(book.coverId);
+  const src = book.coverUrl || coverUrl(book.coverId);
   return (
     <motion.div
       className="cursor-pointer group"

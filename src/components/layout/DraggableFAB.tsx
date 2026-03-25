@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Users, MessageSquare, Settings, BookMarked, Palette, Menu, X, Sun, Moon } from 'lucide-react';
+import { Users, Sparkles, Settings, UserRound, Palette, Menu, X, Sun, Moon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 
@@ -13,7 +13,7 @@ const STORAGE_KEY = 'pustara_fab_pos';
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
 export default function DraggableFAB() {
-  const { theme, toggle } = useTheme();  // ← pakai toggle, bukan setTheme
+  const { theme, toggle } = useTheme();  
   const isLight = theme === 'light';
   const router  = useRouter();
 
@@ -27,24 +27,22 @@ export default function DraggableFAB() {
   // Defined inside component — needs access to toggle & isLight
   const FAB_ITEMS = [
     {
-      icon: BookMarked, label: 'Rak Buku', color: 'bg-amber-500 text-white',
-      action: () => { setOpen(false); router.push('/shelf'); },
+      icon: isLight ? Moon : Sun,
+      label: isLight ? 'Mode Gelap' : 'Mode Terang',
+      color: isLight ? 'bg-yellow-400 text-navy-900' : 'bg-slate-600 text-white',
+      action: () => { toggle(); setOpen(false); },  // ← toggle() dari ThemeProvider
     },
     {
+      icon: Sparkles, label: 'PustarAI', color: 'bg-blue-500 text-white',
+      action: () => { setOpen(false); router.push('/pustarai/chat'); },
+    },    {
       icon: Users, label: 'Komunitas', color: 'bg-emerald-500 text-white',
       action: () => { setOpen(false); router.push('/community'); },
     },
     {
-      icon: MessageSquare, label: 'PustarAI', color: 'bg-blue-500 text-white',
-      action: () => { setOpen(false); router.push('/recommendations/chat'); },
-    },
-    {
-      icon: isLight ? Moon : Sun,
-      label: isLight ? 'Mode Gelap' : 'Mode Terang',
-      color: 'bg-violet-500 text-white',
-      action: () => { toggle(); setOpen(false); },  // ← toggle() dari ThemeProvider
-    },
-    {
+      icon: UserRound, label: 'Profil', color: 'bg-amber-500 text-white',
+      action: () => { setOpen(false); router.push('/profile'); },
+    },    {
       icon: Settings, label: 'Pengaturan', color: 'bg-slate-500 text-white',
       action: () => { setOpen(false); router.push('/settings'); },
     },

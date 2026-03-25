@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useSearchParams, useRouter, usePathname, ReadonlyURLSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Medal, Star, BookOpen, ArrowRight, X, Calendar, 
   FileText, WifiOff, RefreshCw, TrendingUp, Sparkles, Users, MessageCircle,
@@ -15,14 +15,18 @@ import Link from 'next/link';
 import { useChatAI } from '@/hooks/useChatAI';
 import { useRecommendations } from '@/hooks/useRecommendations';
 import { fetchOpenLibraryCoverId } from '@/lib/api';
-import type { AiRecommendation } from '@/store/aiStore';
-// import { AISection } from '@/components/browse/AISection';
+import type { AiRecommendation } from '@/types/ai';
+import AiRecoCard from '@/components/ai/AiRecoCard';
+import { useCover, AiRecoCardSkeleton, } from '@/components/ai/AiRecoCard';
+import { fetchBrowseBooks, fetchTopPustakrew } from '@/lib/browse';
+import type { BrowseBook } from '@/types/browse';
+import { BROWSE_FRIEND_ACTIVITY, BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';
+import { fetchTrending } from '@/lib/api';
+import { JSX } from 'react/jsx-runtime';
+import { Suspense } from 'react';
 
-// ── Types & helpers ────────────────────────────────────────────────────────────
-interface Book { key: string; title: string; author: string; coverId?: number; }
-
-const coverUrl = (id?: number, s = 'M') =>
-  id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
+// const coverUrl = (id?: number, s = 'M') =>
+//   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
 
 const pseudo = (n: number, mn: number, mx: number) =>
   mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
@@ -32,14 +36,14 @@ const getRating = (coverId?: number, idx = 0) =>
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const CATEGORIES = [
-  { id: 'fiction',    label: 'Fiksi',     icon: BookOpen      },
-  { id: 'history',    label: 'Sejarah',   icon: Landmark      },
-  { id: 'science',    label: 'Sains',     icon: FlaskConical  },
-  { id: 'philosophy', label: 'Filsafat',  icon: Brain         },
-  { id: 'biography',  label: 'Biografi',  icon: User          },
+  { id: 'fiksi',      label: 'Fiksi',     icon: BookOpen      },
+  { id: 'sejarah',    label: 'Sejarah',   icon: Landmark      },
+  { id: 'sains',      label: 'Sains',     icon: FlaskConical  },
+  { id: 'sastra',     label: 'Sastra',    icon: Brain         }, 
+  { id: 'biografi',   label: 'Biografi',  icon: User          },
   { id: 'romance',    label: 'Romansa',   icon: Heart         },
-  { id: 'mystery',    label: 'Misteri',   icon: Search        },
-  { id: 'technology', label: 'Teknologi', icon: Cpu           },
+  { id: 'misteri',    label: 'Misteri',   icon: Search        },
+  { id: 'teknologi',  label: 'Teknologi', icon: Cpu           },
 ];
 
 const RANK_STYLE = [
@@ -65,62 +69,6 @@ const RANK_STYLE = [
     idle:   'shadow-[0_0_0_2px_rgba(217,119,6,0.3),0_12px_40px_rgba(0,0,0,0.4)]',
   },
 ];
-
-// ── Dummy Top 3 ────────────────────────────────────────────────────────────────
-interface Top3Book {
-  key: string; title: string; author: string; coverId?: number; coverUrl?:string,
-  rating: string; genres: string[]; year: string; pages: number; desc: string;
-}
-
-const DUMMY_TOP3: Top3Book[] = [
-  {
-    key: 'p1', title: 'Surga Anjing Liar', author: 'Adimas Immanuel',
-    coverUrl: 'https://m.media-amazon.com/images/S/compressed.photo.goodreads.com/books/1612586447i/56966631.jpg', rating: '4.2', genres: ['Fiksi', 'Psikologis'],
-    year: '2020', pages: 228,
-    desc: 'Potret kelam masyarakat desa di kaki gunung yang bergulat dengan ambisi, kekuasaan, dan batas moral yang mengabur, melahirkan penjahat paling keji.',
-  },
-  {
-    key: 'p2', title: 'Unwind', author: 'Neal Shusterman',
-    coverId: 13347240, rating: '4.6', genres: ['Dystopia', 'Sci-Fi'],
-    year: '2007', pages: 336,
-    desc: 'Di dunia masa depan, orang tua bisa memilih untuk memisahkan organ anak remajanya secara paksa lewat proses "Unwinding". Tiga remaja berjuang melarikan diri dari takdir ini.',
-  },
-  {
-    key: 'p3', title: 'Pulang', author: 'Leila S. Chudori',
-    coverUrl: 'https://tse4.mm.bing.net/th/id/OIP.Gr4qolQ7Wik8cUPOmG9TTQAAAA?rs=1&pid=ImgDetMain&o=7&rm=3', rating: '4.7', genres: ['Sastra', 'Sejarah'],
-    year: '2012', pages: 464,
-    desc: 'Kisah para eksil politik Indonesia di Paris pasca peristiwa 1965 yang terus dihantui trauma masa lalu, pencarian identitas, dan kerinduan mendalam akan tanah air.',
-  },
-];
-
-const CACHE: Record<string, Book[]> = {};
-
-async function fetchBooks(q: string, limit = 24): Promise<Book[]> {
-  const key = `${q}_${limit}`;
-  if (CACHE[key]) return CACHE[key];
-  const url = q.startsWith('subject:')
-    ? `https://openlibrary.org/search.json?${q}&limit=${limit}&fields=key,title,author_name,cover_i`
-    : `https://openlibrary.org/search.json?q=${encodeURIComponent(q)}&limit=${limit}&fields=key,title,author_name,cover_i`;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000); // 8s timeout
-  try {
-    const r = await fetch(url, { signal: controller.signal });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d = await r.json();
-    const books = (d.docs || []).filter((b: any) => b.cover_i).map((b: any) => ({
-      key: b.key, title: b.title || '?',
-      author: (b.author_name || ['?'])[0],
-      coverId: b.cover_i,
-    }));
-    CACHE[key] = books;
-    return books;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-
 function useAiCover(reco?: AiRecommendation) {
   const [src, setSrc] = useState<string | null>(null);
   useEffect(() => {
@@ -166,48 +114,52 @@ export function AISection({ dark, tk }: { dark: boolean; tk: any }) {
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState('');
   const [chatResult, setChatResult] = useState<AiRecommendation[]>([]);
- 
-  // Reko default (personal, pakai genre preferensi user)
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isLight = !dark;
+
   const { recommendations: defaultRecs, loading: defaultLoading } = useRecommendations();
- 
-  // Chat hook untuk query manual
   const { sendMessage, chatHistory, chatLoading } = useChatAI();
- 
-  // Ambil hasil dari pesan chat terakhir
+
   useEffect(() => {
     const last = [...chatHistory].reverse().find(m => m.role === 'assistant' && m.recommendations?.length);
     if (last?.recommendations) setChatResult(last.recommendations.slice(0, 4));
   }, [chatHistory]);
- 
-  // Tampilkan: kalau ada hasil chat → pakai itu, kalau tidak → pakai default reks
-  const displayRecs = chatResult.length > 0 ? chatResult : defaultRecs.slice(0, 4);
-  const isLoadingDisplay = chatResult.length === 0 && defaultLoading;
- 
+
+  const aiReco = defaultRecs;
+  const aiLoading = defaultLoading;
+
+  function handleSuggestion(s: string) {
+    setInput(s);
+    setExpanded(true);
+    setTimeout(() => inputRef.current?.focus(), 120);
+  }
+
   async function handleSend(q: string) {
     if (!q.trim() || chatLoading) return;
     setInput('');
-    setChatResult([]); // clear dulu biar loading keliatan
+    setChatResult([]);
     await sendMessage(q);
   }
- 
+
   return (
     <div>
-      {/* Reko cards — real data */}
-      <div className="flex gap-3 overflow-x-auto pb-3" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(201,168,76,0.3) transparent' }}>
-        {isLoadingDisplay
-          ? Array(4).fill(0).map((_, i) => (
-              <div key={i} className="flex-shrink-0 w-32">
-                <div className={cn('w-full aspect-[2/3] rounded-xl animate-pulse', dark ? 'bg-navy-700/60' : 'bg-parchment-darker')} />
-                <div className={cn('h-2 rounded mt-2 w-3/4 animate-pulse', dark ? 'bg-navy-700/60' : 'bg-parchment-darker')} />
-              </div>
-            ))
-          : displayRecs.map((reco, i) => (
-              <AIRecoMiniCard key={reco.book_id + i} reco={reco} dark={dark} tk={tk} />
-            ))
-        }
-      </div>
- 
-      {/* Chat prompt toggle — UI persis sama seperti sebelumnya */}
+      <section className="mt-8 max-w-7xl mx-auto">
+        <div className="flex gap-4 px-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
+          {aiLoading
+            ? Array(5).fill(0).map((_, i) => <AiRecoCardSkeleton key={i} isLight={isLight} />)
+            : aiReco.length > 0
+              ? aiReco.map((reco, i) => (
+                  <AiRecoCard key={reco.book_id} reco={reco} index={i} isLight={isLight} />
+                ))
+              : (
+                <p className="text-sm px-1 py-8" style={{ color: 'var(--muted)' }}>
+                  Rekomendasi belum tersedia. Pastikan server AI berjalan.
+                </p>
+              )
+          }
+        </div>
+      </section>
+
       <motion.button
         onClick={() => setExpanded(v => !v)}
         className={cn(
@@ -220,7 +172,7 @@ export function AISection({ dark, tk }: { dark: boolean; tk: any }) {
         </span>
         <ArrowRight className={cn('w-4 h-4 ml-auto flex-shrink-0 transition-transform', tk.muted, expanded && 'rotate-90')} />
       </motion.button>
- 
+
       <AnimatePresence>
         {expanded && (
           <motion.div
@@ -229,12 +181,11 @@ export function AISection({ dark, tk }: { dark: boolean; tk: any }) {
             className="overflow-hidden">
             <div className={cn('mt-2 p-4 rounded-2xl border', dark ? 'bg-navy-800/60 border-white/8' : 'bg-white border-parchment-darker')}>
               <p className={cn('text-xs mb-3', tk.muted)}>Apa yang ingin kamu temukan?</p>
- 
-              {/* Suggestion chips */}
+
               <div className="flex gap-2 flex-wrap mb-3">
                 {CHAT_SUGGESTIONS.map(s => (
                   <button key={s}
-                    onClick={() => handleSend(s)}
+                    onClick={() => handleSuggestion(s)}
                     className={cn('text-xs px-3 py-1.5 rounded-full border transition-colors',
                       dark ? 'border-white/10 text-white/60 hover:border-gold/40 hover:text-gold'
                            : 'border-slate-200 text-slate-500 hover:border-gold/40 hover:text-gold')}>
@@ -242,27 +193,30 @@ export function AISection({ dark, tk }: { dark: boolean; tk: any }) {
                   </button>
                 ))}
               </div>
- 
-              {/* Input */}
+
               <div className="flex gap-2">
                 <input
+                  ref={inputRef}
                   value={input}
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && handleSend(input)}
-                  placeholder="Atau ketik sendiri..."
+                  placeholder={chatLoading ? 'PustarAI sedang berpikir...' : 'Atau ketik sendiri...'}
+                  disabled={chatLoading}
                   className={cn('flex-1 px-3 py-2 rounded-xl border text-sm outline-none transition-all',
-                    dark ? 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/50'
-                         : 'bg-slate-50 border-slate-200 text-navy-900 placeholder-slate-400 focus:border-gold')}
+                    dark ? 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/50 disabled:opacity-50'
+                         : 'bg-slate-50 border-slate-200 text-navy-900 placeholder-slate-400 focus:border-gold disabled:opacity-50')}
                 />
                 <button
                   onClick={() => handleSend(input)}
                   disabled={!input.trim() || chatLoading}
-                  className="px-4 py-2 rounded-xl bg-gold text-navy-900 text-sm font-semibold hover:bg-gold/90 transition-colors disabled:opacity-40">
-                  {chatLoading ? '...' : 'Tanya'}
+                  className="px-4 py-2 rounded-xl bg-gold text-navy-900 text-sm font-semibold hover:bg-gold/90 transition-colors disabled:opacity-40 min-w-[64px] flex items-center justify-center">
+                  {chatLoading
+                    ? <div className="flex gap-0.5">{[0,1,2].map(i => <div key={i} className="w-1 h-1 rounded-full bg-navy-900 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}</div>
+                    : 'Tanya'
+                  }
                 </button>
               </div>
- 
-              {/* Hasil chat inline */}
+
               <AnimatePresence>
                 {chatResult.length > 0 && (
                   <motion.div
@@ -272,7 +226,7 @@ export function AISection({ dark, tk }: { dark: boolean; tk: any }) {
                     <div className="space-y-1">
                       {chatResult.map(r => <MiniRecoCard key={r.book_id} reco={r} dark={dark} tk={tk} />)}
                     </div>
-                    <Link href="/recommendations/chat"
+                    <Link href="/pustarai/chat"
                       className={cn('flex items-center justify-center gap-1 text-xs font-semibold mt-3 pt-2 border-t transition-colors hover:text-gold', tk.muted)}
                       style={{ borderColor: 'var(--border)' }}>
                       Buka Chat lengkap <ArrowRight className="w-3 h-3" />
@@ -287,42 +241,22 @@ export function AISection({ dark, tk }: { dark: boolean; tk: any }) {
     </div>
   );
 }
- 
-// Mini card untuk horizontal scroll (sebelumnya pakai coverId hardcoded)
-function AIRecoMiniCard({ reco, dark, tk }: { reco: AiRecommendation; dark: boolean; tk: any }) {
-  const coverSrc = useAiCover(reco);
-  return (
-    <Link href={`/browse?q=${encodeURIComponent(reco.title)}`}>
-      <motion.div className="flex-shrink-0 w-32 cursor-pointer group"
-        whileHover={{ y: -4 }} transition={{ type: 'spring', stiffness: 400, damping: 28 }}>
-        <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-lg relative', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
-          {coverSrc
-            ? <img src={coverSrc} alt={reco.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-            : <div className="w-full h-full flex items-center justify-center"><BookOpen className="w-6 h-6 opacity-20" style={{ color: 'var(--text)' }} /></div>
-          }
-        </div>
-        <p className={cn('text-[11px] font-semibold leading-tight line-clamp-2 mt-2', tk.text)}>{reco.title}</p>
-        <p className={cn('text-[10px] mt-0.5 line-clamp-2', tk.muted)}>{reco.reason_primary}</p>
-      </motion.div>
-    </Link>
-  );
-}
- 
 
 // ── Page ───────────────────────────────────────────────────────────────────────
-export default function BrowsePage() {
+function BrowseContent() {
   const { ready } = useProtectedRoute();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-
   const [query,      setQuery]      = useState('');
   const [active,     setActive]     = useState('');
-  const [books,      setBooks]      = useState<Book[]>([]);
+  const [books,      setBooks]      = useState<BrowseBook[]>([]);
+  const [topPicks,   setTopPicks]   = useState<BrowseBook[]>([]);
   const [loading,    setLoading]    = useState(false);
   const [error,      setError]      = useState<string | null>(null);
   const [searched,   setSearched]   = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [popularBooks, setPopularBooks] = useState<BrowseBook[]>(BROWSE_POPULAR_BOOKS);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -342,7 +276,46 @@ export default function BrowsePage() {
     syncQueryToUrl(q);
   }
 
-  // Sync state dari ?q= (mis. dari navbar search, link, back/forward)
+  useEffect(() => {
+    fetchTopPustakrew(3).then(setTopPicks).catch(() => setTopPicks([]));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    fetchTrending(12)
+      .then((list) => {
+        if (!active) return;
+        if (!Array.isArray(list) || list.length === 0) {
+          setPopularBooks(BROWSE_POPULAR_BOOKS);
+          return;
+        }
+
+        const mapped: BrowseBook[] = list
+          .filter((item) => item.book_id && item.title)
+          .map((item) => ({
+            key: item.book_id,
+            title: item.title,
+            author: item.authors || 'Unknown',
+            coverUrl: item.cover_url || undefined,
+            genres: item.genres || [],
+            rating: Number(item.avg_rating || 0),
+            year: item.year ? Number(item.year) : undefined,
+            pages: item.pages || undefined,
+            desc: item.description || item.reason_primary || '',
+          }));
+
+        setPopularBooks(mapped.length > 0 ? mapped : BROWSE_POPULAR_BOOKS);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPopularBooks(BROWSE_POPULAR_BOOKS);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useEffect(() => {
     const q = (searchParams.get('q') || '').trim();
 
@@ -360,7 +333,7 @@ export default function BrowsePage() {
     setSearched(true);
     setLoading(true);
     setError(null);
-    fetchBooks(q)
+    fetchBrowseBooks(q)
       .then(setBooks)
       .catch(() => setError('Pencarian gagal. Coba lagi.'))
       .finally(() => setLoading(false));
@@ -405,7 +378,7 @@ export default function BrowsePage() {
     }
     syncQueryToUrl('');
     setActive(id); setQuery(''); setSearched(true); setLoading(true); setError(null);
-    try { setBooks(await fetchBooks(`subject:${id}`)); }
+    try { setBooks(await fetchBrowseBooks(`subject:${id}`)); }
     catch { setError('Gagal memuat buku. Periksa koneksi internetmu.'); setBooks([]); }
     finally { setLoading(false); }
   }
@@ -429,14 +402,13 @@ export default function BrowsePage() {
       return;
     }
 
-    // Delay URL update supaya typing tetap mulus.
     urlTimerRef.current = setTimeout(() => {
       syncQueryToUrl(trimmed);
     }, 900);
 
     searchTimerRef.current = setTimeout(async () => {
       setSearched(true); setLoading(true); setError(null);
-      try { setBooks(await fetchBooks(trimmed)); }
+      try { setBooks(await fetchBrowseBooks(trimmed)); }
       catch { setError('Pencarian gagal. Coba lagi beberapa saat.'); setBooks([]); }
       finally { setLoading(false); }
     }, 650);
@@ -453,16 +425,11 @@ export default function BrowsePage() {
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
       <Navbar />
 
-      {/* ══════════════════════════════════════════
-          HERO — LEFT (info/search) + RIGHT (top 3)
-      ══════════════════════════════════════════ */}
       <section className="max-w-7xl mx-auto px-4 pt-5 pb-2">
-
-        {/* Centered label */}
-        <div className="hidden md:flex items-center justify-end gap-2 mt-8 -mb-12">
+        <div className="hidden md:flex items-center justify-end gap-2 mt-8 -mb-12 mr-52">
           <Medal className="w-3.5 h-3.5 text-gold" />
           <span className="text-gold text-xs font-semibold uppercase tracking-wider">
-            {searched ? 'Top 3 Hasil Terbaik' : 'Pustara\'s Pick — kurasi dari Pustakrew 📚'}
+            {searched ? 'Top 3 Hasil Terbaik' : 'Pustara\'s Pick — kurasi dari Pustakrew'}
           </span>
         </div>
 
@@ -471,7 +438,6 @@ export default function BrowsePage() {
           {/* ── LEFT ── */}
           <div className="flex flex-col gap-3 min-w-0 md:w-[44%] lg:w-[40%] md:pt-6">
 
-            {/* Search bar — always present */}
             <div className="relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
@@ -496,18 +462,17 @@ export default function BrowsePage() {
             </div>
 
             <AnimatePresence mode="wait">
-
-              {/* ── NOT searched: headline + quick stats ── */}
+              {/* ── NOT searched ── */}
               {!searched && (
                 <motion.div key="idle"
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22 }}>
 
-                  {/* Desktop: show hovered book detail if any, else headline */}
                   <div className="hidden md:block">
                     {(() => {
                       const activeIdx = hoveredIdx ?? 0;
-                      const b  = DUMMY_TOP3[activeIdx];
+                      const b  = topPicks[activeIdx] ?? topPicks[0];
+                      if (!b) return null;
                       const rs = RANK_STYLE[activeIdx];
                       const rn = Number(b.rating);
                       return (
@@ -536,7 +501,7 @@ export default function BrowsePage() {
                               <span className="text-gold font-bold ml-1">{b.rating}</span>
                             </div>
                             <div className="flex flex-wrap gap-1.5 mb-3">
-                              {b.genres.map(g => (
+                              {b.genres?.map((g: string) => (
                                 <span key={g} className={cn('text-xs font-medium px-2.5 py-1 rounded-full border', tk.genreChip)}>{g}</span>
                               ))}
                             </div>
@@ -562,49 +527,39 @@ export default function BrowsePage() {
                               <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
                               Hover cover lain untuk detail
                             </p>
-                            {/* {hoveredIdx === null && (
-                              <p className={cn('text-xs mt-3 flex items-center gap-1.5', tk.muted)}>
-                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-gold animate-pulse" />
-                                Hover cover lain untuk detail
-                              </p>
-                            )} */}
                           </motion.div>
                         </AnimatePresence>
                       );
                     })()}
                   </div>
 
-                  {/* Mobile: just tagline */}
                   <div className="md:hidden">
                     <h1 className={cn('font-serif text-3xl font-black leading-tight mb-1', tk.text)}>
                       Temukan buku<br /><span className="text-gold">favoritmu.</span>
                     </h1>
                     <p className={cn('text-sm', tk.muted)}>Dari fiksi klasik sampai sains modern.</p>
-                    {/* if mobile, show tagline */}
                     <div className="flex md:hidden items-center justify-start mt-8">
                       <Medal className="w-3.5 h-3.5 text-gold" />
                       <span className="text-gold text-xs font-semibold uppercase tracking-wider">
-                        'Pustara\'s Pick — kurasi dari Pustakrew 📚'
+                        Pustara's Pick — kurasi dari Pustakrew 📚
                       </span>
                     </div>
                   </div>
                 </motion.div>
               )}
 
-              {/* ── Searched: result meta + active book preview ── */}
+              {/* ── Searched ── */}
               {searched && (
                 <motion.div key="searched"
                   initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22 }}>
 
-                  {/* Desktop only */}
                   <div className="hidden md:block">
                     {(() => {
-                      // activeIdx: hovered OR default to 0 so left panel is never empty
                       const activeIdx = hoveredIdx ?? 0;
                       const b    = books[activeIdx];
-                      const rs   = RANK_STYLE[activeIdx];
-                      const rating = getRating(b?.coverId, activeIdx);
+                      const rs   = RANK_STYLE[activeIdx] || RANK_STYLE[2];
+                      const rating = b?.rating?.toFixed(1) || "4.5";
                       const rn   = Number(rating);
                       if (!b) return null;
                       return (
@@ -632,7 +587,7 @@ export default function BrowsePage() {
                               ))}
                               <span className="text-gold font-bold ml-1">{rating}</span>
                             </div>
-                            <Link href={`/book/${b.key.split('/').pop()}`}
+                            <Link href={`/book/${b.key}`}
                               className={cn(
                                 'inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl text-sm font-semibold transition-all',
                                 dark ? 'bg-gold text-navy-900 hover:bg-gold-light' : 'bg-navy-800 text-white hover:bg-navy-700'
@@ -649,7 +604,6 @@ export default function BrowsePage() {
                     })()}
                   </div>
 
-                  {/* Mobile search meta */}
                   <div className="md:hidden">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -667,54 +621,46 @@ export default function BrowsePage() {
                   </div>
                 </motion.div>
               )}
-
             </AnimatePresence>
           </div>
 
-          {/* ══════════════════════════════════════════
-              TOP 3 RIGHT PANEL
-              Desktop: fanned covers, hover → info panel slides in (clickable)
-              Mobile:  3 covers side-by-side, tap → info card below
-          ══════════════════════════════════════════ */}
+          {/* ── RIGHT (Top 3) ── */}
           <div className="flex-1 min-w-0 pt-0 md:pt-24">
-            {/* Determine which 3 books to show */}
             {(() => {
-              // When search has results, use top3 from results; otherwise show dummy
-              const top3: Top3Book[] = searched && books.length >= 3
-                ? books.slice(0, 3).map((b, i) => ({
-                    key: b.key, title: b.title, author: b.author,
-                    coverId: b.coverId ?? 0,
-                    rating: getRating(b.coverId, i),
-                    genres: DUMMY_TOP3[i]?.genres ?? ['Fiksi'],
-                    year: String(2000 + Math.floor(pseudo((b.coverId ?? i) + 5, 0, 24))),
-                    pages: Math.floor(pseudo((b.coverId ?? i) + 9, 200, 600)),
-                    desc: DUMMY_TOP3[i]?.desc ?? '',
-                  }))
-                : DUMMY_TOP3;
+              const top3: BrowseBook[] = searched ? books.slice(0, 3) : topPicks;
+
+              if (searched && top3.length < 3) {
+                return (
+                  <div className="mt-2 md:mt-10">
+                    <p className={cn('text-xs font-semibold uppercase tracking-wider mb-3', tk.muted)}>
+                      Hasil Pencarian
+                    </p>
+                    <div
+                      className={cn(
+                        'grid gap-3',
+                        top3.length === 1 ? 'grid-cols-1 max-w-[220px]' : 'grid-cols-2 max-w-[460px]'
+                      )}
+                    >
+                      {top3.map((b, i) => (
+                        <GridBookCard key={b.key} book={b} index={i} rank={i + 1} dark={dark} tk={tk} />
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
 
               return (
                 <>                  
-                  {/* ── DESKTOP: fanned + hover-to-reveal side panel ── */}
-                  <div className="hidden md:block relative"
-                    style={{ height: 300 }}
-                    onMouseLeave={() => setHoveredIdx(null)}>
-
-                    {/* Fanned covers */}
+                  {/* Desktop fanned */}
+                  <div className="hidden md:block relative" style={{ height: 300 }} onMouseLeave={() => setHoveredIdx(null)}>
                     {[...top3].reverse().map((b, ri) => {
                       const i     = top3.length - 1 - ri;
-                      const rs    = RANK_STYLE[i];
+                      const rs    = RANK_STYLE[i] || RANK_STYLE[2];
                       const isHov = hoveredIdx === i;
                       const isSide = i !== 0;
 
-                      // #1 bigger, #2 #3 slightly smaller
-                      const baseW = searched
-                        ? (i === 0 ? 160 : 134)
-                        : (i === 0 ? 213 : 174);
-                      const baseH = searched
-                        ? (i === 0 ? 220 : 188)
-                        : (i === 0 ? 306 : 258);
-
-                      // Fan positions
+                      const baseW = searched ? (i === 0 ? 160 : 134) : (i === 0 ? 213 : 174);
+                      const baseH = searched ? (i === 0 ? 220 : 188) : (i === 0 ? 306 : 258);
                       const xOff = searched ? [0, -88, 88][i] : [0, -138, 152][i];
                       const yOff = [0, 45, 57][i];
                       const rot  = [0, -11, 12][i];
@@ -732,120 +678,75 @@ export default function BrowsePage() {
                           }}
                           transition={{ type: 'spring', stiffness: 340, damping: 28 }}
                           onHoverStart={() => setHoveredIdx(i)}
-                          onClick={() => window.location.href = `/book/${b.key.split('/').pop()}`}>
+                          onClick={() => window.location.href = `/book/${b.key}`}>
 
-                          <div
-                            className={cn('rounded-2xl overflow-hidden relative transition-all duration-300', isHov ? rs.shadow : rs.idle)}
+                          <div className={cn('rounded-2xl overflow-hidden relative transition-all duration-300', isHov ? rs.shadow : rs.idle)}
                             style={{ width: baseW, height: baseH }}>
-
-                            {/* Cover image */}
-                            {b.coverUrl || b.coverId ? (
-                              <img 
-                                src={b.coverUrl ? b.coverUrl : `https://covers.openlibrary.org/b/id/${b.coverId}-M.jpg`} 
-                                alt={b.title}
-                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
-                                loading="lazy" 
-                              />
+                            {b.coverUrl ? (
+                              <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
                             ) : (
                               <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
                             )}
-
-                            {/* Side books: dark vignette overlay so they read as "behind" */}
-                            {isSide && !isHov && (
-                              <div className="absolute inset-0 bg-black/30 rounded-2xl" />
-                            )}
-
-                            {/* Rank badge */}
-                            <div className={cn(
-                              'absolute top-2.5 left-2.5 min-w-[28px] h-7 px-2 rounded-full',
-                              'flex items-center justify-center text-[11px] font-black shadow-lg',
-                              rs.badge
-                            )}>
+                            {isSide && !isHov && <div className="absolute inset-0 bg-black/30 rounded-2xl" />}
+                            <div className={cn('absolute top-2.5 left-2.5 min-w-[28px] h-7 px-2 rounded-full flex items-center justify-center text-[11px] font-black shadow-lg', rs.badge)}>
                               #{i + 1}
                             </div>
-
-                            {/* Rating pill */}
                             <div className="absolute bottom-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur-sm">
                               <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                              <span className="text-white text-[10px] font-bold">{b.rating}</span>
+                              <span className="text-white text-[10px] font-bold">{b.rating?.toFixed(1) || "4.5"}</span>
                             </div>
                           </div>
                         </motion.div>
                       );
                     })}
 
-                    {/* Desktop info panel — sibling (not child), so never scaled */}
                     <AnimatePresence>
                       {hoveredIdx !== null && (() => {
                         const i     = hoveredIdx;
                         const b     = top3[i];
                         if (!b) return null;
-                        const baseW = searched 
-                        ? (i === 0 ? 140 : 114)
-                        : (i === 0 ? 210 : 171);
+                        const baseW = searched ? (i === 0 ? 140 : 114) : (i === 0 ? 210 : 171);
                         const xOff  = searched ? [0, -88, 88][i] : [0, -40, 88][i];
-                        // panel left of #1 and #3, right of #2
-                        const panelX = i === 1
-                          ? xOff + baseW / 2 - 80
-                          : xOff - baseW / 2 - 180;
+                        const panelX = i === 1 ? xOff + baseW / 2 - 80 : xOff - baseW / 2 - 180;
 
                         return (
                           <motion.div key={`dp-${i}`}
-                            className={cn(
-                              'absolute rounded-2xl border shadow-2xl p-4 backdrop-blur-md cursor-pointer',
-                              tk.panelBg
-                            )}
+                            className={cn('absolute rounded-2xl border shadow-2xl p-4 backdrop-blur-md cursor-pointer', tk.panelBg)}
                             style={{ width: 220, zIndex: 60, top: [0, 28, 36][i] - 18, left: '50%', x: panelX }}
                             initial={{ opacity: 0, y: 8, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             exit={{ opacity: 0, y: 6, scale: 0.95 }}
                             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                            onClick={() => window.location.href = `/book/${b.key.split('/').pop()}`}>
-
+                            onClick={() => window.location.href = `/book/${b.key}`}>
                             <div className="flex items-center gap-2 mb-2">
                               <div className="w-5 h-5 bg-gold rounded-full flex items-center justify-center flex-shrink-0">
                                 <span className="text-navy-900 font-black text-[10px]">{i + 1}</span>
                               </div>
-                              <span className={cn('text-[10px] font-semibold uppercase tracking-widest', tk.muted)}>
-                                Trending #{i + 1}
-                              </span>
+                              <span className={cn('text-[10px] font-semibold uppercase tracking-widest', tk.muted)}>Trending #{i + 1}</span>
                             </div>
-
-                            <p className={cn('font-serif font-black text-base leading-tight mb-0.5 line-clamp-2', tk.text)}>
-                              {b.title}
-                            </p>
+                            <p className={cn('font-serif font-black text-base leading-tight mb-0.5 line-clamp-2', tk.text)}>{b.title}</p>
                             <p className={cn('text-xs mb-2.5', tk.muted)}>{b.author}</p>
-
                             <div className="flex items-center gap-1 mb-2.5">
                               {[1,2,3,4,5].map(s => (
-                                <Star key={s} className={cn('w-3 h-3',
-                                  s <= Math.round(Number(b.rating)) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200'
-                                )} />
+                                <Star key={s} className={cn('w-3 h-3', s <= Math.round(b.rating || 4) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
                               ))}
-                              <span className="text-gold text-xs font-bold ml-1">{b.rating}</span>
+                              <span className="text-gold text-xs font-bold ml-1">{b.rating?.toFixed(1) || "4.5"}</span>
                             </div>
-
                             <div className="flex flex-wrap gap-1 mb-2.5">
-                              {b.genres.map(g => (
+                              {b.genres?.map(g => (
                                 <span key={g} className={cn('text-[10px] font-medium px-2 py-0.5 rounded-full border', tk.genreChip)}>{g}</span>
                               ))}
                             </div>
-
                             <div className="flex items-center gap-3 mb-3">
-                              <div className="flex items-center gap-1">
-                                <Calendar className={cn('w-3 h-3', tk.muted)} />
-                                <span className={cn('text-[11px]', tk.muted)}>{b.year}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <FileText className={cn('w-3 h-3', tk.muted)} />
-                                <span className={cn('text-[11px]', tk.muted)}>{b.pages} hal.</span>
-                              </div>
+                              <span className={cn('text-[11px] flex items-center gap-1', tk.muted)}>
+                                <Calendar className="w-3 h-3" />{b.year || 2020}
+                              </span>
+                              <span className={cn('text-[11px] flex items-center gap-1', tk.muted)}>
+                                <FileText className="w-3 h-3" />{b.pages || 300} hal.
+                              </span>
                             </div>
-
                             <div className={cn('flex items-center gap-1.5 text-xs font-semibold', dark ? 'text-gold' : 'text-navy-700')}>
-                              <BookOpen className="w-3.5 h-3.5" />
-                              Lihat Detail
-                              <ArrowRight className="w-3 h-3" />
+                              <BookOpen className="w-3.5 h-3.5" /> Lihat Detail <ArrowRight className="w-3 h-3" />
                             </div>
                           </motion.div>
                         );
@@ -853,13 +754,11 @@ export default function BrowsePage() {
                     </AnimatePresence>
                   </div>
 
-                  {/* ── MOBILE: 3 covers side by side, tap → info card ── */}
+                  {/* Mobile covers */}
                   <div className="md:hidden">
-
-                    {/* 3 covers row */}
                     <div className="flex gap-3 mb-4">
                       {top3.map((b, i) => {
-                        const rs       = RANK_STYLE[i];
+                        const rs       = RANK_STYLE[i] || RANK_STYLE[2];
                         const isActive = hoveredIdx === i;
                         const isSide   = i !== 0;
                         return (
@@ -869,62 +768,32 @@ export default function BrowsePage() {
                             onClick={() => setHoveredIdx(isActive ? null : i)}
                             animate={{ y: isActive ? -8 : 0, scale: isActive ? 1.04 : 1 }}
                             transition={{ type: 'spring', stiffness: 400, damping: 28 }}>
-
-                            <div
-                              className={cn(
-                                'w-full rounded-2xl overflow-hidden relative transition-all duration-300',
-                                isActive ? rs.shadow : rs.idle,
-                              )}
-                              style={{ aspectRatio: '2/3' }}>
-
-                              {b.coverUrl || b.coverId ? (
-                                <img 
-                                  src={b.coverUrl ? b.coverUrl : `https://covers.openlibrary.org/b/id/${b.coverId}-M.jpg`} 
-                                  alt={b.title}
-                                  className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
-                                  loading="lazy" 
-                                />
+                            <div className={cn('w-full rounded-2xl overflow-hidden relative transition-all duration-300', isActive ? rs.shadow : rs.idle)} style={{ aspectRatio: '2/3' }}>
+                              {b.coverUrl ? (
+                                <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
                               ) : (
                                 <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
                               )}
-
-                              {/* Vignette on non-active side books */}
-                              {isSide && !isActive && (
-                                <div className="absolute inset-0 bg-black/20 rounded-2xl" />
-                              )}
-
-                              {/* Rank badge */}
-                              <div className={cn(
-                                'absolute top-2 left-2 min-w-[26px] h-[26px] px-1.5 rounded-full',
-                                'flex items-center justify-center text-[11px] font-black shadow-lg',
-                                rs.badge
-                              )}>
+                              {isSide && !isActive && <div className="absolute inset-0 bg-black/20 rounded-2xl" />}
+                              <div className={cn('absolute top-2 left-2 min-w-[26px] h-[26px] px-1.5 rounded-full flex items-center justify-center text-[11px] font-black shadow-lg', rs.badge)}>
                                 #{i + 1}
                               </div>
-
-                              {/* Rating */}
                               <div className="absolute bottom-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur-sm">
                                 <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                                <span className="text-white text-[10px] font-bold">{b.rating}</span>
+                                <span className="text-white text-[10px] font-bold">{b.rating?.toFixed(1) || "4.5"}</span>
                               </div>
                             </div>
-
-                            {/* Active indicator dot */}
-                            <motion.div
-                              className="w-1.5 h-1.5 rounded-full mx-auto mt-2"
-                              animate={{ backgroundColor: isActive ? '#c9a84c' : 'transparent' }}
-                            />
+                            <motion.div className="w-1.5 h-1.5 rounded-full mx-auto mt-2" animate={{ backgroundColor: isActive ? '#c9a84c' : 'transparent' }} />
                           </motion.button>
                         );
                       })}
                     </div>
 
-                    {/* Info card — slides in below covers when tapped */}
                     <AnimatePresence mode="wait">
                       {hoveredIdx !== null && top3[hoveredIdx] && (() => {
                         const i  = hoveredIdx;
                         const b  = top3[i];
-                        const rs = RANK_STYLE[i];
+                        const rs = RANK_STYLE[i] || RANK_STYLE[2];
 
                         return (
                           <motion.div key={`mc-${i}`}
@@ -933,81 +802,49 @@ export default function BrowsePage() {
                             exit={{ opacity: 0, y: -8, scale: 0.97 }}
                             transition={{ type: 'spring', stiffness: 380, damping: 30 }}
                             className={cn('rounded-2xl border overflow-hidden', tk.panelBg)}>
-
                             <div className="flex gap-4 p-4">
-                              {/* Mini cover */}
                               <div className="flex-shrink-0 relative">
-                                <div className={cn('rounded-xl overflow-hidden', rs.shadow)}
-                                  style={{ width: 80, height: 116 }}>
-                                  {b.coverUrl || b.coverId ? (
-                                    <img 
-                                      src={b.coverUrl ? b.coverUrl : `https://covers.openlibrary.org/b/id/${b.coverId}-M.jpg`} 
-                                      alt={b.title}
-                                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
-                                      loading="lazy" 
-                                    />
+                                <div className={cn('rounded-xl overflow-hidden', rs.shadow)} style={{ width: 80, height: 116 }}>
+                                  {b.coverUrl ? (
+                                    <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
                                   ) : (
                                     <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
-                                  )}                                </div>
+                                  )}                                
+                                </div>
                                 <div className={cn('absolute -top-1.5 -left-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow', rs.badge)}>
                                   {i + 1}
                                 </div>
                               </div>
-
-                              {/* Details */}
                               <div className="flex-1 min-w-0">
-                                <p className={cn('text-[10px] font-semibold uppercase tracking-widest mb-1', tk.muted)}>
-                                  Trending #{i + 1}
-                                </p>
-                                <p className={cn('font-serif font-black text-base leading-tight mb-0.5 line-clamp-2', tk.text)}>
-                                  {b.title}
-                                </p>
+                                <p className={cn('text-[10px] font-semibold uppercase tracking-widest mb-1', tk.muted)}>Trending #{i + 1}</p>
+                                <p className={cn('font-serif font-black text-base leading-tight mb-0.5 line-clamp-2', tk.text)}>{b.title}</p>
                                 <p className={cn('text-xs mb-2', tk.muted)}>{b.author}</p>
-
-                                {/* Stars */}
                                 <div className="flex items-center gap-1 mb-2">
                                   {[1,2,3,4,5].map(s => (
-                                    <Star key={s} className={cn('w-3 h-3',
-                                      s <= Math.round(Number(b.rating)) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200'
-                                    )} />
+                                    <Star key={s} className={cn('w-3 h-3', s <= Math.round(b.rating || 4) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
                                   ))}
-                                  <span className="text-gold text-xs font-bold ml-1">{b.rating}</span>
+                                  <span className="text-gold text-xs font-bold ml-1">{b.rating?.toFixed(1) || "4.5"}</span>
                                 </div>
-
-                                {/* Genres */}
                                 <div className="flex flex-wrap gap-1 mb-2">
-                                  {b.genres.map(g => (
+                                  {b.genres?.map(g => (
                                     <span key={g} className={cn('text-[10px] px-2 py-0.5 rounded-full border', tk.genreChip)}>{g}</span>
                                   ))}
                                 </div>
-
-                                {/* Meta */}
                                 <div className="flex items-center gap-3">
                                   <span className={cn('text-[11px] flex items-center gap-1', tk.muted)}>
-                                    <Calendar className="w-3 h-3" />{b.year}
+                                    <Calendar className="w-3 h-3" />{b.year || 2020}
                                   </span>
                                   <span className={cn('text-[11px] flex items-center gap-1', tk.muted)}>
-                                    <FileText className="w-3 h-3" />{b.pages} hal.
+                                    <FileText className="w-3 h-3" />{b.pages || 300} hal.
                                   </span>
                                 </div>
                               </div>
                             </div>
-
-                            {/* Desc */}
-                            {b.desc && (
-                              <p className={cn('text-xs leading-relaxed px-4 pb-3', tk.muted)}>{b.desc}</p>
-                            )}
-
-                            {/* CTA — full width, tappable */}
+                            {b.desc && <p className={cn('text-xs leading-relaxed px-4 pb-3', tk.muted)}>{b.desc}</p>}
                             <button
-                              onClick={() => window.location.href = `/book/${b.key.split('/').pop()}`}
-                              className={cn(
-                                'w-full flex items-center justify-center gap-2 py-3 border-t text-sm font-semibold transition-colors',
-                                dark ? 'border-white/10 text-gold hover:bg-white/5' : 'border-navy-100 text-navy-700 hover:bg-navy-50'
-                              )}>
-                              <BookOpen className="w-4 h-4" />
-                              Lihat Detail Buku
-                              <ArrowRight className="w-3.5 h-3.5" />
+                              onClick={() => window.location.href = `/book/${b.key}`}
+                              className={cn('w-full flex items-center justify-center gap-2 py-3 border-t text-sm font-semibold transition-colors', dark ? 'border-white/10 text-gold hover:bg-white/5' : 'border-navy-100 text-navy-700 hover:bg-navy-50')}>
+                              <BookOpen className="w-4 h-4" /> Lihat Detail Buku <ArrowRight className="w-3.5 h-3.5" />
                             </button>
                           </motion.div>
                         );
@@ -1025,7 +862,6 @@ export default function BrowsePage() {
           KATEGORI or HASIL
       ══════════════════════════════════════════ */}
       <AnimatePresence mode="wait">
-
         {!searched && (
           <motion.section key="cats"
             className="max-w-7xl mx-auto px-4 mt-8 pb-12"
@@ -1034,10 +870,7 @@ export default function BrowsePage() {
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
               {CATEGORIES.map((c, i) => (
                 <motion.button key={c.id} onClick={() => loadCategory(c.id)}
-                  className={cn(
-                    'flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all',
-                    tk.chip
-                  )}
+                  className={cn('flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all', tk.chip)}
                   initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                   transition={{ delay: i * 0.04 }} whileTap={{ scale: 0.95 }} whileHover={{ y: -3 }}>
                   <span className="text-2xl"><c.icon className="w-6 h-6 text-gold/70" /></span>
@@ -1046,7 +879,6 @@ export default function BrowsePage() {
               ))}
             </div>
 
-            {/* ══ POPULER ══ */}
             <div id="popular" className="scroll-mt-28 flex items-center justify-between mt-10 mb-3">
               <div className="flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-gold" />
@@ -1056,21 +888,20 @@ export default function BrowsePage() {
                 Lihat semua →
               </Link>
             </div>
-            <PopularSection dark={dark} tk={tk} />
+            <PopularSection dark={dark} tk={tk} books={popularBooks} />
 
-            {/* ══ PUSTARAI ══ */}
-            <div id="ai-reco" className="scroll-mt-28 flex items-center justify-between mt-10 mb-3">
+            <div id="ai-reco" className="scroll-mt-28 flex items-center justify-between mt-10 -mb-3">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-gold" />
                 <h2 className={cn('font-serif text-lg font-bold', tk.text)}>PustarAI</h2>
-                <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-semibold', dark ? 'border-gold/30 text-gold/70' : 'border-gold/40 text-gold/80')}>
-                  Beta
-                </span>
+                <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-semibold', dark ? 'border-gold/30 text-gold/70' : 'border-gold/40 text-gold/80')}>Beta</span>
               </div>
+              <Link href="/recommendations/chat" className="text-gold text-xs font-medium hover:underline">
+                Buka chat →
+              </Link>
             </div>
             <AISection dark={dark} tk={tk} />
 
-            {/* ══ AKTIVITAS TEMAN ══ */}
             <div id="community" className="scroll-mt-28 flex items-center justify-between mt-10 mb-3">
               <div className="flex items-center gap-2">
                 <Users className="w-4 h-4 text-gold" />
@@ -1108,8 +939,7 @@ export default function BrowsePage() {
                 <button
                   onClick={() => active ? loadCategory(active) : handleSearch(query)}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gold text-navy-900 text-sm font-semibold hover:bg-gold/90 transition-colors">
-                  <RefreshCw className="w-4 h-4" />
-                  Coba Lagi
+                  <RefreshCw className="w-4 h-4" /> Coba Lagi
                 </button>
               </div>
             ) : books.length === 0 ? (
@@ -1129,7 +959,18 @@ export default function BrowsePage() {
                   ))}
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="mt-2 md:-mt-4">
+                <p className={cn('text-xs font-medium mb-4 uppercase tracking-wider', tk.muted)}>
+                  Hasil Pencarian
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-4">
+                  {books.map((b, i) => (
+                    <GridBookCard key={b.key} book={b} index={i} rank={i + 1} dark={dark} tk={tk} />
+                  ))}
+                </div>
+              </div>
+            )}
           </motion.section>
         )}
       </AnimatePresence>
@@ -1137,140 +978,114 @@ export default function BrowsePage() {
   );
 }
 
-// ── GridBookCard — rating badge on cover ──────────────────────────────────────
-function GridBookCard({
-  book, index, rank, dark, tk,
-}: {
-  book: Book; index: number; rank: number; dark: boolean; tk: any;
-}) {
-  const src       = coverUrl(book.coverId);
-  const rating    = getRating(book.coverId, index);
+// ── GridBookCard ─────────────────────────────────────────────────────────────
+function GridBookCard({ book, index, rank, dark, tk }: { book: BrowseBook; index: number; rank: number; dark: boolean; tk: any; }) {
+  const src       = book.coverUrl;
+  const rating    = book.rating?.toFixed(1) || "4.5";
   const ratingNum = Number(rating);
 
   return (
-    <motion.div
-      className="cursor-pointer group"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: Math.min(index * 0.02, 0.3) }}
-      whileHover={{ y: -6 }}
-      onClick={() => window.location.href = `/book/${book.key.split('/').pop()}`}>
-
-      {/* Cover */}
-      <div className={cn(
-        'w-full aspect-[2/3] rounded-xl overflow-hidden shadow-md relative',
-        dark ? 'bg-navy-700' : 'bg-parchment-dark'
-      )}>
-        {src && (
-          <img src={src} alt={book.title}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-            loading="lazy" />
-        )}
-
-        {/* Rank badge — top left */}
+    <motion.div className="cursor-pointer group"
+      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: Math.min(index * 0.02, 0.3) }} whileHover={{ y: -6 }}
+      onClick={() => window.location.href = `/book/${book.key}`}>
+      <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-md relative', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
+        {src && <img src={src} alt={book.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />}
         <div className="absolute top-1.5 left-1.5 w-5 h-5 bg-black/55 backdrop-blur-sm rounded-full flex items-center justify-center">
           <span className="text-white/80 text-[9px] font-bold">{rank}</span>
         </div>
-
-        {/* Rating — always visible small pill bottom-right */}
         <div className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/55 backdrop-blur-sm group-hover:opacity-0 transition-opacity duration-150">
           <Star className="w-2 h-2 text-gold fill-gold" />
           <span className="text-white text-[9px] font-bold">{rating}</span>
         </div>
-
-        {/* Rating + stars — expands on hover from bottom */}
-        <div className={cn(
-          'absolute bottom-0 left-0 right-0 px-2 py-2 flex items-center justify-between',
-          'bg-gradient-to-t from-black/80 via-black/50 to-transparent rounded-b-xl',
-          'translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100',
-          'transition-all duration-200'
-        )}>
+        <div className={cn('absolute bottom-0 left-0 right-0 px-2 py-2 flex items-center justify-between', 'bg-gradient-to-t from-black/80 via-black/50 to-transparent rounded-b-xl', 'translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100', 'transition-all duration-200')}>
           <div className="flex items-center gap-0.5">
-            {[1, 2, 3, 4, 5].map(s => (
-              <Star key={s} className={cn(
-                'w-2 h-2',
-                s <= Math.round(ratingNum) ? 'text-gold fill-gold' : 'text-white/30'
-              )} />
-            ))}
+            {[1, 2, 3, 4, 5].map(s => <Star key={s} className={cn('w-2 h-2', s <= Math.round(ratingNum) ? 'text-gold fill-gold' : 'text-white/30')} />)}
           </div>
           <span className="text-white text-[10px] font-bold">{rating}</span>
         </div>
       </div>
-
-      {/* Text */}
-      <p className={cn(
-        'text-[11px] font-medium mt-1.5 leading-tight line-clamp-2',
-        dark ? 'text-white' : 'text-navy-900'
-      )}>
-        {book.title}
-      </p>
+      <p className={cn('text-[11px] font-medium mt-1.5 leading-tight line-clamp-2', dark ? 'text-white' : 'text-navy-900')}>{book.title}</p>
       <p className="text-slate-500 text-[10px] mt-0.5 truncate">{book.author}</p>
     </motion.div>
   );
 }
 
-// ── Dummy data for new sections ───────────────────────────────────────────────
-const POPULAR_BOOKS = [
-  { key:'d1', title:'Laskar Pelangi',   author:'Andrea Hirata',         coverId:8231568  },
-  { key:'d2', title:'Bumi Manusia',     author:'Pramoedya Ananta Toer', coverId:8750787  },
-  { key:'d3', title:'Cantik Itu Luka',  author:'Eka Kurniawan',         coverId:12699828 },
-  { key:'d4', title:'Perahu Kertas',    author:'Dee Lestari',           coverId:7886745  },
-  { key:'d5', title:'Negeri 5 Menara',  author:'Ahmad Fuadi',           coverId:8913924  },
-  { key:'d6', title:'Ayah',             author:'Andrea Hirata',         coverId:10521865 },
-];
-
-// const AI_RECO = [
-//   { key:'d3', title:'Cantik Itu Luka',  author:'Eka Kurniawan',         coverId:12699828, reason:'Karena kamu suka Bumi Manusia' },
-//   { key:'d5', title:'Negeri 5 Menara',  author:'Ahmad Fuadi',           coverId:8913924,  reason:'Cocok dengan genre favoritmu' },
-//   { key:'d4', title:'Perahu Kertas',    author:'Dee Lestari',           coverId:7886745,  reason:'Banyak dibaca minggu ini' },
-//   { key:'d6', title:'Ayah',             author:'Andrea Hirata',         coverId:10521865, reason:'Dari penulis favoritmu' },
-// ];
-
-const FRIEND_ACTIVITY = [
-  { user:'Ameliana R.', avatar:'A', action:'sedang membaca', book:'Laskar Pelangi',  coverId:8231568,  key:'d1', time:'2 jam lalu'    },
-  { user:'Budi S.',     avatar:'B', action:'selesai membaca', book:'Bumi Manusia',   coverId:8750787,  key:'d2', time:'5 jam lalu'    },
-  { user:'Sari A.',     avatar:'S', action:'sedang membaca', book:'Perahu Kertas',   coverId:7886745,  key:'d4', time:'kemarin'       },
-  { user:'Dika P.',     avatar:'D', action:'baru meminjam',  book:'Cantik Itu Luka', coverId:12699828, key:'d3', time:'2 hari lalu'   },
-];
-
-const pseudo2 = (n: number, mn: number, mx: number) =>
-  mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
-
-// ── PopularSection ────────────────────────────────────────────────────────────
-function PopularSection({ dark, tk }: { dark: boolean; tk: any }) {
+const pseudo2 = (n: number, mn: number, mx: number) => mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
+function PopularSection({ dark, tk, books }: { dark: boolean; tk: any; books: BrowseBook[] }) {
+  const items = books.length > 0 ? books : BROWSE_POPULAR_BOOKS;
+  
   return (
-    <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-gold"
-      style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(201,168,76,0.3) transparent' }}>
-      {POPULAR_BOOKS.map((b, i) => {
-        const rating = (pseudo2(b.coverId + 7, 38, 50) / 10).toFixed(1);
-        const reads  = Math.floor(pseudo2(b.coverId + 1, 1200, 28000));
+    <div className="flex gap-4 px-4 -mx-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      {items.map((b, i) => {
+        const rating = Number.isFinite(b.rating) && Number(b.rating) > 0
+          ? Number(b.rating).toFixed(1)
+          : (pseudo2(i + 8, 38, 50) / 10).toFixed(1);
+        const reads  = Math.floor(pseudo2(i + 2, 1200, 28000));
+        
         const RANK_BADGE = [
-          'bg-yellow-400 text-yellow-900',
-          'bg-slate-300 text-slate-700',
-          'bg-amber-600 text-amber-100',
+          'bg-yellow-400 text-yellow-900', 
+          'bg-slate-300 text-slate-700', 
+          'bg-amber-600 text-amber-100'
         ];
+
         return (
-          <Link key={b.key} href={`/book/${b.key}`}>
-            <motion.div className="flex-shrink-0 w-32 cursor-pointer group"
-              whileHover={{ y: -4 }} transition={{ type: 'spring', stiffness: 400, damping: 28 }}>
-              <div className="relative">
+          <Link key={b.key} href={`/book/${b.key}`} className="flex-shrink-0">
+            <motion.div 
+              className="w-36 cursor-pointer group flex flex-col h-full" 
+              whileHover={{ y: -4 }} 
+              transition={{ type: 'spring', stiffness: 400, damping: 28 }}
+            >
+              <div className="relative mb-2">
+                {/* Badge Top 3 */}
                 {i < 3 && (
                   <div className={cn(
-                    'absolute z-10 w-6 h-6 rounded-lg rounded-bl-none rounded-tr-none flex items-center justify-center text-[10px] font-black shadow-lg',
+                    'absolute -top-2 -left-2 z-10 w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-black shadow-lg', 
                     RANK_BADGE[i]
-                  )}>#{i + 1}</div>
+                  )}>
+                    #{i + 1}
+                  </div>
                 )}
-                <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-lg', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
-                  <img src={`https://covers.openlibrary.org/b/id/${b.coverId}-M.jpg`} alt={b.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+                
+                {/* Cover Buku (aspect ratio disamain 2/3) */}
+                <div className={cn(
+                  'w-full aspect-[2/3] rounded-xl overflow-hidden shadow-md group-hover:shadow-xl transition-shadow duration-300', 
+                  dark ? 'bg-navy-700' : 'bg-parchment-dark'
+                )}>
+                  {b.coverUrl ? (
+                    <img 
+                      src={b.coverUrl} 
+                      alt={b.title} 
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+                      loading="lazy" 
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-slate-500 opacity-50">
+                      <BookOpen className="w-6 h-6" />
+                    </div>
+                  )}
                 </div>
               </div>
-              <p className={cn('text-[11px] font-semibold leading-tight line-clamp-2 mt-2', tk.text)}>{b.title}</p>
-              <p className={cn('text-[10px] mt-0.5 truncate', tk.muted)}>{b.author}</p>
-              <div className="flex items-center gap-1 mt-1">
-                <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                <span className="text-gold text-[10px] font-bold">{rating}</span>
-                <span className={cn('text-[10px]', tk.muted)}>· {reads.toLocaleString()}x</span>
+
+              {/* Info Buku */}
+              <div className="flex flex-col flex-1">
+                <p className={cn('text-xs font-bold leading-snug line-clamp-2 mb-1', tk.text)}>
+                  {b.title}
+                </p>
+                <p className={cn('text-[10px] truncate mb-1.5 mt-auto', tk.muted)}>
+                  {b.author}
+                </p>
+                
+                {/* Rating & Stats */}
+                <div className="flex items-center gap-1.5 mt-auto">
+                  <div className="flex items-center gap-0.5 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded text-[10px]">
+                    <Star className="w-2.5 h-2.5 text-gold fill-gold" />
+                    <span className="text-gold font-bold">{rating}</span>
+                  </div>
+                  <span className={cn('text-[9px] font-medium uppercase tracking-wider', tk.muted)}>
+                    {reads.toLocaleString()}x dibaca
+                  </span>
+                </div>
               </div>
             </motion.div>
           </Link>
@@ -1279,120 +1094,34 @@ function PopularSection({ dark, tk }: { dark: boolean; tk: any }) {
     </div>
   );
 }
-
-// // ── AISection ─────────────────────────────────────────────────────────────────
-// function AISection({ dark, tk }: { dark: boolean; tk: any }) {
-//   const [expanded, setExpanded] = useState(false);
-
-//   return (
-//     <div>
-//       <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-gold"
-//         style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(201,168,76,0.3) transparent' }}>
-//         {AI_RECO.map((b, i) => (
-//           <Link key={b.key + i} href={`/book/${b.key}`}>
-//             <motion.div className="flex-shrink-0 w-32 cursor-pointer group"
-//               whileHover={{ y: -4 }} transition={{ type: 'spring', stiffness: 400, damping: 28 }}>
-//               <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-lg', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
-//                 <img src={`https://covers.openlibrary.org/b/id/${b.coverId}-M.jpg`} alt={b.title}
-//                   className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-//               </div>
-//               <p className={cn('text-[11px] font-semibold leading-tight line-clamp-2 mt-2', tk.text)}>{b.title}</p>
-//               <p className={cn('text-[10px] mt-0.5', tk.muted)}>{b.reason}</p>
-//             </motion.div>
-//           </Link>
-//         ))}
-//       </div>
-
-//       {/* AI chat prompt */}
-//       <motion.button
-//         onClick={() => setExpanded(v => !v)}
-//         className={cn(
-//           'mt-3 w-full flex items-center gap-3 px-4 py-3 rounded-2xl border transition-all text-left',
-//           dark ? 'border-gold/20 bg-gold/5 hover:bg-gold/10' : 'border-gold/30 bg-gold/5 hover:bg-gold/10'
-//         )}>
-//         <Sparkles className="w-4 h-4 text-gold flex-shrink-0" />
-//         <span className={cn('text-sm', tk.text)}>
-//           Tanya PustarAI — <span className={cn('', tk.muted)}>
-//             "Rekomendasiin buku mirip Laskar Pelangi..."
-//           </span>
-//         </span>
-//         <ArrowRight className={cn('w-4 h-4 ml-auto flex-shrink-0 transition-transform', tk.muted, expanded && 'rotate-90')} />
-//       </motion.button>
-
-//       <AnimatePresence>
-//         {expanded && (
-//           <motion.div
-//             initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-//             exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}
-//             className="overflow-hidden">
-//             <div className={cn('mt-2 p-4 rounded-2xl border', dark ? 'bg-navy-800/60 border-white/8' : 'bg-white border-parchment-darker')}>
-//               <p className={cn('text-xs mb-3', tk.muted)}>Apa yang ingin kamu temukan?</p>
-//               <div className="flex gap-2 flex-wrap mb-3">
-//                 {['Mirip Laskar Pelangi', 'Sastra Indonesia klasik', 'Buku untuk dibaca sebelum tidur', 'Fiksi pendek'].map(s => (
-//                   <button key={s}
-//                     className={cn('text-xs px-3 py-1.5 rounded-full border transition-colors', dark ? 'border-white/10 text-white/60 hover:border-gold/40 hover:text-gold' : 'border-slate-200 text-slate-500 hover:border-gold/40 hover:text-gold')}>
-//                     {s}
-//                   </button>
-//                 ))}
-//               </div>
-//               <div className="flex gap-2">
-//                 <input placeholder="Atau ketik sendiri..."
-//                   className={cn('flex-1 px-3 py-2 rounded-xl border text-sm outline-none transition-all',
-//                     dark ? 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/50'
-//                          : 'bg-slate-50 border-slate-200 text-navy-900 placeholder-slate-400 focus:border-gold'
-//                   )} />
-//                 <button className="px-4 py-2 rounded-xl bg-gold text-navy-900 text-sm font-semibold hover:bg-gold/90 transition-colors">
-//                   Tanya
-//                 </button>
-//               </div>
-//             </div>
-//           </motion.div>
-//         )}
-//       </AnimatePresence>
-//     </div>
-//   );
-// }
-
-// ── FriendActivitySection ─────────────────────────────────────────────────────
 function FriendActivitySection({ dark, tk }: { dark: boolean; tk: any }) {
   return (
     <div className="flex flex-col gap-3">
-      {FRIEND_ACTIVITY.map((a, i) => (
-        <motion.div key={i}
-          className={cn('flex items-center gap-3 p-3 rounded-2xl border transition-all', dark ? 'bg-navy-800/40 border-white/6 hover:bg-navy-800/60' : 'bg-white border-parchment-darker hover:bg-slate-50')}
-          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-          transition={{ delay: i * 0.06 }}>
-
-          {/* Avatar */}
-          <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-            {a.avatar}
-          </div>
-
-          {/* Info */}
+      {BROWSE_FRIEND_ACTIVITY.map((a, i) => (
+        <motion.div key={i} className={cn('flex items-center gap-3 p-3 rounded-2xl border transition-all', dark ? 'bg-navy-800/40 border-white/6 hover:bg-navy-800/60' : 'bg-white border-parchment-darker hover:bg-slate-50')} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}>
+          <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">{a.avatar}</div>
           <div className="flex-1 min-w-0">
             <p className={cn('text-sm leading-tight', tk.text)}>
-              <span className="font-semibold">{a.user}</span>
-              <span className={cn('font-normal', tk.muted)}> {a.action} </span>
-              <span className="font-semibold">{a.book}</span>
+              <span className="font-semibold">{a.user}</span><span className={cn('font-normal', tk.muted)}> {a.action} </span><span className="font-semibold">{a.book}</span>
             </p>
             <p className={cn('text-xs mt-0.5', tk.muted)}>{a.time}</p>
           </div>
-
-          {/* Cover thumbnail */}
           <Link href={`/book/${a.key}`} className="flex-shrink-0">
             <div className="w-9 h-12 rounded-lg overflow-hidden shadow-md">
-              <img src={`https://covers.openlibrary.org/b/id/${a.coverId}-S.jpg`} alt={a.book}
-                className="w-full h-full object-cover" loading="lazy" />
+              <img src={a.coverUrl} alt={a.book} className="w-full h-full object-cover" loading="lazy" />
             </div>
           </Link>
-
-          {/* Comment icon */}
-          <Link href={`/book/${a.key}/reviews`}
-            className={cn('flex-shrink-0 p-1.5 rounded-lg transition-colors', tk.muted, 'hover:text-gold')}>
-            <MessageCircle className="w-4 h-4" />
-          </Link>
+          <Link href={`/book/${a.key}/reviews`} className={cn('flex-shrink-0 p-1.5 rounded-lg transition-colors', tk.muted, 'hover:text-gold')}><MessageCircle className="w-4 h-4" /></Link>
         </motion.div>
       ))}
     </div>
+  );
+}
+
+export default function BrowsePage() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <BrowseContent />
+    </Suspense>
   );
 }

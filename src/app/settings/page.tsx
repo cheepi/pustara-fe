@@ -9,8 +9,7 @@ import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Navbar from '@/components/layout/Navbar';
-
-type ThemeOption = 'dark' | 'light';
+import type { ThemeOption } from '@/types/settings';
 
 const THEME_OPTIONS: { value: ThemeOption; label: string; icon: typeof Moon; desc: string }[] = [
   { value: 'dark',  label: 'Gelap',  icon: Moon, desc: 'Navy & gold — mode default'   },

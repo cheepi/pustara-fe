@@ -39,7 +39,7 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
-
+  
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(''); setLoading(true);

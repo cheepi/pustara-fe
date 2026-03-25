@@ -1,37 +1,5 @@
 import { create } from 'zustand';
-
-// ── Types (sesuai response dari FastAPI via Express) ──────────────────────────
-
-export interface AiSignal {
-  score: number;
-  weight: number;
-  label: string;
-}
-
-export interface AiRecommendation {
-  book_id: string;
-  title: string;
-  authors: string;
-  avg_rating: number;
-  reason_primary: string;
-  reason_secondary: string | null;
-  dominant_signal: 'content' | 'collab';
-  hybrid_score: number;
-  phase: '❄️ Cold' | '🌡️ Mid' | '🔥 Warm';
-  signals: {
-    content: AiSignal;
-    collab: AiSignal;
-  };
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  recommendations?: AiRecommendation[];
-  query?: string;
-  phase?: string;
-  timestamp: number;
-}
+import type { AiRecommendation, ChatMessage } from '@/types/ai';
 
 interface AiStore {
   // Rekomendasi untuk homepage & ai-reco page
@@ -61,6 +29,8 @@ interface AiStore {
   setChatLoading: (v: boolean) => void;
   clearChat: () => void;
 }
+
+export type { AiRecommendation, ChatMessage };
 
 export const useAiStore = create<AiStore>((set) => ({
   homeRecommendations: [],

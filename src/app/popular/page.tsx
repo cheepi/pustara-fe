@@ -6,25 +6,11 @@ import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { fetchPopularBooks } from '@/lib/browse';
+import type { BrowseBook } from '@/types/browse';
 
 const coverUrl = (id?: number, s = 'M') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
-
-interface Book { key: string; title: string; author: string; coverId?: number; }
-
-const CACHE: Record<string, Book[]> = {};
-async function fetchBooks(q: string, limit = 40): Promise<Book[]> {
-  if (CACHE[q]) return CACHE[q];
-  const r = await fetch(`https://openlibrary.org/search.json?${q}&limit=${limit}&fields=key,title,author_name,cover_i`);
-  const d = await r.json();
-  const books = (d.docs || []).filter((b: any) => b.cover_i).map((b: any) => ({
-    key: b.key, title: b.title || '?',
-    author: (b.author_name || ['?'])[0],
-    coverId: b.cover_i,
-  }));
-  CACHE[q] = books;
-  return books;
-}
 
 const GENRES = ['Semua', 'Fiksi', 'Sastra', 'Romance', 'Sejarah', 'Sains', 'Filsafat', 'Biografi'];
 
@@ -46,7 +32,7 @@ export default function PopularPage() {
   const isLight = theme === 'light';
   const dark = !isLight;
 
-  const [books,   setBooks]   = useState<Book[]>([]);
+  const [books,   setBooks]   = useState<BrowseBook[]>([]);
   const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState('');
   const [genre,   setGenre]   = useState('Semua');
@@ -55,10 +41,7 @@ export default function PopularPage() {
 
   useEffect(() => {
     setLoading(true);
-    const q = genre === 'Semua'
-      ? 'subject:fiction&sort=rating'
-      : `subject:${genre.toLowerCase()}&sort=rating`;
-    fetchBooks(q, 40).then(setBooks).finally(() => setLoading(false));
+    fetchPopularBooks(genre, 40).then(setBooks).finally(() => setLoading(false));
   }, [genre]);
 
   const filtered = books.filter(b =>
@@ -156,6 +139,7 @@ export default function PopularPage() {
                       const rating = getRating(b.coverId, rankIdx);
                       const reads  = getReads(b.coverId, rankIdx);
                       const isFirst = rankIdx === 0;
+                      const src = b.coverUrl || coverUrl(b.coverId, 'M');
 
                       return (
                         <motion.div key={b.key}
@@ -179,8 +163,8 @@ export default function PopularPage() {
                               rk.glow
                             )}
                               style={{ width: isFirst ? 120 : 96, height: isFirst ? 172 : 138 }}>
-                              {b.coverId
-                                ? <img src={coverUrl(b.coverId, 'M')!} alt={b.title}
+                              {src
+                                ? <img src={src} alt={b.title}
                                     className="w-full h-full object-cover" loading="lazy" />
                                 : <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
                               }
@@ -226,7 +210,7 @@ export default function PopularPage() {
                       const rank   = i + 4;
                       const rating = getRating(b.coverId, i + 3);
                       const reads  = getReads(b.coverId, i + 3);
-                      const src    = coverUrl(b.coverId);
+                      const src    = b.coverUrl || coverUrl(b.coverId);
 
                       return (
                         <motion.div key={b.key}

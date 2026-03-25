@@ -6,24 +6,10 @@ import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { fetchCommunityReviews } from '@/lib/community';
+import type { CommunityReview } from '@/types/community';
 
 const coverUrl = (id?: number) => id ? `https://covers.openlibrary.org/b/id/${id}-M.jpg` : null;
-
-const ALL_REVIEWS = [
-  { user:'Ameliana R.', avatar:'A', loc:'Yogyakarta', rating:5, book:'Laskar Pelangi',  author:'Andrea Hirata',         coverId:8231568,  key:'d1', text:'Buku ini benar-benar mengubah cara pandangku tentang pendidikan dan semangat belajar. Andrea Hirata berhasil membawa kita ke Belitung dengan sangat hidup.', likes:142, comments:23, time:'2 jam lalu' },
-  { user:'Budi S.',     avatar:'B', loc:'Jakarta',    rating:5, book:'Bumi Manusia',    author:'Pramoedya Ananta Toer', coverId:8750787,  key:'d2', text:'Pramoedya adalah maestro sastra Indonesia. Minke adalah karakter yang paling kompleks dan manusiawi yang pernah kutemui dalam literatur Indonesia.', likes:98,  comments:17, time:'5 jam lalu' },
-  { user:'Sari A.',     avatar:'S', loc:'Bandung',    rating:5, book:'Cantik Itu Luka', author:'Eka Kurniawan',         coverId:12699828, key:'d3', text:'Realisme magis yang gelap dan indah. Eka Kurniawan berhasil memadukan sejarah kelam Indonesia dengan narasi yang memukau dari awal hingga akhir.', likes:87,  comments:11, time:'1 hari lalu' },
-  { user:'Dika P.',     avatar:'D', loc:'Surabaya',   rating:4, book:'Perahu Kertas',   author:'Dee Lestari',           coverId:7886745,  key:'d4', text:'Dee Lestari menulis cinta dengan cara yang tidak klise. Kugy dan Keenan adalah pasangan yang paling lovable dalam fiksi Indonesia modern.', likes:76,  comments:8,  time:'2 hari lalu' },
-  { user:'Maya K.',     avatar:'M', loc:'Medan',      rating:5, book:'Negeri 5 Menara', author:'Ahmad Fuadi',           coverId:8913924,  key:'d5', text:'Man jadda wajada. Novel ini mengubah cara pandangku tentang tekad dan usaha. Wajib baca untuk semua usia.', likes:63,  comments:14, time:'3 hari lalu' },
-  { user:'Reza F.',     avatar:'R', loc:'Makassar',   rating:4, book:'Ayah',            author:'Andrea Hirata',         coverId:10521865, key:'d6', text:'Sabari adalah karakter yang paling mengharukan. Kisah cintanya yang tak berbalas namun teguh adalah cerminan dari cinta yang paling murni.', likes:54,  comments:6,  time:'4 hari lalu' },
-  { user:'Lila S.',     avatar:'L', loc:'Bali',       rating:5, book:'Laskar Pelangi',  author:'Andrea Hirata',         coverId:8231568,  key:'d1', text:'Sudah baca 3 kali dan masih nangis di bagian yang sama. Buku ini adalah karya yang benar-benar abadi.', likes:49,  comments:9,  time:'5 hari lalu' },
-  { user:'Anto B.',     avatar:'A', loc:'Semarang',   rating:4, book:'Perahu Kertas',   author:'Dee Lestari',           coverId:7886745,  key:'d4', text:'Alur ceritanya mengalir dengan natural. Ini adalah romansa yang paling realistis yang pernah kubaca.', likes:41,  comments:5,  time:'1 minggu lalu' },
-  { user:'Hendra T.',   avatar:'H', loc:'Palembang',  rating:4, book:'Laskar Pelangi',  author:'Andrea Hirata',         coverId:8231568,  key:'d1', text:'Sangat menginspirasi! Kisah persahabatan yang tulus di tengah keterbatasan materi membuat air mata tak terbendung.', likes:38, comments:7, time:'1 minggu lalu' },
-  { user:'Putri R.',    avatar:'P', loc:'Malang',     rating:5, book:'Bumi Manusia',    author:'Pramoedya Ananta Toer', coverId:8750787,  key:'d2', text:'Membaca Bumi Manusia adalah pengalaman yang mengubah hidup. Setiap halaman penuh dengan kebijaksanaan tentang kemanusiaan.', likes:33, comments:4, time:'2 minggu lalu' },
-  { user:'Citra M.',    avatar:'C', loc:'Bogor',      rating:4, book:'Cantik Itu Luka', author:'Eka Kurniawan',         coverId:12699828, key:'d3', text:'Sejarah yang dikemas dalam narasi yang gelap dan indah. Butuh waktu untuk mencerna kedalamannya, tapi sangat worth it.', likes:29, comments:3, time:'2 minggu lalu' },
-  { user:'Yudi P.',     avatar:'Y', loc:'Solo',       rating:5, book:'Negeri 5 Menara', author:'Ahmad Fuadi',           coverId:8913924,  key:'d5', text:'Pesantren Gontor dan persahabatan yang tulus. Novel ini membuatku ingin belajar lebih keras lagi dalam hidup.', likes:24, comments:6, time:'3 minggu lalu' },
-];
-
 const TABS = ['Terbaru', 'Terpopuler', 'Diikuti'];
 const PAGE_SIZE = 4;
 
@@ -35,17 +21,22 @@ export default function CommunityPage() {
   const [liked,   setLiked]   = useState<Set<number>>(new Set());
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
+  const [reviews, setReviews] = useState<CommunityReview[]>([]);
 
   const loaderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { document.title = 'Pustara | Komunitas'; }, []);
 
+  useEffect(() => {
+    fetchCommunityReviews().then(setReviews).catch(() => setReviews([]));
+  }, []);
+
   // Reset ketika tab berubah
   useEffect(() => { setVisible(PAGE_SIZE); }, [tab]);
 
   const sorted = tab === 'Terpopuler'
-    ? [...ALL_REVIEWS].sort((a, b) => b.likes - a.likes)
-    : ALL_REVIEWS;
+    ? [...reviews].sort((a, b) => b.likes - a.likes)
+    : reviews;
 
   const displayed  = sorted.slice(0, visible);
   const hasMore    = visible < sorted.length;
@@ -163,7 +154,7 @@ export default function CommunityPage() {
                     </div>
                   </div>
 
-                  {/* Actions — hapus Reply */}
+                  {/* Actions */}
                   <div className="flex items-center gap-4 mt-4 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
                     <button
                       onClick={() => setLiked(l => {
@@ -176,9 +167,6 @@ export default function CommunityPage() {
                       <Heart className={cn('w-4 h-4', isLiked && 'fill-rose-400')} />
                       {r.likes + (isLiked ? 1 : 0)}
                     </button>
-                    {/* <span className={cn('flex items-center gap-1.5 text-xs', tk.muted)}>
-                      <MessageCircle className="w-4 h-4" />{r.comments}
-                    </span> */}
                     <Link href={`/book/${r.key}`}
                       className={cn('ml-auto flex items-center gap-1.5 text-xs font-medium hover:text-gold transition-colors', tk.muted)}>
                       <BookOpen className="w-3.5 h-3.5" /> Lihat Buku

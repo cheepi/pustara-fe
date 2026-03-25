@@ -11,73 +11,33 @@ import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useAuthStore } from '@/store/authStore';
+import { fetchShelfData } from '@/lib/shelf';
+import { SHELF_FALLBACK_DATA } from '@/data/shelfFallback';
+import type { BacaanBook, PinjamanBook, RiwayatBook, ShelfData, ShelfTabId, WishlistBook } from '@/types/shelf';
 
 const coverUrl = (id?: number) =>
   id ? `https://covers.openlibrary.org/b/id/${id}-M.jpg` : null;
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-interface RakBook {
-  key: string; title: string; author: string; coverId?: number;
-  genre: string; rating?: number;
-}
-interface PinjamanBook extends RakBook {
-  borrowedAt: string; dueDate: string; daysLeft: number;
-  progress: number; // 0-100
-}
-interface RiwayatBook extends RakBook {
-  returnedAt: string; readDays: number; userRating?: number;
-}
-interface WishlistBook extends RakBook {
-  addedAt: string; available: boolean;
-}
-interface BacaanBook extends RakBook {
-  progress: number; lastRead: string; totalPages: number; currentPage: number;
-}
-
-// ── Dummy Data ────────────────────────────────────────────────────────────────
-const DUMMY_PINJAMAN: PinjamanBook[] = [
-  { key: 'd1', title: 'Laskar Pelangi',  author: 'Andrea Hirata',         coverId: 8231568,  genre: 'Fiksi',    borrowedAt: '11 Mar 2026', dueDate: '18 Mar 2026', daysLeft: 0,  progress: 68 },
-  { key: 'd2', title: 'Bumi Manusia',    author: 'Pramoedya Ananta Toer', coverId: 8750787,  genre: 'Sastra',   borrowedAt: '14 Mar 2026', dueDate: '21 Mar 2026', daysLeft: 3,  progress: 22 },
-  { key: 'd4', title: 'Perahu Kertas',   author: 'Dee Lestari',           coverId: 7886745,  genre: 'Romance',  borrowedAt: '15 Mar 2026', dueDate: '22 Mar 2026', daysLeft: 4,  progress: 5  },
-];
-
-const DUMMY_DIBACA: BacaanBook[] = [
-  { key: 'd1', title: 'Laskar Pelangi',  author: 'Andrea Hirata',         coverId: 8231568,  genre: 'Fiksi',   progress: 68, lastRead: '2 jam lalu',  totalPages: 529, currentPage: 360 },
-  { key: 'd3', title: 'Cantik Itu Luka', author: 'Eka Kurniawan',         coverId: 12699828, genre: 'Fiksi',   progress: 41, lastRead: 'Kemarin',     totalPages: 505, currentPage: 207 },
-  { key: 'd5', title: 'Negeri 5 Menara', author: 'Ahmad Fuadi',           coverId: 8913924,  genre: 'Inspiratif', progress: 90, lastRead: '3 hari lalu', totalPages: 423, currentPage: 380 },
-];
-
-const DUMMY_WISHLIST: WishlistBook[] = [
-  { key: 'd3', title: 'Cantik Itu Luka',  author: 'Eka Kurniawan',         coverId: 12699828, genre: 'Fiksi',      addedAt: '10 Mar 2026', available: true,  rating: 4.6 },
-  { key: 'd6', title: 'Ayah',             author: 'Andrea Hirata',         coverId: 10521865, genre: 'Keluarga',   addedAt: '8 Mar 2026',  available: true,  rating: 4.7 },
-  { key: 'd5', title: 'Negeri 5 Menara',  author: 'Ahmad Fuadi',           coverId: 8913924,  genre: 'Inspiratif', addedAt: '5 Mar 2026',  available: false, rating: 4.5 },
-  { key: 'd2', title: 'Bumi Manusia',     author: 'Pramoedya Ananta Toer', coverId: 8750787,  genre: 'Sastra',     addedAt: '1 Mar 2026',  available: true,  rating: 4.9 },
-];
-
-const DUMMY_RIWAYAT: RiwayatBook[] = [
-  { key: 'd6', title: 'Ayah',             author: 'Andrea Hirata',         coverId: 10521865, genre: 'Keluarga',   returnedAt: '5 Mar 2026',  readDays: 6, userRating: 5 },
-  { key: 'd5', title: 'Negeri 5 Menara',  author: 'Ahmad Fuadi',           coverId: 8913924,  genre: 'Inspiratif', returnedAt: '20 Feb 2026', readDays: 7, userRating: 4 },
-  { key: 'd3', title: 'Cantik Itu Luka',  author: 'Eka Kurniawan',         coverId: 12699828, genre: 'Fiksi',      returnedAt: '10 Feb 2026', readDays: 5, userRating: 5 },
-  { key: 'd4', title: 'Perahu Kertas',    author: 'Dee Lestari',           coverId: 7886745,  genre: 'Romance',    returnedAt: '28 Jan 2026', readDays: 4, userRating: 4 },
-];
-
 // ── Tabs config ───────────────────────────────────────────────────────────────
 const TABS = [
-  { id: 'dipinjam', label: 'Dipinjam',      icon: BookMarked,   count: DUMMY_PINJAMAN.length },
-  { id: 'dibaca',   label: 'Sedang Dibaca', icon: BookOpen,     count: DUMMY_DIBACA.length   },
-  { id: 'wishlist', label: 'Wishlist',      icon: Heart,        count: DUMMY_WISHLIST.length },
-  { id: 'riwayat',  label: 'Riwayat',       icon: Clock,        count: DUMMY_RIWAYAT.length  },
+  { id: 'dipinjam', label: 'Dipinjam',      icon: BookMarked },
+  { id: 'dibaca',   label: 'Sedang Dibaca', icon: BookOpen },
+  { id: 'wishlist', label: 'Wishlist',      icon: Heart },
+  { id: 'riwayat',  label: 'Riwayat',       icon: Clock },
 ] as const;
-type TabId = typeof TABS[number]['id'];
 
 // ── Main Page ─────────────────────────────────────────────────────────────────
 export default function RakBukuPage() {
   const { theme } = useTheme();
   const { user }  = useAuthStore();
   const isLight = theme === 'light';
-  const [tab, setTab] = useState<TabId>('dipinjam');
+  const [tab, setTab] = useState<ShelfTabId>('dipinjam');
+  const [shelfData, setShelfData] = useState<ShelfData>(SHELF_FALLBACK_DATA);
 
   useEffect(() => { document.title = 'Pustara | Rak Buku'; }, []);
+  useEffect(() => {
+    fetchShelfData().then(setShelfData).catch(() => setShelfData(SHELF_FALLBACK_DATA));
+  }, []);
 
   const firstName = user?.displayName?.split(' ')[0] || 'Pembaca';
 
@@ -91,11 +51,18 @@ export default function RakBukuPage() {
 
   // Stats summary
   const stats = [
-    { label: 'Dipinjam',    value: DUMMY_PINJAMAN.length, icon: BookMarked,  color: 'text-gold' },
-    { label: 'Dibaca',      value: DUMMY_DIBACA.length,   icon: TrendingUp,  color: 'text-emerald-400' },
-    { label: 'Wishlist',    value: DUMMY_WISHLIST.length, icon: Heart,       color: 'text-rose-400' },
-    { label: 'Selesai',     value: DUMMY_RIWAYAT.length,  icon: CheckCircle, color: 'text-blue-400' },
+    { label: 'Dipinjam',    value: shelfData.pinjaman.length, icon: BookMarked,  color: 'text-gold' },
+    { label: 'Dibaca',      value: shelfData.dibaca.length,   icon: TrendingUp,  color: 'text-emerald-400' },
+    { label: 'Wishlist',    value: shelfData.wishlist.length, icon: Heart,       color: 'text-rose-400' },
+    { label: 'Selesai',     value: shelfData.riwayat.length,  icon: CheckCircle, color: 'text-blue-400' },
   ];
+
+  const tabCounts: Record<ShelfTabId, number> = {
+    dipinjam: shelfData.pinjaman.length,
+    dibaca: shelfData.dibaca.length,
+    wishlist: shelfData.wishlist.length,
+    riwayat: shelfData.riwayat.length,
+  };
 
   return (
     <div className={cn('min-h-screen transition-colors duration-300', tk.bg)} style={{ background: 'var(--bg)' }}>
@@ -107,7 +74,7 @@ export default function RakBukuPage() {
         <motion.div className="mb-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <p className="text-gold/70 text-sm font-medium mb-0.5">Koleksi kamu,</p>
           <h1 className={cn('font-serif text-3xl lg:text-4xl font-black', tk.text)}>
-            Rak Buku 📚
+            Rak Buku
           </h1>
         </motion.div>
 
@@ -146,7 +113,7 @@ export default function RakBukuPage() {
               <span className={cn(
                 'text-[11px] font-bold px-1.5 py-0.5 rounded-full',
                 tab === t.id ? 'bg-navy-900/20 text-navy-900' : isLight ? 'bg-navy-100 text-navy-600' : 'bg-white/10 text-white/60'
-              )}>{t.count}</span>
+              )}>{tabCounts[t.id]}</span>
             </button>
           ))}
         </div>
@@ -157,10 +124,10 @@ export default function RakBukuPage() {
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}>
 
-            {tab === 'dipinjam' && <TabDipinjam books={DUMMY_PINJAMAN} tk={tk} isLight={isLight} />}
-            {tab === 'dibaca'   && <TabDibaca   books={DUMMY_DIBACA}   tk={tk} isLight={isLight} />}
-            {tab === 'wishlist' && <TabWishlist books={DUMMY_WISHLIST} tk={tk} isLight={isLight} />}
-            {tab === 'riwayat'  && <TabRiwayat  books={DUMMY_RIWAYAT}  tk={tk} isLight={isLight} />}
+            {tab === 'dipinjam' && <TabDipinjam books={shelfData.pinjaman} tk={tk} isLight={isLight} />}
+            {tab === 'dibaca'   && <TabDibaca   books={shelfData.dibaca}   tk={tk} isLight={isLight} />}
+            {tab === 'wishlist' && <TabWishlist books={shelfData.wishlist} tk={tk} isLight={isLight} />}
+            {tab === 'riwayat'  && <TabRiwayat  books={shelfData.riwayat}  tk={tk} isLight={isLight} />}
           </motion.div>
         </AnimatePresence>
       </main>

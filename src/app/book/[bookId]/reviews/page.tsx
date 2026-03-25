@@ -7,43 +7,9 @@ import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
-
-const coverUrl = (id?: number) => id ? `https://covers.openlibrary.org/b/id/${id}-M.jpg` : null;
-
-const BOOKS_META: Record<string, { title: string; author: string; coverId: number; rating: number; ratingCount: number }> = {
-  d1: { title:'Laskar Pelangi',  author:'Andrea Hirata',         coverId:8231568,  rating:4.7, ratingCount:12840 },
-  d2: { title:'Bumi Manusia',    author:'Pramoedya Ananta Toer', coverId:8750787,  rating:4.9, ratingCount:9210  },
-  d3: { title:'Cantik Itu Luka', author:'Eka Kurniawan',         coverId:12699828, rating:4.6, ratingCount:7330  },
-  d4: { title:'Perahu Kertas',   author:'Dee Lestari',           coverId:7886745,  rating:4.8, ratingCount:15200 },
-  d5: { title:'Negeri 5 Menara', author:'Ahmad Fuadi',           coverId:8913924,  rating:4.5, ratingCount:8760  },
-  d6: { title:'Ayah',            author:'Andrea Hirata',         coverId:10521865, rating:4.7, ratingCount:6540  },
-};
-
-const REVIEWS_BY_BOOK: Record<string, Review[]> = {
-  d1: [
-    { user:'Ameliana R.', avatar:'A', loc:'Yogyakarta', rating:5, text:'Buku ini benar-benar mengubah cara pandangku tentang pendidikan dan semangat belajar. Andrea Hirata berhasil membawa kita ke Belitung dengan sangat hidup dan penuh warna.', likes:142, time:'2 jam lalu' },
-    { user:'Lila S.',     avatar:'L', loc:'Bali',       rating:5, text:'Sudah baca 3 kali dan masih nangis di bagian yang sama. Karya yang benar-benar abadi.', likes:49, time:'5 hari lalu' },
-    { user:'Hendra T.',   avatar:'H', loc:'Palembang',  rating:4, text:'Sangat menginspirasi! Kisah persahabatan yang tulus di tengah keterbatasan materi.', likes:31, time:'1 minggu lalu' },
-    { user:'Putri R.',    avatar:'P', loc:'Malang',     rating:5, text:'Belitung terasa sangat nyata setelah membaca ini. Penulisan Andrea sangat puitis.', likes:28, time:'2 minggu lalu' },
-    { user:'Yoga D.',     avatar:'Y', loc:'Bandung',    rating:4, text:'Membaca ini di saat hujan adalah pengalaman tersendiri. Sangat hangat dan mengharukan.', likes:19, time:'3 minggu lalu' },
-    { user:'Nisa W.',     avatar:'N', loc:'Surabaya',   rating:5, text:'10/10 tidak ada kata yang bisa mendeskripsikan betapa bagusnya buku ini.', likes:15, time:'1 bulan lalu' },
-  ],
-  d2: [
-    { user:'Budi S.',     avatar:'B', loc:'Jakarta',    rating:5, text:'Pramoedya adalah maestro sastra Indonesia. Minke adalah karakter yang paling kompleks dan manusiawi.', likes:98, time:'5 jam lalu' },
-    { user:'Maya K.',     avatar:'M', loc:'Medan',      rating:5, text:'Membaca Bumi Manusia adalah pengalaman yang mengubah hidup. Setiap halaman penuh dengan kebijaksanaan.', likes:67, time:'2 hari lalu' },
-    { user:'Citra M.',    avatar:'C', loc:'Bogor',      rating:4, text:'Sejarah kolonial yang dikemas dalam romance yang indah. Wajib baca untuk semua orang Indonesia.', likes:45, time:'1 minggu lalu' },
-    { user:'Rafi A.',     avatar:'R', loc:'Jogja',      rating:5, text:'Minke dan Annelies — kisah cinta yang melampaui batas ras dan kelas. Sangat memilukan dan indah.', likes:38, time:'2 minggu lalu' },
-  ],
-};
-
-const getReviews = (key: string): Review[] => REVIEWS_BY_BOOK[key] ?? [
-  { user:'Pengguna Pustara', avatar:'P', loc:'Indonesia', rating:5, text:'Buku yang sangat bagus! Sangat direkomendasikan untuk semua pembaca.', likes:34, time:'3 hari lalu' },
-  { user:'Pembaca Setia',    avatar:'S', loc:'Jakarta',   rating:4, text:'Cerita yang mengalir dengan indah. Tidak bisa berhenti membaca!', likes:21, time:'1 minggu lalu' },
-  { user:'Ahmad R.',         avatar:'A', loc:'Bandung',   rating:5, text:'Salah satu buku terbaik yang pernah kubaca. Sangat merekomendasikan!', likes:18, time:'2 minggu lalu' },
-];
-
-interface Review { user: string; avatar: string; loc: string; rating: number; text: string; likes: number; time: string; }
-
+import { fetchBookReviewData } from '@/lib/bookReviews';
+import type { Review } from '@/types/book';
+import type { BookDetail } from '@/types/book';
 const RATING_FILTERS = ['Semua', '5 ★', '4 ★', '3 ★', '2 ★', '1 ★'];
 const PAGE_SIZE = 3;
 
@@ -54,22 +20,45 @@ export default function ReviewsPage() {
   const isLight = theme === 'light';
 
   const bookKey = (params?.bookId as string) ?? 'd1';
-  const meta    = BOOKS_META[bookKey] ?? BOOKS_META['d1'];
-  const reviews = getReviews(bookKey);
-
+  const [meta, setMeta] = useState<BookDetail | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingData, setLoadingData] = useState(true);
   const [filter,  setFilter]  = useState('Semua');
   const [liked,   setLiked]   = useState<Set<number>>(new Set());
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => { document.title = `Pustara | Ulasan ${meta.title}`; }, [meta.title]);
+  useEffect(() => {
+    fetchBookReviewData(bookKey)
+      .then(({ meta, reviews }) => {
+        setMeta(meta);
+        setReviews(reviews);
+      })
+      .finally(() => setLoadingData(false));
+  }, [bookKey]);
+
+  useEffect(() => {
+    if (!meta) return;
+    document.title = `Pustara | Ulasan ${meta.title}`;
+  }, [meta]);
 
   // Reset visible ketika filter berubah
   useEffect(() => { setVisible(PAGE_SIZE); }, [filter]);
 
-  const filtered  = filter === 'Semua' ? reviews : reviews.filter(r => r.rating === parseInt(filter));
+  const filtered  = filter === 'Semua' ? reviews : reviews.filter(r => r.rating === parseInt(filter, 10));
   const displayed = filtered.slice(0, visible);
   const hasMore   = visible < filtered.length;
+
+  if (loadingData || !meta) {
+    return (
+      <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
+        <Navbar />
+      </div>
+    );
+  }
+
+  const authorText = meta.authors.join(', ');
+  const cover = meta.cover_url || 'https://placehold.co/240x360?text=No+Cover';
 
   function handleLoadMore() {
     if (loading) return;
@@ -84,7 +73,7 @@ export default function ReviewsPage() {
   const dist = [5,4,3,2,1].map(s => ({
     stars: s,
     count: reviews.filter(r => r.rating === s).length,
-    pct:   Math.round(reviews.filter(r => r.rating === s).length / reviews.length * 100),
+    pct:   reviews.length > 0 ? Math.round(reviews.filter(r => r.rating === s).length / reviews.length * 100) : 0,
   }));
 
   const tk = {
@@ -113,21 +102,21 @@ export default function ReviewsPage() {
           initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <Link href={`/book/${bookKey}`} className="flex-shrink-0">
             <div className="w-16 h-24 rounded-xl overflow-hidden shadow-lg">
-              <img src={coverUrl(meta.coverId)!} alt={meta.title} className="w-full h-full object-cover" />
+              <img src={cover} alt={meta.title} className="w-full h-full object-cover" />
             </div>
           </Link>
           <div className="flex-1 min-w-0">
             <h1 className={cn('font-serif text-xl font-black leading-tight', tk.text)}>{meta.title}</h1>
-            <p className={cn('text-sm mt-0.5 mb-3', tk.muted)}>{meta.author}</p>
+            <p className={cn('text-sm mt-0.5 mb-3', tk.muted)}>{authorText}</p>
             <div className="flex items-center gap-2">
               <div className="flex gap-0.5">
                 {[1,2,3,4,5].map(s => (
                   <Star key={s} className={cn('w-4 h-4',
-                    s <= Math.round(meta.rating) ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
+                    s <= Math.round(meta.avg_rating) ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
                 ))}
               </div>
-              <span className="text-gold font-bold">{meta.rating}</span>
-              <span className={cn('text-xs', tk.muted)}>({meta.ratingCount.toLocaleString()} ulasan)</span>
+              <span className="text-gold font-bold">{meta.avg_rating}</span>
+              <span className={cn('text-xs', tk.muted)}>({meta.rating_count.toLocaleString()} ulasan)</span>
             </div>
           </div>
         </motion.div>
@@ -189,8 +178,8 @@ export default function ReviewsPage() {
                       {r.avatar}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className={cn('text-sm font-semibold', tk.text)}>{r.user}</p>
-                      <p className={cn('text-xs', tk.muted)}>{r.loc} · {r.time}</p>
+                      <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
+                      <p className={cn('text-xs', tk.muted)}>{r.loc ?? '-'} · {r.time ?? '-'}</p>
                     </div>
                     <div className="flex gap-0.5">
                       {[1,2,3,4,5].map(s => (
@@ -202,7 +191,7 @@ export default function ReviewsPage() {
 
                   <p className={cn('text-sm leading-relaxed mb-3', tk.muted)}>{r.text}</p>
 
-                  {/* Actions — no reply */}
+                  {/* Actions */}
                   <button
                     onClick={() => setLiked(l => {
                       const n = new Set(l);
@@ -212,7 +201,7 @@ export default function ReviewsPage() {
                     className={cn('flex items-center gap-1.5 text-xs font-medium transition-colors',
                       isLiked ? 'text-rose-400' : tk.muted, 'hover:text-rose-400')}>
                     <Heart className={cn('w-3.5 h-3.5', isLiked && 'fill-rose-400')} />
-                    {r.likes + (isLiked ? 1 : 0)}
+                    {(r.likes ?? 0) + (isLiked ? 1 : 0)}
                   </button>
                 </motion.div>
               );

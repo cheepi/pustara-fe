@@ -46,19 +46,19 @@ function Eyeball({ mouseX, mouseY, eyeRef, isLight }: {
         'relative w-24 h-24 rounded-full border-4 flex items-center justify-center overflow-hidden',
         isLight
           ? 'bg-white border-navy-800 shadow-[0_8px_32px_rgba(0,0,0,0.18)]'
-          : 'bg-navy-100 border-navy-900 shadow-[0_8px_32px_rgba(0,0,0,0.5)]'
+          : 'bg-white border-slate-300 shadow-[0_8px_32px_rgba(0,0,0,0.18)]'
       )}>
       <motion.div
         className="absolute w-12 h-12 rounded-full"
         style={{
           background: isLight
             ? 'radial-gradient(circle at 35% 35%, #4f7cac, #1a3a5c)'
-            : 'radial-gradient(circle at 35% 35%, #c9a84c, #7a5c1a)',
+            : 'radial-gradient(circle at 35% 35%, #c9a84c, #1a3a5c)',
         }}
         animate={{ x: pupilPos.x, y: pupilPos.y }}
         transition={{ type: 'spring', stiffness: 400, damping: 28 }}>
         <div className="absolute inset-0 flex items-center justify-center">
-          <div className={cn('w-5 h-5 rounded-full', isLight ? 'bg-navy-900' : 'bg-navy-950')} />
+          <div className={cn('w-5 h-5 rounded-full', isLight ? 'bg-navy-900' : 'bg-black')} />
         </div>
         <div className="absolute top-1.5 left-2 w-2 h-2 rounded-full bg-white/70" />
       </motion.div>
@@ -69,7 +69,7 @@ function Eyeball({ mouseX, mouseY, eyeRef, isLight }: {
 
 const EGG_MESSAGES = [
   null,
-  'Iya tau, ini emg gerak ikutin kursor lo 👀 -Pustrakrew',
+  'No no yh, no pencet-pencet 👀 -Pustrakrew',
   'Udah berapa kali nih? Gapunya kerjaan? 😄',
   'Oke oke gue tau lo kesepian... balik ke beranda yuk',
   'Seriously, balik deh. Banyak buku bagus nunggu! 📚',
@@ -142,7 +142,7 @@ export default function NotFoundPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
 
-        {/* 4 👁👁 4 */}
+        {/* its the eyes chico, they never lie */}
         <motion.div
           className="flex items-center justify-center gap-3 mb-5 cursor-pointer select-none"
           onClick={() => setShookCount(c => c + 1)}
@@ -261,7 +261,7 @@ export default function NotFoundPage() {
           className={cn('text-[11px] mt-6', tk.muted)}
           initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           transition={{ delay: 0.7 }}>
-          💡 Psst — coba klik angka 404 berkali-kali...
+          💡 Psst — punya pertanyaan atau saran? Hit us up <Link href=" " target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">@Pustakrew</Link>
         </motion.p>
       </motion.div>
     </div>

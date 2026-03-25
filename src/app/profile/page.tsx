@@ -40,9 +40,9 @@ const RECENT_ACTIVITY = [
 ];
 
 const FOLLOWING_PREVIEW = [
-  { name: 'Ameliana', avatar: 'A', books: 31 },
-  { name: 'Syifa',    avatar: 'S', books: 19 },
-  { name: 'Kayana',   avatar: 'K', books: 27 },
+  { name: 'Ana', avatar: 'A', books: 31 },
+  { name: 'Shea',    avatar: 'S', books: 19 },
+  { name: 'Kamal',   avatar: 'K', books: 27 },
 ];
 
 export default function ProfilePage() {
