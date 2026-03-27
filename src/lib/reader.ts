@@ -32,7 +32,8 @@ function toReaderBook(id: string, title: string, author: string, pdfUrl?: string
 
 export async function fetchReaderBook(bookId: string): Promise<ReaderBook> {
   try {
-    const res = await fetch(`${API_URL}/books/${bookId}/read`, { cache: 'no-store' });
+    // Try fetch from /books/:id endpoint (yang ada di backend)
+    const res = await fetch(`${API_URL}/books/${bookId}`, { cache: 'no-store' });
     if (res.ok) {
       const json = await res.json();
       const data = json?.data ?? json;
