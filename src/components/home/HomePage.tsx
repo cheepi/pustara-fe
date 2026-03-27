@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Sparkles, BookCopy, Flame, Users, Heart, CircleCheckBig,
@@ -15,6 +15,12 @@ import { useRecommendations } from '@/hooks/useRecommendations';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
 import AiRecoCard from '@/components/ai/AiRecoCard';
 import { DUMMY_COMMUNITY_REVIEWS } from '@/data/dummyData';
+import {
+  batchFetchCovers,
+  getCoverFromMap,
+  coverBatchCache,
+  type CoverRequest,
+} from '@/lib/coverBatch';
 
 const coverUrl = (id?: number, s = 'M') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
@@ -52,6 +58,36 @@ export default function HomePage() {
   const firstName  = user?.displayName?.split(' ')[0] || 'Pembaca';
   const { books: popularBooks, loading: popularLoading } = useTrendingBooks(6);
   const { recommendations: aiReco, loading: aiLoading } = useRecommendations();
+  const [aiCovers, setAiCovers] = useState<Map<string, string | null>>(new Map());
+
+  useEffect(() => {
+    if (!aiReco || aiReco.length === 0) {
+      setAiCovers(new Map());
+      return;
+    }
+
+    // Prepare cover requests
+    const coverRequests: CoverRequest[] = aiReco.map((reco) => ({
+      title: reco.title,
+      authors: reco.authors,
+      coverUrl: (reco as any).cover_url, // Check if already have URL
+    }));
+
+    // Batch fetch all covers at once
+    coverBatchCache
+      .fetch(coverRequests)
+      .then((coverMap) => {
+        // Convert map to simple key->url for easier lookup
+        const urlMap = new Map<string, string | null>();
+        for (const [key, result] of coverMap.entries()) {
+          urlMap.set(key, result.coverUrl);
+        }
+        setAiCovers(urlMap);
+      })
+      .catch(() => {
+        setAiCovers(new Map());
+      });
+  }, [aiReco]);
 
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
@@ -135,9 +171,20 @@ export default function HomePage() {
           {aiLoading
             ? Array(5).fill(0).map((_, i) => <AiRecoCardSkeleton key={i} isLight={isLight} />)
             : aiReco.length > 0
-              ? aiReco.slice(0, 5).map((reco, i) => (
-                  <AiRecoCard key={reco.book_id} reco={reco} index={i} isLight={isLight} />
-                ))
+              ? aiReco.slice(0, 5).map((reco, i) => {
+                  // Lookup cover from batch-fetched map
+                  const key = `${reco.title}—${reco.authors}`.toLowerCase();
+                  const coverUrl = aiCovers.get(key) || (reco as any).cover_url;
+                  return (
+                    <AiRecoCard
+                      key={reco.book_id}
+                      reco={reco}
+                      index={i}
+                      isLight={isLight}
+                      coverUrl={coverUrl}
+                    />
+                  );
+                })
               : (
                 <p className="text-sm px-1 py-8" style={{ color: 'var(--muted)' }}>
                   Rekomendasi belum tersedia. Pastikan server AI berjalan.

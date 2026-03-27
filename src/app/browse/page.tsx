@@ -17,7 +17,7 @@ import { useRecommendations } from '@/hooks/useRecommendations';
 import { fetchOpenLibraryCoverId } from '@/lib/api';
 import type { AiRecommendation } from '@/types/ai';
 import AiRecoCard from '@/components/ai/AiRecoCard';
-import { useCover, AiRecoCardSkeleton, } from '@/components/ai/AiRecoCard';
+import { AiRecoCardSkeleton, } from '@/components/ai/AiRecoCard';
 import { fetchBrowseBooks, fetchTopPustakrew } from '@/lib/browse';
 import type { BrowseBook } from '@/types/browse';
 import { BROWSE_FRIEND_ACTIVITY, BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';

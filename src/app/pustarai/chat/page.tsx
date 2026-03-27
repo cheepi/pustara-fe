@@ -10,7 +10,7 @@ import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import { useChatAI } from '@/hooks/useChatAI';
 import { useUserStore } from '@/store/userStore';
-import { fetchOpenLibraryCoverId } from '@/lib/api';
+import { useBookCover } from '@/hooks/useBookCover';
 import type { AiRecommendation } from '@/types/ai';
 import ReactMarkdown from 'react-markdown';
 
@@ -52,14 +52,13 @@ function useTypewriter(text: string, speed = 18, enabled = true) {
 
 // ── Mini book card ─────────────────────────────────────────────────────────────
 function MiniRecoCard({ reco, isLight }: { reco: AiRecommendation; isLight: boolean }) {
-  const [coverSrc, setCoverSrc] = useState<string | null>(null);
+  const { url: coverSrc } = useBookCover({
+    id: reco.book_id,
+    title: reco.title,
+    author: reco.authors,
+    cover_url: reco.cover_url ?? null,
+  });
   const bg = `hsl(${hue(reco.title)}, 35%, ${isLight ? '75%' : '25%'})`;
-
-  useEffect(() => {
-    fetchOpenLibraryCoverId(reco.title, reco.authors).then(id => {
-      if (id) setCoverSrc(`https://covers.openlibrary.org/b/id/${id}-M.jpg`);
-    });
-  }, [reco.title, reco.authors]);
 
   return (
     <Link href={`/book/${reco.book_id}`}>

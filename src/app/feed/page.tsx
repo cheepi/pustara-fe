@@ -13,7 +13,8 @@ import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import { useChatAI } from '@/hooks/useChatAI';
 import { useRecommendations } from '@/hooks/useRecommendations';
-import { fetchOpenLibraryCoverId, type TrendingBook } from '@/lib/api';
+import { type TrendingBook } from '@/lib/api';
+import { useBookCover } from '@/hooks/useBookCover';
 import type { AiRecommendation } from '@/types/ai';
 import type { FeedItem } from '@/types/feed';
 import { STATIC_SOCIAL_FEED } from '@/data/feedFallback';
@@ -34,26 +35,23 @@ const FILTER_TABS = [
 
 // ── Cover hooks ───────────────────────────────────────────────────────────────
 function useAiCover(reco?: AiRecommendation) {
-  const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    if (!reco) return;
-    fetchOpenLibraryCoverId(reco.title, reco.authors).then(id => {
-      if (id) setSrc(`https://covers.openlibrary.org/b/id/${id}-M.jpg`);
-    });
-  }, [reco?.title, reco?.authors]);
-  return src;
+  const { url } = useBookCover(reco ? {
+    id: reco.book_id,
+    title: reco.title,
+    author: reco.authors,
+    cover_url: reco.cover_url ?? null,
+  } : null);
+  return url;
 }
 
 function useTrendingCover(book?: TrendingBook) {
-  const [src, setSrc] = useState<string | null>(null);
-  useEffect(() => {
-    if (!book) return;
-    if (book.cover_url) { setSrc(book.cover_url); return; }
-    fetchOpenLibraryCoverId(book.title, book.authors).then(id => {
-      if (id) setSrc(`https://covers.openlibrary.org/b/id/${id}-M.jpg`);
-    });
-  }, [book?.title, book?.authors]);
-  return src;
+  const { url } = useBookCover(book ? {
+    id: book.book_id,
+    title: book.title,
+    author: book.authors,
+    cover_url: book.cover_url ?? null,
+  } : null);
+  return url;
 }
 
 // ── Cover thumb ───────────────────────────────────────────────────────────────

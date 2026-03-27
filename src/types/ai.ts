@@ -8,6 +8,7 @@ export interface AiRecommendation {
   book_id: string;
   title: string;
   authors: string;
+  cover_url?: string | null;
   avg_rating: number;
   reason_primary: string;
   reason_secondary: string | null;
