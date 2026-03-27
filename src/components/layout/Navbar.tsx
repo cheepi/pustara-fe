@@ -13,7 +13,9 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Wordmark from '../icons/Wordmark';
+import Logo from '../icons/Logo';
 
+const MotionLogo = motion(Logo);
 export default function Navbar() {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [dropOpen,   setDropOpen]   = useState(false);
@@ -96,19 +98,18 @@ export default function Navbar() {
 
             {/* ── Logo: icon overflows bar top/bottom, wordmark inside ── */}
             <Link href="/" className="flex items-center gap-1 flex-shrink-0 -ml-1">
-              <motion.img
-                src="/logo.png"
-                alt="Pustara"
-                className="w-auto drop-shadow-lg flex-shrink-0 relative z-10"
-                style={{ 
-                  height: typeof window !== 'undefined' && window.innerWidth < 768 ? '80px' : '86px',
-                  marginTop: typeof window !== 'undefined' && window.innerWidth < 768 ? '0px' : '-10px',
-                  marginBottom: typeof window !== 'undefined' && window.innerWidth < 768 ? '0px' : '-10px', 
-                  marginLeft: typeof window !== 'undefined' && window.innerWidth < 768 ? '-18px' : '-36px' }}
-                whileHover={{ rotate: -12, scale: 1.1 }}
-                whileTap={{ scale: 0.92 }}
-                transition={{ type: 'spring', stiffness: 420, damping: 18 }}
-              />
+            <MotionLogo
+              className="w-auto drop-shadow-lg flex-shrink-0 relative z-10"
+              style={{
+                height: typeof window !== "undefined" && window.innerWidth < 768 ? "80px" : "86px",
+                marginTop: typeof window !== "undefined" && window.innerWidth < 768 ? "0px" : "-10px",
+                marginBottom: typeof window !== "undefined" && window.innerWidth < 768 ? "0px" : "-10px",
+                marginLeft: typeof window !== "undefined" && window.innerWidth < 768 ? "-18px" : "-36px",
+              }}
+              whileHover={{ rotate: -12, scale: 1.1 }}
+              whileTap={{ scale: 0.92 }}
+              transition={{ type: "spring", stiffness: 420, damping: 18 }}
+            />
               <Wordmark isLight={isLight} className="hidden md:block h-4 w-auto flex-shrink-0" />
             </Link>
 

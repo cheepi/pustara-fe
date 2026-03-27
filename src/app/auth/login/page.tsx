@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import Logo from '@/components/icons/Logo';
 import Wordmark from '@/components/icons/Wordmark';
 import ComboLogo from '@/components/icons/ComboLogo';
+import { useCaptcha, CaptchaWidget } from '@/hooks/useCaptcha';
 
 // Floating orb particles — purely CSS/motion, no external images needed
 const ORBS = [
@@ -39,26 +40,55 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  const { token: captchaToken, error: captchaError, captchaRef, reset: resetCaptcha } = useCaptcha();
   
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    if (!captchaToken) {
+      setError('Verifikasi CAPTCHA diperlukan sebelum masuk.');
+      return;
+    }
     setError(''); setLoading(true);
     try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const precheck = await fetch(`${apiUrl}/auth/signin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, captchaToken }),
+      });
+
+      if (!precheck.ok) {
+        const payload = await precheck.json().catch(() => ({}));
+        setError(payload?.error || 'Verifikasi login gagal.');
+        resetCaptcha();
+        return;
+      }
+
       await signInWithEmailAndPassword(auth, email, password);
       const p = localStorage.getItem('pustara_personalized');
       router.replace(p ? '/' : '/auth/personalization');
-    } catch (err: any) { setError(friendlyError(err.code)); }
+    } catch (err: any) {
+      setError(friendlyError(err.code));
+      resetCaptcha();
+    }
     finally { setLoading(false); }
   }
 
   async function handleGoogle() {
+    if (!captchaToken) {
+      setError('Verifikasi CAPTCHA diperlukan sebelum melanjutkan dengan Google.');
+      return;
+    }
     setError(''); setLoading(true);
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const isNew = getAdditionalUserInfo(result)?.isNewUser;
       const p = localStorage.getItem('pustara_personalized');
       router.replace(isNew || !p ? '/auth/personalization' : '/');
-    } catch (err: any) { setError(friendlyError(err.code)); }
+    } catch (err: any) {
+      setError(friendlyError(err.code));
+      resetCaptcha();
+    }
     finally { setLoading(false); }
   }
 
@@ -245,6 +275,9 @@ export default function LoginPage() {
               <div className="flex justify-end -mt-1">
                 <Link href="#" className="text-xs text-slate-500 hover:text-navy-700 hover:underline transition-colors">Lupa Sandi?</Link>
               </div>
+
+              <CaptchaWidget captchaRef={captchaRef} />
+              {captchaError && <p className="text-xs text-red-600 -mt-1">{captchaError}</p>}
 
               <motion.button type="submit" disabled={loading}
                 className="w-full py-3.5 bg-navy-800 text-white rounded-2xl font-semibold text-sm hover:bg-navy-700 disabled:opacity-50 transition-colors relative overflow-hidden"

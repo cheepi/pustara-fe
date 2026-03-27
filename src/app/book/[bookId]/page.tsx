@@ -18,6 +18,7 @@ import { useSimilarBooks } from '@/hooks/useSimilarBooks';
 import { fetchBookById } from '@/lib/books';
 import { BookDetail } from '@/types/book';
 import type { ModalState } from '@/types/bookPage';
+import { useBookCover, useBookCovers } from '@/hooks/useBookCover';
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -49,7 +50,17 @@ export default function BookDetailPage() {
     if (bookKey) fetchBookDetail();
   }, [bookKey, router]);
 
+  // Unified book cover: prioritizes database cover_url, falls back to OpenLibrary
+  const { url: coverUrl } = useBookCover(book);
   const { books: aiSimilar, loading: similarLoading } = useSimilarBooks(book?.title ?? '');
+  const { covers: aiSimilarCovers } = useBookCovers(
+    aiSimilar.map((rb) => ({
+      id: rb.book_id,
+      title: rb.title,
+      author: rb.authors,
+      cover_url: rb.cover_url ?? null,
+    })),
+  );
   
   const [modal,    setModal]    = useState<ModalState>('none');
   const [shared,   setShared]   = useState(false);
@@ -116,7 +127,7 @@ export default function BookDetailPage() {
 
   if (authLoading || loadingBook || !book) return <PageSkeleton />;
 
-  const src         = book.cover_url;
+  const src         = coverUrl;
   const isAvailable = book.available > 0;
 
   const borrowDate = new Date();
@@ -364,8 +375,9 @@ export default function BookDetailPage() {
                       <div key={i} className={cn('w-full aspect-[2/3] rounded-xl animate-pulse', isLight ? 'bg-parchment-darker' : 'bg-navy-700')} />
                     ))
                   : aiSimilar.length > 0
-                    ? aiSimilar.map((rb) => {
+                    ? aiSimilar.map((rb, idx) => {
                         const hue = (rb.title.charCodeAt(0) + (rb.title.charCodeAt(1) || 0)) % 360;
+                        const aiCover = aiSimilarCovers[idx]?.url ?? null;
                         return (
                           <Link key={rb.book_id} href={`/book/${rb.book_id}`}>
                             <motion.div className="cursor-pointer group"
@@ -374,7 +386,9 @@ export default function BookDetailPage() {
                               <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-lg mb-2 flex items-center justify-center',
                                 isLight ? 'bg-parchment-darker' : 'bg-navy-700')}
                                 style={{ background: `hsl(${hue}, 35%, ${isLight ? '75%' : '25%'})` }}>
-                                <BookOpen className="w-6 h-6 text-white/30" />
+                                {aiCover
+                                  ? <img src={aiCover} alt={rb.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                  : <BookOpen className="w-6 h-6 text-white/30" />}
                               </div>
                               <p className={cn('text-xs font-medium leading-tight line-clamp-2', tk.text)}>{rb.title}</p>
                               <p className={cn('text-[10px] mt-0.5 truncate', tk.muted)}>{rb.authors}</p>

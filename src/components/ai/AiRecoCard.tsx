@@ -1,17 +1,11 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, BookOpen, Users, BarChart2, X, Info } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { fetchOpenLibraryCoverId } from '@/lib/api';
+import { useBookCover } from '@/hooks/useBookCover';
 import type { AiRecommendation } from '@/types/ai';
-
-// ── Cover helpers ─────────────────────────────────────────────────────────────
-
-function olCoverUrl(id: string | null, size: 'S' | 'M' | 'L' = 'M') {
-  return id ? `https://covers.openlibrary.org/b/id/${id}-${size}.jpg` : null;
-}
 
 // ── Signal config ─────────────────────────────────────────────────────────────
 
@@ -104,38 +98,17 @@ function getPhaseInfo(phase?: string) {
   return PHASE_INFO.cold;
 }
 
-// ── Hook: resolve cover ───────────────────────────────────────────────────────
-// Priority: cover_url dari Neon → OpenLibrary by title → null
-
-export function useCover(reco: AiRecommendation) {
-  const [coverSrc, setCoverSrc] = useState<string | null>(
-    // Kalau Neon punya cover_url langsung pakai
-    (reco as AiRecommendation & { cover_url?: string }).cover_url ?? null,
-  );
-  const [coverLoading, setCoverLoading] = useState(false);
-
-  useEffect(() => {
-    // Kalau Neon sudah punya cover_url, skip fetch OpenLibrary
-    const neonCover = (reco as AiRecommendation & { cover_url?: string }).cover_url;
-    if (neonCover) return;
-
-    setCoverLoading(true);
-    fetchOpenLibraryCoverId(reco.title, reco.authors)
-      .then((id) => {
-        setCoverSrc(olCoverUrl(id, 'M'));
-      })
-      .finally(() => setCoverLoading(false));
-  }, [reco.title, reco.authors]);
-
-  return { coverSrc, coverLoading };
-}
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 interface Props {
   reco: AiRecommendation;
   index?: number;
   isLight: boolean;
+  /**
+   * Pre-fetched cover URL (from batch fetcher)
+   * If provided, avoids N+1 queries for OpenLibrary covers
+   */
+  coverUrl?: string | null;
 }
 
 export function AiRecoCardSkeleton({ isLight }: { isLight: boolean }) {
@@ -149,13 +122,23 @@ export function AiRecoCardSkeleton({ isLight }: { isLight: boolean }) {
   );
 }
 
-export default function AiRecoCard({ reco, index = 0, isLight }: Props) {
+export default function AiRecoCard({ reco, index = 0, isLight, coverUrl: propCoverUrl }: Props) {
   const [open, setOpen] = useState(false);
   const [signalInfoOpen, setSignalInfoOpen] = useState(false);
   const [showSignalTooltip, setShowSignalTooltip] = useState(false);
   const [phaseInfoOpen, setPhaseInfoOpen] = useState(false);
   const [showPhaseTooltip, setShowPhaseTooltip] = useState(false);
-  const { coverSrc, coverLoading } = useCover(reco);
+
+  const hasPropCover = typeof propCoverUrl === 'string' && propCoverUrl.trim().length > 0;
+  const { url: resolvedCoverSrc, loading: resolvedCoverLoading } = useBookCover({
+    id: reco.book_id,
+    title: reco.title,
+    author: reco.authors,
+    cover_url: reco.cover_url,
+  });
+  const coverSrc = hasPropCover ? propCoverUrl : resolvedCoverSrc;
+  const coverLoading = hasPropCover ? false : resolvedCoverLoading;
+
   const phaseInfo = getPhaseInfo(reco.phase);
 
   const hybridScorePct = Number.isFinite(reco.hybrid_score)

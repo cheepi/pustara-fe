@@ -3,13 +3,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { createUserWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
 import { Eye, EyeOff, Mail, Lock, User, Star } from 'lucide-react';
 import Wordmark from '@/components/icons/Wordmark';
 import ComboLogo from '@/components/icons/ComboLogo';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { useCaptcha, CaptchaWidget } from '@/hooks/useCaptcha';
 
 const ORBS = [
   { w: 160, h: 160, x: '5%',  y: '20%', delay: 0.3, dur: 8  },
@@ -41,27 +42,53 @@ export default function RegisterPage() {
   const [showCf, setShowCf]     = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
+  const { token: captchaToken, error: captchaError, captchaRef, reset: resetCaptcha } = useCaptcha();
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+    if (!captchaToken) { setError('Verifikasi CAPTCHA diperlukan sebelum mendaftar.'); return; }
     if (password !== confirm) { setError('Kata sandi tidak cocok.'); return; }
     if (password.length < 6)  { setError('Kata sandi minimal 6 karakter.'); return; }
     setLoading(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const createResp = await fetch(`${apiUrl}/auth/signup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, captchaToken }),
+      });
+
+      if (!createResp.ok) {
+        const payload = await createResp.json().catch(() => ({}));
+        setError(payload?.error || 'Pendaftaran gagal.');
+        resetCaptcha();
+        return;
+      }
+
+      const cred = await signInWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
       router.replace('/auth/personalization');
-    } catch (err: any) { setError(friendlyError(err.code)); }
+    } catch (err: any) {
+      setError(friendlyError(err.code));
+      resetCaptcha();
+    }
     finally { setLoading(false); }
   }
 
   async function handleGoogle() {
+    if (!captchaToken) {
+      setError('Verifikasi CAPTCHA diperlukan sebelum melanjutkan dengan Google.');
+      return;
+    }
     setError(''); setLoading(true);
     try {
       await signInWithPopup(auth, googleProvider);
       router.replace('/auth/personalization');
-    } catch (err: any) { setError(friendlyError(err.code)); }
+    } catch (err: any) {
+      setError(friendlyError(err.code));
+      resetCaptcha();
+    }
     finally { setLoading(false); }
   }
 
@@ -247,6 +274,9 @@ export default function RegisterPage() {
                            hover:bg-navy-600 active:scale-[0.98] transition-all disabled:opacity-60 mt-1">
                 {loading ? 'Mendaftar...' : 'Daftar'}
               </button>
+
+              <CaptchaWidget captchaRef={captchaRef} />
+              {captchaError && <p className="text-xs text-red-500 -mt-1">{captchaError}</p>}
             </form>
 
             <div className="flex items-center gap-3 my-4">

@@ -1,5 +1,6 @@
 import { auth } from './firebase';
 import type { AiRecommendation } from '@/types/ai';
+import { apiCaches } from './cache';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -16,6 +17,17 @@ async function getAuthHeader(): Promise<Record<string, string>> {
       }
     });
   });
+}
+
+async function getOptionalAuthHeader(): Promise<Record<string, string>> {
+  const user = auth.currentUser;
+  if (!user) return {};
+  try {
+    const token = await user.getIdToken();
+    return { Authorization: `Bearer ${token}` };
+  } catch {
+    return {};
+  }
 }
 
 // ── Generic fetchers ──────────────────────────────────────────────────────────
@@ -37,6 +49,18 @@ export async function apiGet<T>(path: string): Promise<T> {
 
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const headers = await getAuthHeader();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  const json = await res.json();
+  return unwrapData<T>(json);
+}
+
+export async function apiPostAllowAnonymous<T>(path: string, body: unknown): Promise<T> {
+  const headers = await getOptionalAuthHeader();
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...headers },
@@ -116,6 +140,7 @@ function normalizeAiRecommendation(raw: unknown): AiRecommendation {
     book_id: String(rec.book_id ?? rec.id ?? ''),
     title: String(rec.title ?? 'Untitled'),
     authors: String(rec.authors ?? rec.author ?? 'Unknown Author'),
+    cover_url: rec.cover_url ? String(rec.cover_url) : null,
     avg_rating: toFiniteNumber(rec.avg_rating, 0),
     reason_primary: String(rec.reason_primary ?? 'Rekomendasi dari PustarAI'),
     reason_secondary:
@@ -198,7 +223,7 @@ export async function fetchSimilarBooks(
   seedTitle: string,
   topN = 6,
 ): Promise<DirectRecoResponse> {
-  const raw = await apiPost<DirectRecoResponse>('/recommendations/direct', {
+  const raw = await apiPostAllowAnonymous<DirectRecoResponse>('/recommendations/direct', {
     seed_title: seedTitle,
     top_n: topN,
   });
@@ -227,8 +252,18 @@ export async function fetchColdStartRecommendations(
 /**
  * Fetch trending books dari FastAPI (Redis sorted set).
  * Dipakai oleh feed/page.tsx untuk replace hardcoded trending items.
+ * 
+ * CACHED: 60 seconds to prevent redundant API calls
  */
 export async function fetchTrending(topN = 10): Promise<TrendingBook[]> {
+  const cacheKey = `trending_${topN}`;
+
+  // Check cache first
+  const cached = apiCaches.trending.get(cacheKey) as TrendingBook[] | null;
+  if (cached !== null) {
+    return cached;
+  }
+
   try {
     const res = await apiGet<TrendingResponse & { recommendations?: TrendingBook[] }>(`/recommendations/trending?top_n=${topN}`);
     const source = Array.isArray(res.trending)
@@ -236,7 +271,12 @@ export async function fetchTrending(topN = 10): Promise<TrendingBook[]> {
       : Array.isArray(res.recommendations)
         ? res.recommendations
         : [];
-    return source.map(normalizeTrendingBook);
+    const result = source.map(normalizeTrendingBook);
+
+    // Store in cache for 60 seconds
+    apiCaches.trending.set(cacheKey, result);
+
+    return result;
   } catch {
     return [];
   }
