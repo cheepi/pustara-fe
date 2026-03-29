@@ -43,7 +43,7 @@ export async function fetchReaderBook(bookId: string): Promise<ReaderBook> {
         author: String(data.author ?? data.authors ?? '-'),
         dueDate: String(data.dueDate ?? formatDueDate(7).dueDate),
         daysLeft: Number(data.daysLeft ?? 7),
-        pdfUrl: String(data.pdfUrl ?? data.fileUrl ?? SAMPLE_PDF),
+        pdfUrl: String(data.pdfUrl ?? data.fileUrl ?? data.file_url ?? SAMPLE_PDF),
       };
     }
   } catch {

@@ -259,7 +259,6 @@ export default function PopularPage() {
 
               {filtered.length === 0 && (
                 <div className={cn('text-center py-20', tk.muted)}>
-                  <p className="text-4xl mb-3">😔</p>
                   <p className="font-semibold">Tidak ditemukan</p>
                   <p className="text-sm mt-1">Coba kata kunci yang berbeda</p>
                 </div>
