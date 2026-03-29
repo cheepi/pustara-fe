@@ -2,61 +2,114 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { Users, Sparkles, Settings, UserRound, Palette, Menu, X, Sun, Moon } from 'lucide-react';
+import { Users, Sparkles, Settings, UserRound, Menu, X, Sun, Moon, Compass, Bird, Library, Flame } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 
-const FAB_SIZE    = 52;
-const ITEM_GAP    = 58;
+const ITEM_GAP_DESKTOP = 58;
+const ITEM_GAP_MOBILE = 48;
 const STORAGE_KEY = 'pustara_fab_pos';
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
 export default function DraggableFAB() {
-  const { theme, toggle } = useTheme();  
+  const { theme, toggle } = useTheme();
   const isLight = theme === 'light';
-  const router  = useRouter();
+  const router = useRouter();
 
-  const [open,  setOpen]  = useState(false);
-  const [pos,   setPos]   = useState({ x: 0, y: 0 });
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
   const [ready, setReady] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   const drag = useRef({ active: false, moved: false, startMX: 0, startMY: 0, startPX: 0, startPY: 0 });
   const posRef = useRef({ x: 0, y: 0 });
 
-  // Defined inside component — needs access to toggle & isLight
-  const FAB_ITEMS = [
+  const mobileFabItems = [
     {
-      icon: isLight ? Moon : Sun,
-      label: isLight ? 'Mode Gelap' : 'Mode Terang',
-      color: isLight ? 'bg-yellow-400 text-navy-900' : 'bg-slate-600 text-white',
-      action: () => { toggle(); setOpen(false); },  // ← toggle() dari ThemeProvider
+      icon: Compass, label: 'Eksplor', color: 'bg-indigo-500 text-white',
+      action: () => { setOpen(false); router.push('/browse'); },
+    },
+    {
+      icon: Bird, label: 'Feed', color: 'bg-sky-500 text-white',
+      action: () => { setOpen(false); router.push('/feed'); },
+    },
+    {
+      icon: Library, label: 'Rak', color: 'bg-violet-500 text-white',
+      action: () => { setOpen(false); router.push('/shelf'); },
     },
     {
       icon: Sparkles, label: 'PustarAI', color: 'bg-blue-500 text-white',
       action: () => { setOpen(false); router.push('/pustarai/chat'); },
-    },    {
+    },
+    {
+      icon: Flame, label: 'Populer', color: 'bg-rose-500 text-white',
+      action: () => { setOpen(false); router.push('/popular'); },
+    },
+    {
+      icon: Users, label: 'Komunitas', color: 'bg-emerald-500 text-white',
+      action: () => { setOpen(false); router.push('/community'); },
+    },
+    {
+      icon: isLight ? Moon : Sun,
+      label: isLight ? 'Gelap' : 'Terang',
+      color: isLight ? 'bg-yellow-400 text-navy-900' : 'bg-slate-600 text-white',
+      action: () => { toggle(); setOpen(false); },
+    },
+  ];
+
+  const desktopFabItems = [
+    {
+      icon: isLight ? Moon : Sun,
+      label: isLight ? 'Mode Gelap' : 'Mode Terang',
+      color: isLight ? 'bg-yellow-400 text-navy-900' : 'bg-slate-600 text-white',
+      action: () => { toggle(); setOpen(false); },
+    },
+    {
+      icon: Sparkles, label: 'PustarAI', color: 'bg-blue-500 text-white',
+      action: () => { setOpen(false); router.push('/pustarai/chat'); },
+    },
+    {
+      icon: Flame, label: 'Populer', color: 'bg-rose-500 text-white',
+      action: () => { setOpen(false); router.push('/popular'); },
+    },
+    {
       icon: Users, label: 'Komunitas', color: 'bg-emerald-500 text-white',
       action: () => { setOpen(false); router.push('/community'); },
     },
     {
       icon: UserRound, label: 'Profil', color: 'bg-amber-500 text-white',
       action: () => { setOpen(false); router.push('/profile'); },
-    },    {
+    },
+    {
       icon: Settings, label: 'Pengaturan', color: 'bg-slate-500 text-white',
       action: () => { setOpen(false); router.push('/settings'); },
     },
   ];
 
+  const FAB_ITEMS = isMobile ? mobileFabItems : desktopFabItems;
+  const ITEM_GAP = isMobile ? ITEM_GAP_MOBILE : ITEM_GAP_DESKTOP;
+  const FAB_SIZE = isMobile? 48 : 52;
+
+  // ── Init position ──────────────────────────────────────────────────────────
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY);
-    let p = { x: 16, y: window.innerHeight - FAB_SIZE - 96 };
+    let p = { x: window.innerWidth - FAB_SIZE - 16, y: window.innerHeight - FAB_SIZE - 96 };
     if (stored) { try { p = JSON.parse(stored); } catch {} }
     setPos(p);
     posRef.current = p;
     setReady(true);
   }, []);
 
+  // ── Viewport flags ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    function update() { setIsMobile(window.innerWidth < 768); }
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  // ── Drag handlers ──────────────────────────────────────────────────────────
   useEffect(() => {
     function onMove(e: PointerEvent) {
       if (!drag.current.active) return;
@@ -80,7 +133,7 @@ export default function DraggableFAB() {
       if (drag.current.moved) {
         const snapX = posRef.current.x + FAB_SIZE / 2 < window.innerWidth / 2
           ? 16 : window.innerWidth - FAB_SIZE - 16;
-        const snapped = { x: snapX, y: posRef.current.y };
+        const snapped = { x: snapX, y: clamp(posRef.current.y, 8, window.innerHeight - FAB_SIZE - 8) };
         setPos(snapped);
         posRef.current = snapped;
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapped));
@@ -88,10 +141,10 @@ export default function DraggableFAB() {
     }
 
     window.addEventListener('pointermove', onMove);
-    window.addEventListener('pointerup',   onUp);
+    window.addEventListener('pointerup', onUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup',   onUp);
+      window.removeEventListener('pointerup', onUp);
     };
   }, []);
 
@@ -119,24 +172,32 @@ export default function DraggableFAB() {
 
   if (!ready) return null;
 
-  const fanUp      = pos.y > FAB_ITEMS.length * ITEM_GAP + 60;
-  const labelRight = pos.x < window.innerWidth / 2;  // FAB di kiri → label ke kanan
+  const totalHeight = FAB_ITEMS.length * ITEM_GAP + 60;
+  const fanUp = pos.y > totalHeight;
+  const labelRight = pos.x + FAB_SIZE / 2 < window.innerWidth / 2;
+
+  const iconSize = isMobile ? 'w-[40px] h-[40px]' : 'w-[52px] h-[52px]';
+  const iconClass = isMobile ? 'w-3.5 h-3.5' : 'w-5 h-5';
+  const labelCls = isMobile ? 'text-[11px] px-2.5 py-1' : 'text-xs px-3 py-1.5';
 
   return (
     <>
+      {/* Backdrop */}
       <AnimatePresence>
         {open && (
-          <motion.div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
+          <motion.div
+            className="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }} />
+            transition={{ duration: 0.15 }}
+          />
         )}
       </AnimatePresence>
 
       <div
         className="fixed z-50 select-none"
         style={{ left: pos.x, top: pos.y, width: FAB_SIZE, height: FAB_SIZE, touchAction: 'none' }}
-        onPointerDown={onFabPointerDown}>
-
+        onPointerDown={onFabPointerDown}
+      >
         {/* Speed dial items */}
         <AnimatePresence>
           {open && FAB_ITEMS.map((item, i) => {
@@ -146,39 +207,41 @@ export default function DraggableFAB() {
                 key={item.label}
                 className="absolute top-0 flex items-center pointer-events-auto"
                 style={{
-                  // FAB kiri → anchor left, tumbuh ke kanan (icon | label)
-                  // FAB kanan → anchor right, tumbuh ke kiri (label | icon)
                   ...(labelRight ? { left: 0 } : { right: 0 }),
                   flexDirection: labelRight ? 'row' : 'row-reverse',
                   y: yOff,
                 }}
                 initial={{ opacity: 0, scale: 0.6, y: yOff + (fanUp ? 12 : -12) }}
                 animate={{ opacity: 1, scale: 1, y: yOff }}
-                exit={{   opacity: 0, scale: 0.6, y: yOff + (fanUp ? 12 : -12) }}
+                exit={{ opacity: 0, scale: 0.6, y: yOff + (fanUp ? 12 : -12) }}
                 transition={{ type: 'spring', stiffness: 440, damping: 28, delay: i * 0.04 }}
-                onPointerDown={e => e.stopPropagation()}>
-
+                onPointerDown={e => e.stopPropagation()}
+              >
                 {/* Icon button */}
                 <motion.button
-                  className={cn('w-[52px] h-[52px] rounded-full flex items-center justify-center shadow-xl flex-shrink-0', item.color)}
-                  whileHover={{ scale: 1.12 }} whileTap={{ scale: 0.9 }}
-                  onClick={item.action}>
-                  <item.icon className="w-5 h-5" />
+                  className={cn('rounded-full flex items-center justify-center shadow-xl flex-shrink-0', iconSize, item.color)}
+                  whileHover={{ scale: 1.12 }}
+                  whileTap={{ scale: 0.9 }}
+                  onClick={item.action}
+                >
+                  <item.icon className={iconClass} />
                 </motion.button>
 
                 {/* Label pill */}
                 <motion.span
                   className={cn(
-                    'px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shadow-lg',
-                    labelRight ? 'ml-2.5' : 'mr-2.5',
+                    'rounded-full font-semibold whitespace-nowrap shadow-lg',
+                    labelCls,
+                    labelRight ? 'ml-2' : 'mr-2',
                     isLight
                       ? 'glass-dark text-white border border-slate-200'
-                      : 'glass-light  text-navy-800  border border-white/10'
+                      : 'glass-light text-navy-800 border border-white/10'
                   )}
                   initial={{ opacity: 0, x: labelRight ? -8 : 8 }}
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0 }}
-                  transition={{ delay: i * 0.04 + 0.05 }}>
+                  transition={{ delay: i * 0.04 + 0.05 }}
+                >
                   {item.label}
                 </motion.span>
               </motion.div>
@@ -186,13 +249,13 @@ export default function DraggableFAB() {
           })}
         </AnimatePresence>
 
-        {/* Glass background layer — terpisah dari motion.button biar backdrop-filter jalan */}
+        {/* Glass background */}
         <div className="absolute inset-0 rounded-full overflow-hidden pointer-events-none">
           <div className={cn(
             'absolute inset-0 rounded-full',
             isLight
               ? 'bg-navy-800/80 backdrop-blur-xl border border-navy-700/50'
-              : 'bg-white/10    backdrop-blur-xl border border-white/15'
+              : 'bg-white/10 backdrop-blur-xl border border-white/15'
           )} />
         </div>
 
@@ -202,10 +265,11 @@ export default function DraggableFAB() {
           onClick={onFabClick}
           whileTap={{ scale: 0.92 }}
           animate={{ rotate: open ? 135 : 0 }}
-          transition={{ type: 'spring', stiffness: 380, damping: 24 }}>
+          transition={{ type: 'spring', stiffness: 380, damping: 24 }}
+        >
           <AnimatePresence mode="wait">
             {open
-              ? <motion.div key="x"    initial={{ opacity:0, rotate:-45 }} animate={{ opacity:1, rotate:0 }} exit={{ opacity:0 }} transition={{ duration:0.12 }}><X    className="w-5 h-5" /></motion.div>
+              ? <motion.div key="x" initial={{ opacity:0, rotate:-45 }} animate={{ opacity:1, rotate:0 }} exit={{ opacity:0 }} transition={{ duration:0.12 }}><X    className="w-5 h-5" /></motion.div>
               : <motion.div key="menu" initial={{ opacity:0, rotate: 45 }} animate={{ opacity:1, rotate:0 }} exit={{ opacity:0 }} transition={{ duration:0.12 }}><Menu className="w-5 h-5" /></motion.div>
             }
           </AnimatePresence>
@@ -246,7 +310,8 @@ function DragHint({ isLight }: { isLight: boolean }) {
             'absolute bottom-full mb-2.5 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-xl text-[11px] font-medium whitespace-nowrap shadow-lg pointer-events-none',
             isLight ? 'glass-light text-navy-900' : 'glass-dark text-white'
           )}
-          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}>
+          initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }}
+        >
           Seret untuk memindahkan
           <div className={cn(
             'absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-4',

@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, Bell, Users, Star, Heart, MessageCircle,
-  BookOpen, ArrowRight, RefreshCw, TrendingUp, Send,
+  BookOpen, ArrowRight, RefreshCw, TrendingUp, Send, ChevronDown, ChevronUp,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
@@ -17,13 +17,38 @@ import { type TrendingBook } from '@/lib/api';
 import { useBookCover } from '@/hooks/useBookCover';
 import type { AiRecommendation } from '@/types/ai';
 import type { FeedItem } from '@/types/feed';
-import { STATIC_SOCIAL_FEED } from '@/data/feedFallback';
-import { fetchTrendingFeedItems } from '@/lib/feed';
+import type { RecommendedUser } from '@/types/user';
+import { fetchFeedActivities, fetchFeedSidebarPayload, fetchTrendingFeedItems, type FeedSidebarPayload } from '@/lib/feed';
+import { getRecommendedUsers, toggleFollowUser } from '@/lib/users';
 
 const pseudo = (n: number, mn: number, mx: number) =>
   mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
 const getRating = (coverId = 0) => (pseudo(coverId + 7, 38, 50) / 10).toFixed(1);
 const getReads  = (coverId = 0) => Math.floor(pseudo(coverId + 1, 1200, 28000));
+const normalizeComparable = (value?: string | null) => (value || '').trim().toLowerCase();
+const toInitials = (value?: string | null) => {
+  const clean = (value || '').trim();
+  if (!clean) return 'P';
+  return clean
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+};
+
+const EMPTY_SIDEBAR_PAYLOAD: FeedSidebarPayload = {
+  profile: {
+    initials: 'P',
+    name: 'Pembaca Pustara',
+    subtitle: 'Pembaca aktif',
+    dipinjam: 0,
+    streak: 0,
+    selesai: 0,
+  },
+  recentReads: [],
+  suggestions: [],
+};
 
 const FILTER_TABS = [
   { id: 'all',      label: 'Semua',      icon: null        },
@@ -178,8 +203,8 @@ function NotifCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: any 
         <p className={cn('text-sm', tk.muted)}>{item.notifBody}</p>
         <p className={cn('text-[11px] mt-2', tk.muted)}>{item.time}</p>
       </div>
-      {item.coverId && (
-        <Link href={`/book/${item.bookKey}`}><CoverThumb coverId={item.coverId} size="sm" /></Link>
+      {(item.coverId || item.bookCoverUrl) && (
+        <Link href={`/book/${item.bookKey}`}><CoverThumb src={item.bookCoverUrl} coverId={item.coverId} size="sm" /></Link>
       )}
     </div>
   );
@@ -232,11 +257,28 @@ function TrendingCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: a
 
 // ── AI Sidebar widget ─────────────────────────────────────────────────────────
 const SIDEBAR_SUGGESTIONS = ['Buku sedih tapi indah', 'Sastra Indonesia', 'Bacaan ringan'];
+const AI_WIDGET_COLLAPSE_STORAGE_KEY = 'feed.aiSidebarCollapsed';
 
 function AISidebarWidget({ dark, tk }: { dark: boolean; tk: any }) {
   const [input, setInput] = useState('');
   const [result, setResult] = useState<AiRecommendation[]>([]);
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem(AI_WIDGET_COLLAPSE_STORAGE_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const { sendMessage, chatHistory, chatLoading } = useChatAI();
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(AI_WIDGET_COLLAPSE_STORAGE_KEY, collapsed ? '1' : '0');
+    } catch {
+      // Ignore localStorage access failures.
+    }
+  }, [collapsed]);
 
   useEffect(() => {
     const last = [...chatHistory].reverse().find(m => m.role === 'assistant' && m.recommendations?.length);
@@ -252,101 +294,227 @@ function AISidebarWidget({ dark, tk }: { dark: boolean; tk: any }) {
   return (
     <div className={cn('rounded-3xl border p-5 relative overflow-hidden', tk.card)}>
       <div className="absolute top-0 right-0 w-32 h-32 rounded-full bg-gold/5 -translate-y-8 translate-x-8 pointer-events-none" />
-      <div className="flex items-center gap-2 mb-3">
-        <Sparkles className="w-4 h-4 text-gold" />
-        <p className={cn('font-semibold text-sm', tk.text)}>Tanya PustarAI</p>
-        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/15 text-gold font-semibold">Beta</span>
-      </div>
-      <p className={cn('text-xs leading-relaxed mb-3', tk.muted)}>Cari rekomendasi buku yang sempurna untukmu.</p>
-
-      <div className="flex flex-wrap gap-1.5 mb-3">
-        {SIDEBAR_SUGGESTIONS.map(s => (
-          <button key={s}
-            onClick={() => { setInput(s); }}
-            className={cn('text-[11px] px-2.5 py-1 rounded-full border transition-colors',
-              dark ? 'border-white/10 text-white/50 hover:border-gold/30 hover:text-gold'
-                   : 'border-slate-200 text-slate-400 hover:border-gold/40 hover:text-gold')}>
-            {s}
-          </button>
-        ))}
-      </div>
-
-      <div className="flex gap-2">
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSend(input)}
-          placeholder="Ketik pertanyaan..."
-          disabled={chatLoading}
-          className={cn('flex-1 px-3 py-2 rounded-xl border text-xs outline-none transition-all',
-            dark ? 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/40 disabled:opacity-50'
-                 : 'bg-slate-50 border-slate-200 text-navy-900 placeholder-slate-400 focus:border-gold disabled:opacity-50')}
-        />
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-gold" />
+          <p className={cn('font-semibold text-sm', tk.text)}>Tanya PustarAI</p>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gold/15 text-gold font-semibold">Beta</span>
+        </div>
         <button
-          onClick={() => handleSend(input)}
-          disabled={!input.trim() || chatLoading}
-          className="px-3 py-2 rounded-xl bg-gold text-navy-900 text-xs font-bold hover:bg-gold/90 transition-colors disabled:opacity-40">
-          {chatLoading ? <div className="flex gap-0.5">{[0,1,2].map(i => <div key={i} className="w-1 h-1 rounded-full bg-navy-900 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}</div> : '→'}
+          type="button"
+          onClick={() => setCollapsed((prev) => !prev)}
+          className={cn(
+            'p-1.5 rounded-lg border transition-colors',
+            dark ? 'border-white/10 text-white/60 hover:bg-white/10' : 'border-slate-200 text-slate-500 hover:bg-slate-100'
+          )}
+          aria-label={collapsed ? 'Buka panel Tanya PustarAI' : 'Tutup panel Tanya PustarAI'}
+        >
+          {collapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
         </button>
       </div>
 
-      <AnimatePresence>
-        {result.length > 0 && (
+      <AnimatePresence initial={false}>
+        {!collapsed && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }} className="overflow-hidden mt-3 space-y-2">
-            {result.map(r => (
-              <Link key={r.book_id} href={`/book/${r.book_id}`}>
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="overflow-hidden"
+          >
+            <p className={cn('text-xs leading-relaxed mb-3', tk.muted)}>Cari rekomendasi buku yang sempurna untukmu.</p>
+
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {SIDEBAR_SUGGESTIONS.map(s => (
+                <button key={s}
+                  onClick={() => { setInput(s); }}
+                  className={cn('text-[11px] px-2.5 py-1 rounded-full border transition-colors',
+                    dark ? 'border-white/10 text-white/50 hover:border-gold/30 hover:text-gold'
+                         : 'border-slate-200 text-slate-400 hover:border-gold/40 hover:text-gold')}>
+                  {s}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex gap-2">
+              <input
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSend(input)}
+                placeholder="Ketik pertanyaan..."
+                disabled={chatLoading}
+                className={cn('flex-1 px-3 py-2 rounded-xl border text-xs outline-none transition-all',
+                  dark ? 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/40 disabled:opacity-50'
+                       : 'bg-slate-50 border-slate-200 text-navy-900 placeholder-slate-400 focus:border-gold disabled:opacity-50')}
+              />
+              <button
+                onClick={() => handleSend(input)}
+                disabled={!input.trim() || chatLoading}
+                className="px-3 py-2 rounded-xl bg-gold text-navy-900 text-xs font-bold hover:bg-gold/90 transition-colors disabled:opacity-40">
+                {chatLoading ? <div className="flex gap-0.5">{[0,1,2].map(i => <div key={i} className="w-1 h-1 rounded-full bg-navy-900 animate-pulse" style={{ animationDelay: `${i * 0.15}s` }} />)}</div> : '→'}
+              </button>
+            </div>
+
+            <AnimatePresence>
+              {result.length > 0 && (
                 <motion.div
-                  className={cn('flex items-center gap-2.5 p-2 rounded-xl transition-all cursor-pointer',
-                    dark ? 'hover:bg-white/5' : 'hover:bg-slate-50')}
-                  whileHover={{ x: 3 }}>
-                  <div className={cn('w-8 h-11 rounded-lg overflow-hidden flex-shrink-0', dark ? 'bg-navy-700' : 'bg-parchment-darker')} />
-                  <div className="flex-1 min-w-0">
-                    <p className={cn('text-xs font-semibold line-clamp-1', tk.text)}>{r.title}</p>
-                    <p className={cn('text-[10px] truncate', tk.muted)}>{r.authors}</p>
-                  </div>
-                  <span className="text-[10px] font-bold text-gold flex-shrink-0">★{r.avg_rating.toFixed(1)}</span>
+                  initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }} className="overflow-hidden mt-3 space-y-2">
+                  {result.map(r => (
+                    <Link key={r.book_id} href={`/book/${r.book_id}`}>
+                      <motion.div
+                        className={cn('flex items-center gap-2.5 p-2 rounded-xl transition-all cursor-pointer',
+                          dark ? 'hover:bg-white/5' : 'hover:bg-slate-50')}
+                        whileHover={{ x: 3 }}>
+                        <div className={cn('w-8 h-11 rounded-lg overflow-hidden flex-shrink-0', dark ? 'bg-navy-700' : 'bg-parchment-darker')} />
+                        <div className="flex-1 min-w-0">
+                          <p className={cn('text-xs font-semibold line-clamp-1', tk.text)}>{r.title}</p>
+                          <p className={cn('text-[10px] truncate', tk.muted)}>{r.authors}</p>
+                        </div>
+                        <span className="text-[10px] font-bold text-gold flex-shrink-0">★{r.avg_rating.toFixed(1)}</span>
+                      </motion.div>
+                    </Link>
+                  ))}
+                  <Link href="/pustarai/chat"
+                    className={cn('flex items-center justify-center gap-1 text-xs font-semibold mt-2 pt-2 border-t transition-colors hover:text-gold', tk.muted)}
+                    style={{ borderColor: 'var(--border)' }}>
+                    Lihat semua di Chat <ArrowRight className="w-3 h-3" />
+                  </Link>
                 </motion.div>
-              </Link>
-            ))}
-            <Link href="/pustarai/chat"
-              className={cn('flex items-center justify-center gap-1 text-xs font-semibold mt-2 pt-2 border-t transition-colors hover:text-gold', tk.muted)}
-              style={{ borderColor: 'var(--border)' }}>
-              Lihat semua di Chat <ArrowRight className="w-3 h-3" />
-            </Link>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {collapsed && (
+        <p className={cn('text-xs', tk.muted)}>
+          Panel disembunyikan. Klik ikon untuk buka kembali.
+        </p>
+      )}
     </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FeedPage() {
-  const { ready } = useProtectedRoute();
+  const { ready, user } = useProtectedRoute();
   const { theme } = useTheme();
   const dark = theme === 'dark';
 
   const { recommendations: aiRecs, loading: aiLoading } = useRecommendations();
 
-  const [filter, setFilter]             = useState('all');
-  const [liked,  setLiked]              = useState<Set<string>>(new Set());
-  const [visibleCount, setVisibleCount] = useState(5);
-  const [loadingMore, setLoadingMore]   = useState(false);
+  const [filter, setFilter]               = useState('all');
+  const [liked,  setLiked]                = useState<Set<string>>(new Set());
+  const [visibleCount, setVisibleCount]   = useState(5);
+  const [loadingMore, setLoadingMore]     = useState(false);
   const [trendingItems, setTrendingItems] = useState<FeedItem[]>([]);
+  const [activityItems, setActivityItems] = useState<FeedItem[]>([]);
+  const [sidebar, setSidebar]             = useState<FeedSidebarPayload>(EMPTY_SIDEBAR_PAYLOAD);
+  const [recommendedUsers, setRecommendedUsers] = useState<RecommendedUser[]>([]);
+  const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
+  const [feedLoading, setFeedLoading] = useState(true);
   const loaderRef = useRef<HTMLDivElement>(null);
 
-  // Fetch live trending data
+  async function loadFeedData() {
+    if (!ready || !user) return;
+    setFeedLoading(true);
+
+    const authDisplayName = (user.displayName || user.email?.split('@')[0] || '').trim();
+    const authName = normalizeComparable(authDisplayName);
+    const authEmailPrefix = normalizeComparable(user.email?.split('@')[0]);
+    const authUid = String(user.uid || '').trim();
+
+    try {
+      const [trending, activities, payload, users] = await Promise.all([
+        fetchTrendingFeedItems(5),
+        fetchFeedActivities(8),
+        fetchFeedSidebarPayload(),
+        getRecommendedUsers(8),
+      ]);
+
+      const profileName = normalizeComparable(payload.profile.name);
+      const shouldPatchName = profileName === 'pembaca pustara' || !profileName;
+      const finalName = shouldPatchName && authDisplayName ? authDisplayName : payload.profile.name;
+
+      const patchedPayload: FeedSidebarPayload = {
+        ...payload,
+        profile: {
+          ...payload.profile,
+          name: finalName,
+          initials: toInitials(finalName),
+        },
+      };
+
+      const filteredUsers = users.filter((candidate) => {
+        const candidateName = normalizeComparable(candidate.display_name || candidate.name);
+        const candidateHandle = normalizeComparable(candidate.username);
+        const byName = authName && (candidateName === authName || candidateHandle === authName);
+        const byEmailPrefix = authEmailPrefix && (candidateName === authEmailPrefix || candidateHandle === authEmailPrefix);
+        const byId = authUid && String(candidate.id) === authUid;
+        return !(byName || byEmailPrefix || byId);
+      }).slice(0, 5);
+
+      setTrendingItems(trending);
+      setActivityItems(activities);
+      setSidebar(patchedPayload);
+      setRecommendedUsers(filteredUsers);
+    } catch {
+      setTrendingItems([]);
+      setActivityItems([]);
+      setSidebar({
+        ...EMPTY_SIDEBAR_PAYLOAD,
+        profile: {
+          ...EMPTY_SIDEBAR_PAYLOAD.profile,
+          name: authDisplayName || EMPTY_SIDEBAR_PAYLOAD.profile.name,
+          initials: toInitials(authDisplayName || EMPTY_SIDEBAR_PAYLOAD.profile.name),
+        },
+      });
+      setRecommendedUsers([]);
+    } finally {
+      setFeedLoading(false);
+    }
+  }
+
+  // Fetch live data
   useEffect(() => {
-    fetchTrendingFeedItems(5)
-      .then((items) => setTrendingItems(items))
-      .catch(() => setTrendingItems([]));
-  }, []);
+    void loadFeedData();
+  }, [ready, user?.uid, user?.displayName, user?.email]);
+
+  async function handleFollowToggle(user: RecommendedUser) {
+    if (followLoadingIds.has(user.id)) return;
+
+    const action = user.is_following ? 'unfollow' : 'follow';
+    setFollowLoadingIds((prev) => {
+      const next = new Set(prev);
+      next.add(user.id);
+      return next;
+    });
+
+    try {
+      const result = await toggleFollowUser(user.id, action);
+      if (!result) return;
+
+      setRecommendedUsers((prev) => prev.map((item) => {
+        if (item.id !== user.id) return item;
+        return {
+          ...item,
+          is_following: result.is_following,
+          followers_count: result.target_followers_count,
+        };
+      }));
+    } finally {
+      setFollowLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(user.id);
+        return next;
+      });
+    }
+  }
 
   // Build FEED: gabung semua sources
   const FEED: FeedItem[] = (() => {
-    const feed = [...STATIC_SOCIAL_FEED];
+    const feed = [...activityItems];
 
     if (trendingItems.length > 0) {
       feed.splice(0, 0, trendingItems[0]);
@@ -361,7 +529,17 @@ export default function FeedPage() {
     return feed;
   })();
 
-  const allFiltered = filter === 'all' ? FEED : FEED.filter(i => i.type === filter);
+  const authName = normalizeComparable(user?.displayName);
+  const authEmailPrefix = normalizeComparable(user?.email?.split('@')[0]);
+  const profileName = normalizeComparable(sidebar.profile.name);
+  const selfNameSet = new Set([authName, authEmailPrefix, profileName].filter(Boolean));
+
+  const allFiltered =
+    filter === 'all'
+      ? FEED
+      : filter === 'activity'
+        ? FEED.filter((i) => i.type === 'activity' && !selfNameSet.has(normalizeComparable(i.user)))
+        : FEED.filter((i) => i.type === filter);
   const filtered    = allFiltered.slice(0, visibleCount);
 
   useEffect(() => { setVisibleCount(5); }, [filter]);
@@ -387,6 +565,7 @@ export default function FeedPage() {
     muted:   dark ? 'text-slate-400' : 'text-slate-500',
     card:    dark ? 'bg-navy-800/50 border-white/8 hover:bg-navy-800/70' : 'bg-white border-parchment-darker hover:bg-slate-50/80',
     chip:    dark ? 'bg-navy-700/50 border-white/10 text-white/60' : 'bg-white border-parchment-darker text-slate-500',
+    skel:    dark ? 'bg-navy-700/60' : 'bg-parchment-darker',
     chipAct: 'bg-gold text-navy-900 border-gold',
   };
 
@@ -400,48 +579,88 @@ export default function FeedPage() {
           <aside className="hidden lg:block pt-1">
             <div className="sticky top-24 space-y-6">
               <div className={cn('rounded-3xl border p-5', tk.card)}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-2xl bg-gold/25 border border-gold/40 flex items-center justify-center font-bold text-lg text-gold">C</div>
-                  <div>
-                    <p className={cn('font-semibold text-sm', tk.text)}>cheeps</p>
-                    <p className={cn('text-xs', tk.muted)}>Pembaca aktif</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  {[['12', 'Dipinjam'], ['3', 'Streak'], ['24', 'Selesai']].map(([v, l]) => (
-                    <div key={l} className={cn('rounded-xl p-2', dark ? 'bg-navy-700/40' : 'bg-parchment/60')}>
-                      <p className="font-serif font-black text-base text-gold">{v}</p>
-                      <p className={cn('text-[10px]', tk.muted)}>{l}</p>
+                {feedLoading ? (
+                  <div className="animate-pulse">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className={cn('w-12 h-12 rounded-2xl', tk.skel)} />
+                      <div className="space-y-2">
+                        <div className={cn('h-3.5 w-28 rounded', tk.skel)} />
+                        <div className={cn('h-3 w-20 rounded', tk.skel)} />
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className={cn('rounded-xl p-2', dark ? 'bg-navy-700/40' : 'bg-parchment/60')}>
+                          <div className={cn('h-5 w-8 mx-auto rounded mb-2', tk.skel)} />
+                          <div className={cn('h-2.5 w-12 mx-auto rounded', tk.skel)} />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-2xl bg-gold/25 border border-gold/40 flex items-center justify-center font-bold text-lg text-gold">{sidebar.profile.initials}</div>
+                      <div>
+                        <p className={cn('font-semibold text-sm', tk.text)}>{sidebar.profile.name}</p>
+                        <p className={cn('text-xs max-w-[180px] truncate', tk.muted)} title={sidebar.profile.subtitle}>{sidebar.profile.subtitle}</p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      {[[String(sidebar.profile.dipinjam), 'Dipinjam'], [String(sidebar.profile.streak), 'Streak'], [String(sidebar.profile.selesai), 'Selesai']].map(([v, l]) => (
+                        <div key={l} className={cn('rounded-xl p-2', dark ? 'bg-navy-700/40' : 'bg-parchment/60')}>
+                          <p className="font-serif font-black text-base text-gold">{v}</p>
+                          <p className={cn('text-[10px]', tk.muted)}>{l}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className={cn('rounded-3xl border p-5', tk.card)}>
                 <p className={cn('text-xs font-semibold uppercase tracking-wider mb-4', tk.muted)}>Aktivitas Baru</p>
                 <div className="space-y-3">
-                  {[
-                    { key: 'd1', title: 'Laskar Pelangi', author: 'Andrea Hirata', coverId: 8231568, progress: 68 },
-                    { key: 'd2', title: 'Bumi Manusia', author: 'Pramoedya Ananta Toer', coverId: 8750787, progress: 32 },
-                  ].map(b => (
-                    <Link key={b.key} href={`/read/${b.key}`}>
+                  {feedLoading && (
+                    <div className="space-y-3 animate-pulse">
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className="flex gap-3">
+                          <div className={cn('w-10 h-14 rounded-xl flex-shrink-0', tk.skel)} />
+                          <div className="flex-1 space-y-2">
+                            <div className={cn('h-3 w-24 rounded', tk.skel)} />
+                            <div className={cn('h-2.5 w-20 rounded', tk.skel)} />
+                            <div className={cn('h-1.5 w-full rounded', tk.skel)} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {sidebar.recentReads.map((b) => (
+                    <Link key={b.entryKey} href={`/read/${b.bookId}`}>
                       <div className="flex gap-3 group cursor-pointer">
                         <div className="w-10 h-14 rounded-xl overflow-hidden shadow-md flex-shrink-0">
-                          <img src={`https://covers.openlibrary.org/b/id/${b.coverId}-S.jpg`} className="w-full h-full object-cover" alt={b.title} />
+                          {b.cover_url ? (
+                            <img src={b.cover_url} className="w-full h-full object-cover" alt={b.title} />
+                          ) : (
+                            <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-slate-100')} />
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className={cn('text-xs font-semibold leading-tight line-clamp-2 group-hover:text-gold transition-colors', tk.text)}>{b.title}</p>
-                          <p className={cn('text-[10px] mt-0.5 truncate', tk.muted)}>{b.author}</p>
+                          <p className={cn('text-[10px] mt-0.5 truncate', tk.muted)}>{b.authors}</p>
                           <div className="mt-1.5">
                             <div className={cn('w-full h-1 rounded-full', dark ? 'bg-white/10' : 'bg-slate-100')}>
-                              <div className="h-1 rounded-full bg-gold" style={{ width: `${b.progress}%` }} />
+                              <div className="h-1 rounded-full bg-gold" style={{ width: `${Math.round(Number(b.progress_percentage ?? 0))}%` }} />
                             </div>
-                            <p className={cn('text-[10px] mt-0.5', tk.muted)}>{b.progress}%</p>
+                            <p className={cn('text-[10px] mt-0.5', tk.muted)}>{Math.round(Number(b.progress_percentage ?? 0))}%</p>
                           </div>
                         </div>
                       </div>
                     </Link>
                   ))}
+                  {!feedLoading && sidebar.recentReads.length === 0 && (
+                    <p className={cn('text-xs', tk.muted)}>Belum ada aktivitas baca terbaru.</p>
+                  )}
                 </div>
                 <Link href="/shelf"
                   className={cn('mt-3 flex items-center justify-center gap-1 text-xs font-semibold pt-3 border-t transition-colors hover:text-gold', tk.muted)}
@@ -459,7 +678,7 @@ export default function FeedPage() {
               <button
                 onClick={() => {
                   setVisibleCount(5);
-                  fetchTrendingFeedItems(5).then(setTrendingItems).catch(() => setTrendingItems([]));
+                  void loadFeedData();
                 }}
                 className={cn('p-2 rounded-xl transition-colors', tk.muted, 'hover:text-gold', dark ? 'hover:bg-white/5' : 'hover:bg-navy-50')}>
                 <RefreshCw className="w-4 h-4" />
@@ -479,6 +698,29 @@ export default function FeedPage() {
 
             <AnimatePresence mode="popLayout">
               <div className="flex flex-col gap-4">
+                {feedLoading && (
+                  <div className="space-y-4">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className={cn('rounded-3xl border p-5 animate-pulse', tk.card)}>
+                        <div className="flex gap-3 mb-4">
+                          <div className={cn('w-10 h-10 rounded-2xl', tk.skel)} />
+                          <div className="flex-1 space-y-2">
+                            <div className={cn('h-3.5 w-28 rounded', tk.skel)} />
+                            <div className={cn('h-3 w-24 rounded', tk.skel)} />
+                          </div>
+                        </div>
+                        <div className="flex gap-4">
+                          <div className={cn('w-14 h-20 rounded-xl flex-shrink-0', tk.skel)} />
+                          <div className="flex-1 space-y-2">
+                            <div className={cn('h-3.5 w-3/4 rounded', tk.skel)} />
+                            <div className={cn('h-3 w-1/2 rounded', tk.skel)} />
+                            <div className={cn('h-3 w-2/3 rounded', tk.skel)} />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {filtered.map((item, idx) => (
                   <motion.div key={item.id} layout
                     initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -522,23 +764,59 @@ export default function FeedPage() {
               <div className={cn('rounded-3xl border p-5', tk.card)}>
                 <p className={cn('text-xs font-semibold uppercase tracking-wider mb-4', tk.muted)}>Saran Mengikuti</p>
                 <div className="space-y-4">
-                  {[
-                    { name: 'Anna R.', loc: 'Yogyakarta', books: 31, avatar: 'A' },
-                    { name: 'Brandon S.',     loc: 'Jakarta',    books: 18, avatar: 'B' },
-                    { name: 'Sarah A.',     loc: 'Bandung',    books: 24, avatar: 'S' },
-                  ].map(u => (
-                    <div key={u.name} className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">{u.avatar}</div>
-                      <div className="flex-1 min-w-0">
-                        <p className={cn('text-sm font-semibold', tk.text)}>{u.name}</p>
-                        <p className={cn('text-xs', tk.muted)}>{u.loc} · {u.books} buku</p>
-                      </div>
-                      <button className={cn('text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all',
-                        dark ? 'border-gold/30 text-gold hover:bg-gold/10' : 'border-navy-200 text-navy-700 hover:bg-navy-50')}>
-                        Ikuti
-                      </button>
+                  {feedLoading && (
+                    <div className="space-y-4 animate-pulse">
+                      {[0, 1, 2].map((i) => (
+                        <div key={i} className="flex items-center gap-3">
+                          <div className={cn('w-9 h-9 rounded-2xl flex-shrink-0', tk.skel)} />
+                          <div className="flex-1 space-y-2">
+                            <div className={cn('h-3.5 w-24 rounded', tk.skel)} />
+                            <div className={cn('h-3 w-20 rounded', tk.skel)} />
+                          </div>
+                          <div className={cn('h-7 w-14 rounded-xl', tk.skel)} />
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
+                  {recommendedUsers.map((u) => {
+                    const displayName = u.display_name || u.name || u.username || 'Pustara User';
+                    const initial = displayName.charAt(0).toUpperCase() || 'P';
+                    const isPending = followLoadingIds.has(u.id);
+
+                    return (
+                    <div key={u.id} className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">{initial}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className={cn('text-sm font-semibold', tk.text)}>{displayName}</p>
+                        <p className={cn('text-xs', tk.muted)}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          disabled={isPending}
+                          onClick={() => handleFollowToggle(u)}
+                          className={cn(
+                            'text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all disabled:opacity-60',
+                            u.is_following
+                              ? (dark ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-slate-300 text-slate-700 hover:bg-slate-100')
+                              : (dark ? 'border-gold/30 text-gold hover:bg-gold/10' : 'border-navy-200 text-navy-700 hover:bg-navy-50')
+                          )}
+                        >
+                          {isPending ? '...' : (u.is_following ? 'Mengikuti' : 'Ikuti')}
+                        </button>
+                        <Link
+                          href={`/profile/${u.id}`}
+                          className={cn('text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all',
+                            dark ? 'border-white/20 text-white/70 hover:bg-white/10' : 'border-slate-300 text-slate-600 hover:bg-slate-100')}
+                        >
+                          Lihat
+                        </Link>
+                      </div>
+                    </div>
+                  )})}
+                  {!feedLoading && recommendedUsers.length === 0 && (
+                    <p className={cn('text-xs', tk.muted)}>Belum ada saran mengikuti saat ini.</p>
+                  )}
                 </div>
               </div>
             </div>

@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Star, BookOpen, Users, CheckCircle,
-  X, Bookmark, Share2, Clock, ChevronRight, PenLine,
+  X, Bookmark, Share2, Clock, ChevronRight, PenLine, Sparkles,
   Book,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,7 +15,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import ReviewModal from '@/components/shared/ReviewModal';
 import { useSimilarBooks } from '@/hooks/useSimilarBooks';
-import { fetchBookById } from '@/lib/books';
+import { getBookById, getSimilarBooks } from '@/lib/books';
+import { borrowBookForMe, fetchMyBookShelfStatus, removeSavedBookForMe, saveBookForMe } from '@/lib/shelf';
 import { BookDetail } from '@/types/book';
 import type { ModalState } from '@/types/bookPage';
 import { useBookCover, useBookCovers } from '@/hooks/useBookCover';
@@ -29,11 +30,13 @@ export default function BookDetailPage() {
   const bookKey = params?.bookId as string;
   const [book, setBook] = useState<BookDetail | null>(null);
   const [loadingBook, setLoadingBook] = useState(true);
+  const [relatedBooks, setRelatedBooks] = useState<BookDetail[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(true);
 
   useEffect(() => {
     async function fetchBookDetail() {
       try {
-        const found = await fetchBookById(bookKey);
+        const found = await getBookById(bookKey);
         if (found) {
           setBook(found);
         } else {
@@ -49,6 +52,30 @@ export default function BookDetailPage() {
 
     if (bookKey) fetchBookDetail();
   }, [bookKey, router]);
+
+  useEffect(() => {
+    let active = true;
+    if (!bookKey) return;
+
+    setRelatedLoading(true);
+    getSimilarBooks(bookKey)
+      .then((list) => {
+        if (!active) return;
+        setRelatedBooks(list);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRelatedBooks([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setRelatedLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [bookKey]);
 
   // Unified book cover: prioritizes database cover_url, falls back to OpenLibrary
   const { url: coverUrl } = useBookCover(book);
@@ -66,19 +93,37 @@ export default function BookDetailPage() {
   const [shared,   setShared]   = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
 
-  const WISHLIST_KEY = 'pustara_wishlist';
-  const BORROWED_KEY = 'pustara_borrowed';
-
   const [wishlisted, setWishlisted] = useState(false);
   const [borrowed,   setBorrowed]   = useState(false);
+  const [actionLoading, setActionLoading] = useState<'borrow' | 'wishlist' | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!book) return;
-    const wl: string[] = JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]');
-    const br: string[] = JSON.parse(localStorage.getItem(BORROWED_KEY) || '[]');
-    setWishlisted(wl.includes(book.id));
-    setBorrowed(br.includes(book.id));
-  }, [book?.id]);
+    if (!user) {
+      setWishlisted(false);
+      setBorrowed(false);
+      return;
+    }
+
+    let active = true;
+    fetchMyBookShelfStatus(book.id)
+      .then((status) => {
+        if (!active) return;
+        setWishlisted(Boolean(status.wishlisted));
+        setBorrowed(Boolean(status.borrowed));
+      })
+      .catch(() => {
+        if (!active) return;
+        setWishlisted(false);
+        setBorrowed(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [book?.id, user]);
 
   useEffect(() => {
     if (!book) return;
@@ -86,12 +131,32 @@ export default function BookDetailPage() {
     return () => { document.title = 'Pustara'; };
   }, [book?.title]);
 
-  function toggleWishlist() {
+  async function toggleWishlist() {
     if (!book) return;
-    const wl: string[] = JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]');
-    const next = wishlisted ? wl.filter(k => k !== book.id) : [...wl, book.id];
-    localStorage.setItem(WISHLIST_KEY, JSON.stringify(next));
-    setWishlisted(!wishlisted);
+    if (!user) {
+      router.push('/auth/login');
+      return;
+    }
+
+    setActionError(null);
+    setActionMessage(null);
+    setActionLoading('wishlist');
+    try {
+      if (wishlisted) {
+        await removeSavedBookForMe(book.id);
+        setWishlisted(false);
+        setActionMessage('Buku dihapus dari simpanan.');
+      } else {
+        await saveBookForMe(book.id);
+        setWishlisted(true);
+        setActionMessage('Buku berhasil disimpan ke wishlist.');
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gagal memperbarui wishlist.';
+      setActionError(message.includes('401') ? 'Silakan login ulang untuk menyimpan buku.' : 'Gagal memperbarui wishlist. Coba lagi.');
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   function handleShare() {
@@ -113,14 +178,30 @@ export default function BookDetailPage() {
     setModal('confirm');
   }
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!book) return;
-    const br: string[] = JSON.parse(localStorage.getItem(BORROWED_KEY) || '[]');
-    if (!br.includes(book.id)) {
-      localStorage.setItem(BORROWED_KEY, JSON.stringify([...br, book.id]));
+
+    setActionError(null);
+    setActionMessage(null);
+    setActionLoading('borrow');
+    try {
+      await borrowBookForMe(book.id);
+      setBorrowed(true);
+      setModal('success');
+      setActionMessage('Peminjaman berhasil diproses.');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gagal meminjam buku.';
+      if (message.includes('409')) {
+        setActionError('Buku sedang tidak tersedia. Silakan masuk antrean.');
+      } else if (message.includes('401')) {
+        setActionError('Sesi login berakhir. Silakan login kembali.');
+      } else {
+        setActionError('Gagal meminjam buku. Coba lagi sebentar.');
+      }
+      setModal('none');
+    } finally {
+      setActionLoading(null);
     }
-    setBorrowed(true);
-    setModal('success');
   }
 
   function handleQueue() { setModal('queue'); }
@@ -134,6 +215,8 @@ export default function BookDetailPage() {
   const returnDate = new Date(borrowDate);
   returnDate.setDate(returnDate.getDate() + 7);
   const fmt = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+  const summaryPrompt = `Tolong buat ringkasan singkat buku \"${book.title}\" dalam Bahasa Indonesia.`;
+  const summaryHref = `/pustarai/chat?attachedTitle=${encodeURIComponent(book.title)}&attachedDesc=${encodeURIComponent(book.description || '')}&prefill=${encodeURIComponent(summaryPrompt)}&autosend=1`;
 
   const tk = {
     bg:      isLight ? 'bg-parchment'            : 'bg-navy-900',
@@ -238,10 +321,11 @@ export default function BookDetailPage() {
               ) : isAvailable ? (
                 <motion.button
                   onClick={handleBorrow}
+                  disabled={actionLoading === 'borrow'}
                   className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-navy-800 text-white hover:bg-navy-700 transition-colors shadow-lg shadow-navy-900/30"
                   whileTap={{ scale: 0.98 }}>
                   <BookOpen className="w-4 h-4" />
-                  Pinjam Buku
+                  {actionLoading === 'borrow' ? 'Memproses...' : 'Pinjam Buku'}
                 </motion.button>
               ) : (
                 <motion.button
@@ -256,13 +340,14 @@ export default function BookDetailPage() {
               <div className="flex gap-2">
                 <motion.button
                   onClick={toggleWishlist}
+                  disabled={actionLoading === 'wishlist'}
                   className={cn(
                     'flex-1 py-3 rounded-2xl text-sm font-medium border transition-all flex items-center justify-center gap-2',
                     wishlisted ? 'bg-red-50 border-red-200 text-red-500' : cn(tk.surface, tk.border, tk.muted, 'hover:border-gold/40')
                   )}
                   whileTap={{ scale: 0.97 }}>
                   <Bookmark className={cn('w-4 h-4', wishlisted && 'fill-red-500 text-red-500')} />
-                  {wishlisted ? 'Disimpan' : 'Simpan'}
+                  {actionLoading === 'wishlist' ? 'Menyimpan...' : wishlisted ? 'Disimpan' : 'Simpan'}
                 </motion.button>
 
                 <motion.button
@@ -276,6 +361,13 @@ export default function BookDetailPage() {
                   {shared ? 'Disalin!' : 'Bagikan'}
                 </motion.button>
               </div>
+
+              {actionMessage && (
+                <p className="text-xs text-emerald-600 text-center mt-1">{actionMessage}</p>
+              )}
+              {actionError && (
+                <p className="text-xs text-red-500 text-center mt-1">{actionError}</p>
+              )}
             </div>
           </motion.aside>
 
@@ -315,7 +407,21 @@ export default function BookDetailPage() {
             <div className={cn('h-px mb-6', isLight ? 'bg-parchment-darker' : 'bg-white/8')} />
 
             <section className="mb-8">
-              <h2 className={cn('font-serif text-xl font-bold mb-3', tk.text)}>Sinopsis</h2>
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className={cn('font-serif text-xl font-bold', tk.text)}>Sinopsis</h2>
+                <Link
+                  href={summaryHref}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
+                    isLight
+                      ? 'border-navy-200 text-navy-700 hover:bg-navy-50 hover:border-gold/40'
+                      : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-gold/40'
+                  )}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-gold" />
+                  Minta Summary ke PustarAI
+                </Link>
+              </div>
               <div className={cn('rounded-2xl border p-5', tk.surface, tk.border)}>
                 <p className={cn('text-sm leading-relaxed whitespace-pre-line', tk.muted)}>
                   {book.description}
@@ -370,32 +476,51 @@ export default function BookDetailPage() {
             <section>
               <h2 className={cn('font-serif text-xl font-bold mb-3', tk.text)}>Buku Serupa</h2>
               <div className="grid grid-cols-3 lg:grid-cols-4 gap-3">
-                {similarLoading
+                {relatedLoading
                   ? Array(4).fill(0).map((_, i) => (
                       <div key={i} className={cn('w-full aspect-[2/3] rounded-xl animate-pulse', isLight ? 'bg-parchment-darker' : 'bg-navy-700')} />
                     ))
-                  : aiSimilar.length > 0
-                    ? aiSimilar.map((rb, idx) => {
-                        const hue = (rb.title.charCodeAt(0) + (rb.title.charCodeAt(1) || 0)) % 360;
-                        const aiCover = aiSimilarCovers[idx]?.url ?? null;
+                  : relatedBooks.length > 0
+                    ? relatedBooks.map((rb) => {
                         return (
-                          <Link key={rb.book_id} href={`/book/${rb.book_id}`}>
+                          <Link key={rb.id} href={`/book/${rb.id}`}>
                             <motion.div className="cursor-pointer group"
                               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
                               whileHover={{ y: -4 }}>
                               <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-lg mb-2 flex items-center justify-center',
-                                isLight ? 'bg-parchment-darker' : 'bg-navy-700')}
-                                style={{ background: `hsl(${hue}, 35%, ${isLight ? '75%' : '25%'})` }}>
-                                {aiCover
-                                  ? <img src={aiCover} alt={rb.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                isLight ? 'bg-parchment-darker' : 'bg-navy-700')}>
+                                {rb.cover_url
+                                  ? <img src={rb.cover_url} alt={rb.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
                                   : <BookOpen className="w-6 h-6 text-white/30" />}
                               </div>
                               <p className={cn('text-xs font-medium leading-tight line-clamp-2', tk.text)}>{rb.title}</p>
-                              <p className={cn('text-[10px] mt-0.5 truncate', tk.muted)}>{rb.authors}</p>
+                              <p className={cn('text-[10px] mt-0.5 truncate', tk.muted)}>{rb.authors?.join(', ') || 'Unknown'}</p>
                             </motion.div>
                           </Link>
                         );
                       })
+                    : aiSimilar.length > 0
+                      ? aiSimilar.map((rb, idx) => {
+                          const hue = (rb.title.charCodeAt(0) + (rb.title.charCodeAt(1) || 0)) % 360;
+                          const aiCover = aiSimilarCovers[idx]?.url ?? null;
+                          return (
+                            <Link key={rb.book_id} href={`/book/${rb.book_id}`}>
+                              <motion.div className="cursor-pointer group"
+                                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                                whileHover={{ y: -4 }}>
+                                <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-lg mb-2 flex items-center justify-center',
+                                  isLight ? 'bg-parchment-darker' : 'bg-navy-700')}
+                                  style={{ background: `hsl(${hue}, 35%, ${isLight ? '75%' : '25%'})` }}>
+                                  {aiCover
+                                    ? <img src={aiCover} alt={rb.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                                    : <BookOpen className="w-6 h-6 text-white/30" />}
+                                </div>
+                                <p className={cn('text-xs font-medium leading-tight line-clamp-2', tk.text)}>{rb.title}</p>
+                                <p className={cn('text-[10px] mt-0.5 truncate', tk.muted)}>{rb.authors}</p>
+                              </motion.div>
+                            </Link>
+                          );
+                        })
                     : book.relatedBooks?.map((rb, i) => (
                         <Link key={rb.id} href={`/book/${rb.id}`}>
                           <motion.div className="cursor-pointer group"
@@ -467,9 +592,10 @@ export default function BookDetailPage() {
                       Batalkan
                     </button>
                     <motion.button onClick={handleConfirm}
+                      disabled={actionLoading === 'borrow'}
                       className="flex-1 py-3.5 rounded-2xl text-sm font-bold text-white bg-navy-800 hover:bg-navy-700 transition-colors"
                       whileTap={{ scale: 0.97 }}>
-                      Pinjam Sekarang
+                      {actionLoading === 'borrow' ? 'Memproses...' : 'Pinjam Sekarang'}
                     </motion.button>
                   </div>
                 </div>
@@ -540,6 +666,11 @@ export default function BookDetailPage() {
                   <Link href={`/read/${book.id}`}>
                     <button className="w-full py-3.5 rounded-2xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 transition-colors">
                       Mulai Membaca
+                    </button>
+                  </Link>
+                  <Link href={`/shelf?newBook=${book.id}`}>
+                    <button className="w-full py-3 rounded-2xl text-sm font-semibold bg-gold text-navy-900 hover:bg-gold-light transition-colors">
+                      Lihat Rak Buku
                     </button>
                   </Link>
                   <button onClick={() => setModal('none')}

@@ -1,10 +1,37 @@
 import type { BookDetail, Review } from '@/types/book';
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function dummyBook(b: Omit<BookDetail, 'external_key' | 'cover_id' | 'language' | 'is_active' | 'created_at' | 'updated_at' | 'file_url' | 'file_type' | 'total_pages'>): BookDetail {
+  return {
+    external_key: null,
+    cover_id:     null,
+    language:     'id',
+    is_active:    true,
+    created_at:   '',
+    updated_at:   '',
+    file_url:     null,
+    file_type:    'pdf',
+    total_pages:  null,
+    ...b,
+  };
+}
+
+function dummyReview(r: Omit<Review, 'id' | 'user_id' | 'book_id' | 'body' | 'created_at' | 'updated_at'> & { id?: string }): Review {
+  return {
+    id:         r.id ?? crypto.randomUUID(),
+    user_id:    'dummy',
+    book_id:    'dummy',
+    body:       r.text ?? null,
+    created_at: '',
+    updated_at: '',
+    ...r,
+  };
+}
 
 // ── DUMMY_BOOKS ────────────────────────────────────────────────────────────────
 // Ini fallback kalau BE belum jalan atau buku belum ada di DB.
 // Key = UUID atau ID dummy (d1, d2, dst). Pas BE udah jalan, key ini bakal diganti UUID beneran.
 export const DUMMY_BOOKS: Record<string, BookDetail> = {
-  'd1': {
+  'd1': dummyBook({
     id: 'd1',
     title: 'Laskar Pelangi',
     authors: ['Andrea Hirata'],
@@ -19,12 +46,12 @@ export const DUMMY_BOOKS: Record<string, BookDetail> = {
     queue: 0,
     description: 'Kisah persahabatan sepuluh anak Belitung yang berjuang mendapatkan pendidikan di SD Muhammadiyah yang hampir roboh. Novel ini mengalir dengan penuh emosi, humor, dan semangat pantang menyerah yang akan membuat pembaca tertawa dan menangis sekaligus.',
     reviews: [
-      { name: 'Joseph R.', avatar: 'J', rating: 5, text: 'Buku ini benar-benar mengubah cara pandangku tentang pendidikan dan semangat belajar. Andrea Hirata berhasil membawa kita ke Belitung dengan sangat hidup dan penuh warna.', loc: 'Yogyakarta', likes: 142, time: '2 jam lalu' },
-      { name: 'Lila S.', avatar: 'L', rating: 5, text: 'Sudah baca 3 kali dan masih nangis di bagian yang sama. Karya yang benar-benar abadi.', loc: 'Bali', likes: 49, time: '5 hari lalu' },
-      { name: 'Hendra T.', avatar: 'H', rating: 4, text: 'Sangat menginspirasi! Kisah persahabatan yang tulus di tengah keterbatasan materi.', loc: 'Palembang', likes: 31, time: '1 minggu lalu' },
-    ],
-  },
-  'd2': {
+      { id: 'd1', user_id: 'd1', name: 'Joseph R.', avatar: 'J', rating: 5, text: 'Buku ini benar-benar mengubah cara pandangku tentang pendidikan dan semangat belajar. Andrea Hirata berhasil membawa kita ke Belitung dengan sangat hidup dan penuh warna.', loc: 'Yogyakarta', likes: 142, time: '2 jam lalu' },
+      { id: 'd2', user_id: 'd2', name: 'Lila S.', avatar: 'L', rating: 5, text: 'Sudah baca 3 kali dan masih nangis di bagian yang sama. Karya yang benar-benar abadi.', loc: 'Bali', likes: 49, time: '5 hari lalu' },
+      { id: 'd3', user_id: 'd3', name: 'Hendra T.', avatar: 'H', rating: 4, text: 'Sangat menginspirasi! Kisah persahabatan yang tulus di tengah keterbatasan materi.', loc: 'Palembang', likes: 31, time: '1 minggu lalu' },
+    ] as any,
+  }),
+  'd2': dummyBook({
     id: 'd2',
     title: 'Bumi Manusia',
     authors: ['Pramoedya Ananta Toer'],
@@ -41,9 +68,9 @@ export const DUMMY_BOOKS: Record<string, BookDetail> = {
     reviews: [
       { name: 'Brando D.', avatar: 'B', rating: 5, text: 'Pramoedya adalah maestro sastra Indonesia. Minke adalah karakter yang paling kompleks dan manusiawi.', loc: 'Jakarta', likes: 98, time: '5 jam lalu' },
       { name: 'Maya K.', avatar: 'M', rating: 5, text: 'Membaca Bumi Manusia adalah pengalaman yang mengubah hidup. Setiap halaman penuh dengan kebijaksanaan.', loc: 'Medan', likes: 67, time: '2 hari lalu' },
-    ],
-  },
-  'd3': {
+    ] as any,
+  }),
+  'd3': dummyBook({
     id: 'd3',
     title: 'Cantik Itu Luka',
     authors: ['Eka Kurniawan'],
@@ -60,9 +87,9 @@ export const DUMMY_BOOKS: Record<string, BookDetail> = {
     reviews: [
       { name: 'Sarah A.', avatar: 'S', rating: 5, text: 'Masterpiece sastra Indonesia yang wajib dibaca. Realisme magis-nya benar-benar bikin kagum.', loc: 'Bandung', likes: 87, time: '1 hari lalu' },
       { name: 'Citra M.', avatar: 'C', rating: 4, text: 'Sejarah yang dikemas dalam narasi yang gelap dan indah. Butuh waktu untuk mencerna kedalamannya, tapi sangat worth it.', loc: 'Bogor', likes: 29, time: '2 minggu lalu' },
-    ],
-  },
-  'd4': {
+    ] as any,
+  }),
+  'd4': dummyBook({
     id: 'd4',
     title: 'Perahu Kertas',
     authors: ['Dee Lestari'],
@@ -79,9 +106,9 @@ export const DUMMY_BOOKS: Record<string, BookDetail> = {
     reviews: [
       { name: 'Dika P.', avatar: 'D', rating: 4, text: 'Dee Lestari menulis cinta dengan cara yang tidak klise. Kugy dan Keenan adalah pasangan paling lovable dalam fiksi Indonesia modern.', loc: 'Surabaya', likes: 76, time: '2 hari lalu' },
       { name: 'Anto B.', avatar: 'A', rating: 4, text: 'Alur ceritanya mengalir dengan natural. Ini adalah romansa yang paling realistis yang pernah kubaca.', loc: 'Semarang', likes: 41, time: '1 minggu lalu' },
-    ],
-  },
-  'd5': {
+    ] as any,
+  }),
+  'd5': dummyBook({
     id: 'd5',
     title: 'Negeri 5 Menara',
     authors: ['Ahmad Fuadi'],
@@ -98,9 +125,9 @@ export const DUMMY_BOOKS: Record<string, BookDetail> = {
     reviews: [
       { name: 'Maya K.', avatar: 'M', rating: 5, text: 'Man jadda wajada! Novel ini mengubah perspektifku tentang pendidikan dan ketekunan. Sangat recommended!', loc: 'Medan', likes: 63, time: '3 hari lalu' },
       { name: 'Yudi P.', avatar: 'Y', rating: 5, text: 'Pesantren Gontor dan persahabatan yang tulus. Novel ini membuatku ingin belajar lebih keras lagi dalam hidup.', loc: 'Solo', likes: 24, time: '3 minggu lalu' },
-    ],
-  },
-  'd6': {
+    ] as any,
+  }),
+  'd6': dummyBook({
     id: 'd6',
     title: 'Ayah',
     authors: ['Andrea Hirata'],
@@ -116,8 +143,8 @@ export const DUMMY_BOOKS: Record<string, BookDetail> = {
     description: 'Sabari mencintai Marlena dengan cara paling tulus — tanpa pamrih, tanpa syarat. Kisah tentang cinta, pengorbanan, dan arti sejati menjadi seorang ayah yang ditulis dengan gaya khas Andrea Hirata: puitis, hangat, dan penuh humor pahit.',
     reviews: [
       { name: 'Reza F.', avatar: 'R', rating: 4, text: 'Andrea Hirata kembali dengan kisah yang memukau. Sabari adalah karakter paling lovable yang pernah kubaca.', loc: 'Makassar', likes: 54, time: '4 hari lalu' },
-    ],
-  },
+    ] as any,
+  }),
 };
 
 // ── DUMMY_ALL_REVIEWS ─────────────────────────────────────────────────────────
@@ -146,27 +173,27 @@ export const DUMMY_REVIEWS_BY_BOOK: Record<string, Review[]> = {
     { name: 'Lila S.', avatar: 'L', rating: 5, text: 'Sudah baca 3 kali dan masih nangis di bagian yang sama. Karya yang benar-benar abadi.', loc: 'Bali', likes: 49, time: '5 hari lalu' },
     { name: 'Hendra T.', avatar: 'H', rating: 4, text: 'Sangat menginspirasi! Kisah persahabatan yang tulus di tengah keterbatasan materi.', loc: 'Palembang', likes: 31, time: '1 minggu lalu' },
     { name: 'Putri R.', avatar: 'P', rating: 5, text: 'Belitung terasa sangat nyata setelah membaca ini. Penulisan Andrea sangat puitis.', loc: 'Malang', likes: 28, time: '2 minggu lalu' },
-  ],
+  ] as any,
   d2: [
     { name: 'Brando D.', avatar: 'B', rating: 5, text: 'Pramoedya adalah maestro sastra Indonesia. Minke adalah karakter yang paling kompleks dan manusiawi.', loc: 'Jakarta', likes: 98, time: '5 jam lalu' },
     { name: 'Maya K.', avatar: 'M', rating: 5, text: 'Membaca Bumi Manusia adalah pengalaman yang mengubah hidup. Setiap halaman penuh dengan kebijaksanaan.', loc: 'Medan', likes: 67, time: '2 hari lalu' },
     { name: 'Citra M.', avatar: 'C', rating: 4, text: 'Sejarah kolonial yang dikemas dalam romance yang indah. Wajib baca untuk semua orang Indonesia.', loc: 'Bogor', likes: 45, time: '1 minggu lalu' },
-  ],
+  ] as any,
   d3: [
     { name: 'Sarah A.', avatar: 'S', rating: 5, text: 'Masterpiece sastra Indonesia yang wajib dibaca. Realisme magis-nya benar-benar bikin kagum.', loc: 'Bandung', likes: 87, time: '1 hari lalu' },
     { name: 'Citra M.', avatar: 'C', rating: 4, text: 'Sejarah yang dikemas dalam narasi yang gelap dan indah. Butuh waktu untuk mencerna kedalamannya, tapi sangat worth it.', loc: 'Bogor', likes: 29, time: '2 minggu lalu' },
-  ],
+  ] as any,
   d4: [
     { name: 'Dika P.', avatar: 'D', rating: 4, text: 'Dee Lestari menulis cinta dengan cara yang tidak klise. Kugy dan Keenan adalah pasangan paling lovable dalam fiksi Indonesia modern.', loc: 'Surabaya', likes: 76, time: '2 hari lalu' },
     { name: 'Anto B.', avatar: 'A', rating: 4, text: 'Alur ceritanya mengalir dengan natural. Ini adalah romansa yang paling realistis yang pernah kubaca.', loc: 'Semarang', likes: 41, time: '1 minggu lalu' },
-  ],
+  ] as any,
   d5: [
     { name: 'Maya K.', avatar: 'M', rating: 5, text: 'Man jadda wajada! Novel ini mengubah perspektifku tentang pendidikan dan ketekunan. Sangat recommended!', loc: 'Medan', likes: 63, time: '3 hari lalu' },
     { name: 'Yudi P.', avatar: 'Y', rating: 5, text: 'Pesantren Gontor dan persahabatan yang tulus. Novel ini membuatku ingin belajar lebih keras lagi dalam hidup.', loc: 'Solo', likes: 24, time: '3 minggu lalu' },
-  ],
+  ] as any,
   d6: [
     { name: 'Reza F.', avatar: 'R', rating: 4, text: 'Andrea Hirata kembali dengan kisah yang memukau. Sabari adalah karakter paling lovable yang pernah kubaca.', loc: 'Makassar', likes: 54, time: '4 hari lalu' },
-  ],
+  ] as any,
 };
 
 // ── TOP3_PUSTAKREW ─────────────────────────────────────────────────────────────

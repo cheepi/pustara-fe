@@ -4,6 +4,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { useAuthStore } from '@/store/authStore';
+import { shouldGoToPersonalization } from '@/lib/survey';
 
 // Routes yang butuh login
 const PROTECTED = ['/shelf', '/profile', '/settings', '/ai-reco', '/community', '/read'];
@@ -46,8 +47,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         // Redirect kalau user masuk ke halaman auth
         if (AUTH_ONLY.includes(pathname)) {
-          const personalized = localStorage.getItem('pustara_personalized');
-          router.replace(personalized ? '/' : '/auth/personalization');
+          const token = await user.getIdToken();
+          const needPersonalization = await shouldGoToPersonalization(token);
+          router.replace(needPersonalization ? '/auth/personalization' : '/');
         }
       } else {
         // Redirect kalau user belum login coba akses protected route

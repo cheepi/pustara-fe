@@ -42,7 +42,7 @@ function unwrapData<T>(json: unknown): T {
 export async function apiGet<T>(path: string): Promise<T> {
   const headers = await getAuthHeader();
   const res = await fetch(`${API_URL}${path}`, { headers });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -54,7 +54,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -66,7 +66,18 @@ export async function apiPostAllowAnonymous<T>(path: string, body: unknown): Pro
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  const json = await res.json();
+  return unwrapData<T>(json);
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
   const json = await res.json();
   return unwrapData<T>(json);
 }

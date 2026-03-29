@@ -6,57 +6,69 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import type { RecommendedUser } from '@/types/user';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
-interface Person {
-  name: string; avatar: string; loc: string;
-  books: number; genres: string[]; bio: string;
-  mutual?: number; isFollowing?: boolean;
+type ModalTab = 'following' | 'followers' | 'suggestions';
+
+interface ModalUser {
+  id: string;
+  name: string;
+  avatar: string;
+  bio: string;
+  books: number;
+  genres: string[];
+  followersCount: number;
+  username: string;
 }
 
-const FOLLOWING: Person[] = [
-  { name:'Annabeth C.', avatar:'A', loc:'Yogyakarta', books:31, genres:['Sastra','Fiksi'],       bio:'Pecinta sastra Indonesia dan buku sejarah.',           mutual:2 },
-  { name:'Shayla J.',  avatar:'S', loc:'Bandung',    books:19, genres:['Romance','Teenlit'],    bio:'Membaca adalah cara terbaik berkeliling dunia.',       mutual:0 },
-  { name:'Kayla M.', avatar:'K', loc:'Jakarta',    books:27, genres:['Sains','Filsafat'],     bio:'Scientist by day, book lover by night.',               mutual:1 },
-  { name:'Dika Pratama',   avatar:'D', loc:'Surabaya',   books:14, genres:['Misteri','Thriller'],   bio:'If it has a plot twist, I have already read it.',      mutual:3 },
-  { name:'Maya Kusuma',    avatar:'M', loc:'Medan',      books:22, genres:['Biografi','Sejarah'],   bio:'Belajar dari mereka yang sudah hidup lebih dulu.',     mutual:0 },
-];
-
-const FOLLOWERS: Person[] = [
-  { name:'Reza Firmansyah',avatar:'R', loc:'Makassar',  books:9,  genres:['Fiksi','Drama'],        bio:'Baru mulai suka baca tahun ini, sudah 9 buku!',        isFollowing:true  },
-  { name:'Lila Sari',      avatar:'L', loc:'Bali',      books:35, genres:['Sastra','Puisi'],       bio:'Poetry is my first language, prose is my second.',     isFollowing:false },
-  { name:'Anto Brandonman',   avatar:'A', loc:'Semarang',  books:18, genres:['Romance','Fiksi'],      bio:'Kalau buku bisa bicara, saya akan mendengarkan.',      isFollowing:true  },
-  { name:'Putri Rahayu',   avatar:'P', loc:'Malang',    books:26, genres:['Self-Help','Inspiratif'],bio:'Setiap buku adalah mentor yang diam.',                isFollowing:false },
-];
-
-const SUGGESTIONS: Person[] = [
-  { name:'Hendra Tanjung', avatar:'H', loc:'Palembang', books:41, genres:['Sejarah','Sastra'],     bio:'Penggemar berat Pramoedya Ananta Toer.',               mutual:5 },
-  { name:'Citra Maharani', avatar:'C', loc:'Bogor',     books:17, genres:['Romance','Teenlit'],    bio:'Kalau ada buku Dee Lestari yang belum kubaca, beritahu aku!', mutual:3 },
-  { name:'Yudi Pratama',   avatar:'Y', loc:'Depok',     books:33, genres:['Filsafat','Sains'],     bio:'Membaca untuk memahami dunia yang semakin kompleks.',  mutual:2 },
-];
-
-const TABS = [
-  { id: 'following',   label: 'Mengikuti', count: 12 },
-  { id: 'followers',   label: 'Pengikut',  count: 38 },
-  { id: 'suggestions', label: 'Saran',     count: null },
-];
+function toModalUser(u: RecommendedUser): ModalUser {
+  const displayName = (u.display_name || u.name || u.username || 'Pustara User').trim();
+  return {
+    id: u.id,
+    name: displayName,
+    avatar: displayName.charAt(0).toUpperCase() || 'P',
+    bio: u.bio || 'Pembaca aktif di komunitas Pustara.',
+    books: Number(u.total_read ?? 0),
+    genres: Array.isArray(u.preferred_genres) ? u.preferred_genres.slice(0, 3) : [],
+    followersCount: Number(u.followers_count ?? 0),
+    username: u.username || 'pustara_user',
+  };
+}
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 interface FollowingModalProps {
   open: boolean;
   onClose: () => void;
-  initialTab?: 'following' | 'followers' | 'suggestions';
+  initialTab?: ModalTab;
+  followingUsers: RecommendedUser[];
+  followerUsers: RecommendedUser[];
+  suggestionUsers: RecommendedUser[];
+  loadingIds?: Set<string>;
+  onToggleFollow?: (user: RecommendedUser) => void;
 }
 
-export default function FollowingModal({ open, onClose, initialTab = 'following' }: FollowingModalProps) {
+export default function FollowingModal({
+  open,
+  onClose,
+  initialTab = 'following',
+  followingUsers,
+  followerUsers,
+  suggestionUsers,
+  loadingIds,
+  onToggleFollow,
+}: FollowingModalProps) {
   const { theme } = useTheme();
   const isLight   = theme === 'light';
 
-  const [tab,    setTab]    = useState<'following' | 'followers' | 'suggestions'>(initialTab);
+  const [tab,    setTab]    = useState<ModalTab>(initialTab);
   const [search, setSearch] = useState('');
-  const [followed, setFollowed] = useState<Set<string>>(new Set(
-    [...FOLLOWING.map(f => f.name), ...FOLLOWERS.filter(f => f.isFollowing).map(f => f.name)]
-  ));
+
+  const tabs = [
+    { id: 'following', label: 'Mengikuti', count: followingUsers.length },
+    { id: 'followers', label: 'Pengikut', count: followerUsers.length },
+    { id: 'suggestions', label: 'Saran', count: suggestionUsers.length },
+  ] as const;
 
   // Sync initialTab when modal opens
   useEffect(() => {
@@ -73,13 +85,42 @@ export default function FollowingModal({ open, onClose, initialTab = 'following'
     return () => { document.body.style.overflow = ''; };
   }, [open]);
 
-  function toggleFollow(name: string) {
-    setFollowed(s => { const n = new Set(s); s.has(name) ? n.delete(name) : n.add(name); return n; });
+  const source = tab === 'following' ? followingUsers : tab === 'followers' ? followerUsers : suggestionUsers;
+  const filtered = source.filter(u => {
+    const name = (u.display_name || u.name || u.username || '').toLowerCase();
+    const username = String(u.username || '').toLowerCase();
+    return !search || name.includes(search.toLowerCase()) || username.includes(search.toLowerCase());
+  })
+    .map(toModalUser);
+
+  const followingSet = new Set(followingUsers.map((u) => u.id));
+  const followerMap = new Map(followerUsers.map((u) => [u.id, u]));
+  const suggestionMap = new Map(suggestionUsers.map((u) => [u.id, u]));
+
+  function resolveOriginalUser(user: ModalUser): RecommendedUser | null {
+    const fromFollower = followerMap.get(user.id);
+    if (fromFollower) return fromFollower;
+    const fromSuggestion = suggestionMap.get(user.id);
+    if (fromSuggestion) return fromSuggestion;
+    return null;
   }
 
-  const list = tab === 'following' ? FOLLOWING : tab === 'followers' ? FOLLOWERS : SUGGESTIONS;
-  const filtered = list.filter(u =>
-    !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.loc.toLowerCase().includes(search.toLowerCase())
+  function isFollowing(user: ModalUser): boolean {
+    if (tab === 'following') return true;
+    const original = resolveOriginalUser(user);
+    return original ? Boolean(original.is_following) : followingSet.has(user.id);
+  }
+
+  const pendingSet = loadingIds || new Set<string>();
+
+  const emptyLabel = tab === 'following'
+    ? 'Belum mengikuti siapa pun.'
+    : tab === 'followers'
+      ? 'Belum ada pengikut.'
+      : 'Belum ada saran pengguna.';
+
+  const filteredWithSearch = filtered.filter((u) =>
+    !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.username.toLowerCase().includes(search.toLowerCase())
   );
 
   const tk = {
@@ -140,7 +181,7 @@ export default function FollowingModal({ open, onClose, initialTab = 'following'
 
             {/* Tabs */}
             <div className="flex gap-2 px-5 pb-3 flex-shrink-0">
-              {TABS.map(t => (
+              {tabs.map(t => (
                 <button key={t.id} onClick={() => setTab(t.id as typeof tab)}
                   className={cn(
                     'flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border text-xs font-semibold transition-all',
@@ -167,17 +208,19 @@ export default function FollowingModal({ open, onClose, initialTab = 'following'
 
             {/* List — scrollable */}
             <div className="overflow-y-auto flex-1 px-5 pb-6">
-              {filtered.length === 0 ? (
+              {filteredWithSearch.length === 0 ? (
                 <div className={cn('text-center py-12 text-sm', tk.muted)}>
-                  Tidak ada hasil untuk "{search}"
+                  {search ? `Tidak ada hasil untuk "${search}"` : emptyLabel}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5">
-                  {filtered.map((u, i) => {
-                    const isFollowing = followed.has(u.name);
+                  {filteredWithSearch.map((u, i) => {
+                    const followed = isFollowing(u);
+                    const pending = pendingSet.has(u.id);
+                    const original = resolveOriginalUser(u);
                     return (
                       <motion.div
-                        key={u.name}
+                        key={u.id}
                         className={cn('rounded-2xl border p-3.5', tk.card)}
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -193,22 +236,28 @@ export default function FollowingModal({ open, onClose, initialTab = 'following'
                             <div className="flex items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className={cn('font-semibold text-sm truncate', tk.text)}>{u.name}</p>
-                                <p className={cn('text-xs', tk.muted)}>{u.loc}</p>
+                                <p className={cn('text-xs', tk.muted)}>@{u.username}</p>
                               </div>
 
                               {/* Follow button */}
                               <motion.button
-                                onClick={() => toggleFollow(u.name)}
+                                disabled={pending || !original || !onToggleFollow}
+                                onClick={() => {
+                                  if (!original || !onToggleFollow) return;
+                                  onToggleFollow(original);
+                                }}
                                 className={cn(
-                                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex-shrink-0',
-                                  isFollowing
+                                  'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex-shrink-0 disabled:opacity-60',
+                                  followed
                                     ? isLight
                                       ? 'bg-slate-100 border-slate-200 text-slate-600'
                                       : 'bg-white/10 border-white/15 text-white/60'
                                     : 'bg-gold border-gold text-navy-900 hover:bg-gold/90'
                                 )}
                                 whileTap={{ scale: 0.93 }}>
-                                {isFollowing
+                                {pending
+                                  ? '...'
+                                  : followed
                                   ? <><UserCheck className="w-3 h-3" /> Mengikuti</>
                                   : <><UserPlus  className="w-3 h-3" /> Ikuti</>
                                 }
@@ -226,10 +275,10 @@ export default function FollowingModal({ open, onClose, initialTab = 'following'
                                 <BookOpen className="w-3 h-3 text-gold" />
                                 <span className={cn('text-xs', tk.muted)}>{u.books} buku</span>
                               </div>
-                              {u.mutual != null && u.mutual > 0 && (
+                              {u.followersCount > 0 && (
                                 <div className="flex items-center gap-1">
                                   <Users className="w-3 h-3 text-gold/60" />
-                                  <span className={cn('text-xs', tk.muted)}>{u.mutual} teman bersama</span>
+                                  <span className={cn('text-xs', tk.muted)}>{u.followersCount} pengikut</span>
                                 </div>
                               )}
                               {u.genres.map(g => (

@@ -158,7 +158,7 @@ export default function ReadPage() {
 
   const progress   = numPages ? Math.round((pageNumber / numPages) * 100) : 0;
   const timeStr    = `${Math.floor(readingTime / 60)}m ${readingTime % 60}s`;
-  const isUrgent   = book.daysLeft <= 1;
+  const isUrgent = (book.daysLeft ?? Infinity) <= 1;
 
   return (
     <div ref={containerRef}

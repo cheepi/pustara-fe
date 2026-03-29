@@ -1,9 +1,9 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ComponentType } from 'react';
 import { useSearchParams, useRouter, usePathname, ReadonlyURLSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Medal, Star, BookOpen, ArrowRight, X, Calendar, 
-  FileText, WifiOff, RefreshCw, TrendingUp, Sparkles, Users, MessageCircle,
+  FileText, WifiOff, RefreshCw, TrendingUp, Sparkles,
   Landmark, FlaskConical, Brain, User, Heart, Cpu, 
   } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,10 +18,10 @@ import { fetchOpenLibraryCoverId } from '@/lib/api';
 import type { AiRecommendation } from '@/types/ai';
 import AiRecoCard from '@/components/ai/AiRecoCard';
 import { AiRecoCardSkeleton, } from '@/components/ai/AiRecoCard';
-import { fetchBrowseBooks, fetchTopPustakrew } from '@/lib/browse';
+import { fetchTopPustakrew } from '@/lib/browse';
 import type { BrowseBook } from '@/types/browse';
-import { BROWSE_FRIEND_ACTIVITY, BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';
-import { fetchTrending } from '@/lib/api';
+import { BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';
+import { getBooks, getGenres, searchBooks } from '@/lib/books';
 import { JSX } from 'react/jsx-runtime';
 import { Suspense } from 'react';
 
@@ -35,16 +35,89 @@ const getRating = (coverId?: number, idx = 0) =>
   (pseudo((coverId ?? idx) + 7, 36, 50) / 10).toFixed(1);
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const CATEGORIES = [
-  { id: 'fiksi',      label: 'Fiksi',     icon: BookOpen      },
-  { id: 'sejarah',    label: 'Sejarah',   icon: Landmark      },
-  { id: 'sains',      label: 'Sains',     icon: FlaskConical  },
-  { id: 'sastra',     label: 'Sastra',    icon: Brain         }, 
-  { id: 'biografi',   label: 'Biografi',  icon: User          },
-  { id: 'romance',    label: 'Romansa',   icon: Heart         },
-  { id: 'misteri',    label: 'Misteri',   icon: Search        },
-  { id: 'teknologi',  label: 'Teknologi', icon: Cpu           },
+type CategoryItem = {
+  id: string;
+  label: string;
+  query: string;
+  icon: ComponentType<{ className?: string }>;
+};
+
+const FALLBACK_CATEGORY_LABELS = [
+  'Fiksi',
+  'Sejarah',
+  'Sains',
+  'Sastra',
+  'Biografi',
+  'Romansa',
+  'Misteri',
+  'Teknologi',
 ];
+
+function normalizeCategoryId(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+function pickCategoryIcon(label: string) {
+  const text = label.toLowerCase();
+  if (text.includes('sejarah') || text.includes('history')) return Landmark;
+  if (text.includes('sains') || text.includes('science')) return FlaskConical;
+  if (text.includes('sastra') || text.includes('literature') || text.includes('novel') || text.includes('fiksi') || text.includes('fiction')) return BookOpen;
+  if (text.includes('biografi') || text.includes('biography') || text.includes('memoir')) return User;
+  if (text.includes('romance') || text.includes('romansa') || text.includes('cinta')) return Heart;
+  if (text.includes('misteri') || text.includes('mystery') || text.includes('thriller')) return Search;
+  if (text.includes('teknologi') || text.includes('technology') || text.includes('computer') || text.includes('programming')) return Cpu;
+  if (text.includes('psikologi') || text.includes('filsafat') || text.includes('pemikiran')) return Brain;
+  return BookOpen;
+}
+
+function buildCategoryItems(labels: string[]): CategoryItem[] {
+  const unique = new Map<string, string>();
+  for (const label of labels) {
+    const text = String(label || '').trim();
+    if (!text) continue;
+    const id = normalizeCategoryId(text);
+    if (!id) continue;
+    if (!unique.has(id)) unique.set(id, text);
+  }
+
+  return Array.from(unique.entries())
+    .map(([id, label]) => ({
+      id,
+      label,
+      query: label,
+      icon: pickCategoryIcon(label),
+    }))
+    .slice(0, 16);
+}
+
+function mapToBrowseBook(book: Record<string, unknown>): BrowseBook {
+  const authors = Array.isArray(book.authors)
+    ? book.authors.map(String).join(', ')
+    : String(book.author ?? book.authors ?? 'Unknown');
+
+  return {
+    key: String(book.id ?? ''),
+    title: String(book.title ?? ''),
+    author: authors,
+    coverUrl: String(book.cover_url ?? ''),
+    genres: Array.isArray(book.genres) ? book.genres.map(String) : [],
+    rating: Number(book.avg_rating ?? 0),
+    year: Number(book.year ?? 0) || undefined,
+    pages: Number(book.pages ?? 0) || undefined,
+    desc: String(book.description ?? ''),
+  };
+}
+
+type GenreShelf = {
+  id: string;
+  label: string;
+  books: BrowseBook[];
+};
 
 const RANK_STYLE = [
   {
@@ -249,16 +322,34 @@ function BrowseContent() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query,      setQuery]      = useState('');
-  const [active,     setActive]     = useState('');
+  const [activeCategoryQuery, setActiveCategoryQuery] = useState('');
+  const [activeCategoryLabel, setActiveCategoryLabel] = useState('');
+  const [categories, setCategories] = useState<CategoryItem[]>(
+    buildCategoryItems(FALLBACK_CATEGORY_LABELS)
+  );
+  const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [books,      setBooks]      = useState<BrowseBook[]>([]);
+  const [booksPage, setBooksPage] = useState(1);
+  const [booksTotalPages, setBooksTotalPages] = useState(1);
+  const [booksTotalItems, setBooksTotalItems] = useState(0);
   const [topPicks,   setTopPicks]   = useState<BrowseBook[]>([]);
+  const [topPicksLoading, setTopPicksLoading] = useState(true);
   const [loading,    setLoading]    = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error,      setError]      = useState<string | null>(null);
   const [searched,   setSearched]   = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [popularBooks, setPopularBooks] = useState<BrowseBook[]>(BROWSE_POPULAR_BOOKS);
+  const [popularLoading, setPopularLoading] = useState(true);
+  const [genreShelves, setGenreShelves] = useState<GenreShelf[]>([]);
+  const [genreShelvesLoading, setGenreShelvesLoading] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const appendInFlightRef = useRef(false);
+  const requestIdRef = useRef(0);
+  const localSearchCacheRef = useRef<Map<string, BrowseBook[]>>(new Map());
 
   function syncQueryToUrl(q: string) {
     const next = new URLSearchParams(searchParams.toString());
@@ -277,38 +368,20 @@ function BrowseContent() {
   }
 
   useEffect(() => {
-    fetchTopPustakrew(3).then(setTopPicks).catch(() => setTopPicks([]));
-  }, []);
-
-  useEffect(() => {
     let active = true;
-    fetchTrending(12)
-      .then((list) => {
+    setTopPicksLoading(true);
+    fetchTopPustakrew(3)
+      .then((items) => {
         if (!active) return;
-        if (!Array.isArray(list) || list.length === 0) {
-          setPopularBooks(BROWSE_POPULAR_BOOKS);
-          return;
-        }
-
-        const mapped: BrowseBook[] = list
-          .filter((item) => item.book_id && item.title)
-          .map((item) => ({
-            key: item.book_id,
-            title: item.title,
-            author: item.authors || 'Unknown',
-            coverUrl: item.cover_url || undefined,
-            genres: item.genres || [],
-            rating: Number(item.avg_rating || 0),
-            year: item.year ? Number(item.year) : undefined,
-            pages: item.pages || undefined,
-            desc: item.description || item.reason_primary || '',
-          }));
-
-        setPopularBooks(mapped.length > 0 ? mapped : BROWSE_POPULAR_BOOKS);
+        setTopPicks(items);
       })
       .catch(() => {
         if (!active) return;
-        setPopularBooks(BROWSE_POPULAR_BOOKS);
+        setTopPicks([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setTopPicksLoading(false);
       });
 
     return () => {
@@ -317,27 +390,231 @@ function BrowseContent() {
   }, []);
 
   useEffect(() => {
+    let mounted = true;
+    setCategoriesLoading(true);
+    setCategoriesError(null);
+
+    getGenres()
+      .then((genreList) => {
+        if (!mounted) return;
+        const dynamicItems = buildCategoryItems(genreList);
+        if (dynamicItems.length > 0) {
+          setCategories(dynamicItems);
+          return;
+        }
+        setCategories(buildCategoryItems(FALLBACK_CATEGORY_LABELS));
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setCategories(buildCategoryItems(FALLBACK_CATEGORY_LABELS));
+        setCategoriesError('Kategori dinamis belum tersedia, memakai kategori default.');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setCategoriesLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (categories.length === 0) {
+      setGenreShelves([]);
+      return;
+    }
+
+    let active = true;
+    setGenreShelvesLoading(true);
+
+    const curated = categories.slice(0, 4);
+    Promise.all(
+      curated.map(async (category) => {
+        const result = await getBooks({ genre: category.query, page: 1, limit: 8 });
+        const mapped = result.data.map((item) => mapToBrowseBook(item as unknown as Record<string, unknown>));
+        return {
+          id: category.id,
+          label: category.label,
+          books: mapped,
+        } as GenreShelf;
+      })
+    )
+      .then((shelves) => {
+        if (!active) return;
+        setGenreShelves(shelves.filter((shelf) => shelf.books.length > 0));
+      })
+      .catch(() => {
+        if (!active) return;
+        setGenreShelves([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setGenreShelvesLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [categories]);
+
+  useEffect(() => {
+    let active = true;
+    setPopularLoading(true);
+    getBooks({ page: 1, limit: 12, sort: 'avg_rating', order: 'DESC' })
+      .then((result) => {
+        if (!active) return;
+        const mapped = result.data
+          .filter((item) => item.id && item.title)
+          .map((item) => ({
+            key: item.id,
+            title: item.title,
+            author: Array.isArray(item.authors) ? item.authors.join(', ') : 'Unknown',
+            coverUrl: item.cover_url || undefined,
+            genres: Array.isArray(item.genres) ? item.genres : [],
+            rating: Number(item.avg_rating || 0),
+            year: item.year ? Number(item.year) : undefined,
+            pages: item.pages || undefined,
+            desc: item.description || '',
+          } as BrowseBook));
+
+        setPopularBooks(mapped.length > 0 ? mapped : BROWSE_POPULAR_BOOKS);
+      })
+      .catch(() => {
+        if (!active) return;
+        setPopularBooks(BROWSE_POPULAR_BOOKS);
+      })
+      .finally(() => {
+        if (!active) return;
+        setPopularLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function runBooksQuery(options: {
+    search?: string;
+    genre?: string;
+    page?: number;
+    append?: boolean;
+  }) {
+    const nextPage = options.page ?? 1;
+    const isAppend = Boolean(options.append);
+    const requestId = ++requestIdRef.current;
+
+    if (isAppend) setLoadingMore(true);
+    else setLoading(true);
+
+    setError(null);
+
+    try {
+      const result = await getBooks({
+        search: options.search,
+        genre: options.genre,
+        page: nextPage,
+        limit: 24,
+      });
+
+      if (requestId !== requestIdRef.current) return;
+
+      const mapped = result.data.map((item) => mapToBrowseBook(item as unknown as Record<string, unknown>));
+
+      if (mapped.length === 0 && options.search?.trim()) {
+        const cacheKey = options.search.trim().toLowerCase();
+        let fallbackList = localSearchCacheRef.current.get(cacheKey);
+
+        if (!fallbackList) {
+          const localMatches = await searchBooks(options.search);
+          fallbackList = localMatches.map((book) => ({
+            key: String(book.id ?? ''),
+            title: String(book.title ?? ''),
+            author: Array.isArray(book.authors) ? book.authors.join(', ') : 'Unknown',
+            coverUrl: String(book.cover_url ?? ''),
+            genres: Array.isArray(book.genres) ? book.genres.map(String) : [],
+            rating: Number(book.avg_rating ?? 0),
+            year: Number(book.year ?? 0) || undefined,
+            pages: Number(book.pages ?? 0) || undefined,
+            desc: String(book.description ?? ''),
+          }));
+          localSearchCacheRef.current.set(cacheKey, fallbackList);
+        }
+
+        const totalItems = fallbackList.length;
+        const totalPages = Math.max(1, Math.ceil(totalItems / 24));
+        const start = (nextPage - 1) * 24;
+        const paged = fallbackList.slice(start, start + 24);
+
+        setBooks((prev) => {
+          if (!isAppend) return paged;
+
+          const merged = [...prev, ...paged];
+          const unique = new Map<string, BrowseBook>();
+          for (const book of merged) {
+            if (!book.key) continue;
+            if (!unique.has(book.key)) unique.set(book.key, book);
+          }
+          return Array.from(unique.values());
+        });
+
+        setBooksPage(Math.min(nextPage, totalPages));
+        setBooksTotalPages(totalPages);
+        setBooksTotalItems(totalItems);
+        return;
+      }
+
+      setBooks((prev) => {
+        if (!isAppend) return mapped;
+
+        const merged = [...prev, ...mapped];
+        const unique = new Map<string, BrowseBook>();
+        for (const book of merged) {
+          if (!book.key) continue;
+          if (!unique.has(book.key)) unique.set(book.key, book);
+        }
+        return Array.from(unique.values());
+      });
+
+      setBooksPage(result.meta.page);
+      setBooksTotalPages(result.meta.total_pages);
+      setBooksTotalItems(result.meta.total_items);
+    } catch {
+      if (requestId !== requestIdRef.current) return;
+      if (!isAppend) setBooks([]);
+      setError('Gagal memuat buku. Coba lagi beberapa saat.');
+    } finally {
+      if (requestId !== requestIdRef.current) return;
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }
+
+  useEffect(() => {
     const q = (searchParams.get('q') || '').trim();
 
     if (!q) {
-      setQuery(prev => (prev ? '' : prev));
+      if (activeCategoryQuery) {
+        return;
+      }
+      setQuery((prev) => (prev ? '' : prev));
       setSearched(false);
-      setActive('');
+      setActiveCategoryQuery('');
+      setActiveCategoryLabel('');
       setBooks([]);
+      setBooksPage(1);
+      setBooksTotalPages(1);
+      setBooksTotalItems(0);
       setError(null);
       return;
     }
 
     setQuery(q);
-    setActive('');
+    setActiveCategoryQuery('');
+    setActiveCategoryLabel('');
     setSearched(true);
-    setLoading(true);
-    setError(null);
-    fetchBrowseBooks(q)
-      .then(setBooks)
-      .catch(() => setError('Pencarian gagal. Coba lagi.'))
-      .finally(() => setLoading(false));
-  }, [searchParams]);
+    void runBooksQuery({ search: q, page: 1, append: false });
+  }, [searchParams, activeCategoryQuery]);
 
   useEffect(() => {
     return () => {
@@ -367,7 +644,7 @@ function BrowseContent() {
       : 'bg-navy-50 border-navy-200 text-navy-600',
   };
 
-  async function loadCategory(id: string) {
+  async function loadCategory(categoryQuery: string, categoryLabel?: string) {
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current);
       searchTimerRef.current = null;
@@ -376,15 +653,20 @@ function BrowseContent() {
       clearTimeout(urlTimerRef.current);
       urlTimerRef.current = null;
     }
+    setActiveCategoryQuery(categoryQuery);
+    setActiveCategoryLabel(categoryLabel || categoryQuery);
+    setQuery('');
+    setSearched(true);
+    setError(null);
     syncQueryToUrl('');
-    setActive(id); setQuery(''); setSearched(true); setLoading(true); setError(null);
-    try { setBooks(await fetchBrowseBooks(`subject:${id}`)); }
-    catch { setError('Gagal memuat buku. Periksa koneksi internetmu.'); setBooks([]); }
-    finally { setLoading(false); }
+    await runBooksQuery({ genre: categoryQuery, page: 1, append: false });
   }
 
   function handleSearch(q: string) {
-    setQuery(q); setActive(''); setError(null);
+    setQuery(q);
+    setActiveCategoryQuery('');
+    setActiveCategoryLabel('');
+    setError(null);
     if (searchTimerRef.current) {
       clearTimeout(searchTimerRef.current);
       searchTimerRef.current = null;
@@ -396,6 +678,7 @@ function BrowseContent() {
 
     const trimmed = q.trim();
     if (!trimmed) {
+      localSearchCacheRef.current.clear();
       flushUrlSync('');
       setSearched(false);
       setBooks([]);
@@ -407,17 +690,70 @@ function BrowseContent() {
     }, 900);
 
     searchTimerRef.current = setTimeout(async () => {
-      setSearched(true); setLoading(true); setError(null);
-      try { setBooks(await fetchBrowseBooks(trimmed)); }
-      catch { setError('Pencarian gagal. Coba lagi beberapa saat.'); setBooks([]); }
-      finally { setLoading(false); }
+      setSearched(true);
+      await runBooksQuery({ search: trimmed, page: 1, append: false });
     }, 650);
   }
 
   const rest         = searched ? books.slice(3) : [];
-  const sectionLabel = active
-    ? CATEGORIES.find(c => c.id === active)?.label
+  const sectionLabel = activeCategoryLabel
+    ? `Kategori ${activeCategoryLabel}`
     : query ? `Hasil "${query}"` : '';
+  const hasMoreBooks = booksPage < booksTotalPages;
+
+  function getSourceLabel(book: BrowseBook): string {
+    if (activeCategoryLabel) return `Genre: ${activeCategoryLabel}`;
+
+    const q = query.trim().toLowerCase();
+    if (!q) return 'Cocok untuk kamu';
+
+    const author = (book.author || '').toLowerCase();
+    const title = (book.title || '').toLowerCase();
+    const matchedGenre = (book.genres || []).some((genre) => String(genre).toLowerCase().includes(q));
+
+    if (matchedGenre) return 'Dari genre yang kamu cari';
+    if (author.includes(q)) return 'Dari author yang kamu cari';
+    if (title.includes(q)) return 'Cocok dari judul';
+    return 'Cocok untuk kamu';
+  }
+
+  useEffect(() => {
+    if (!searched || loading || !!error || !hasMoreBooks) return;
+
+    const node = loadMoreRef.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry?.isIntersecting) return;
+        if (appendInFlightRef.current || loadingMore) return;
+
+        appendInFlightRef.current = true;
+        void runBooksQuery({
+          search: activeCategoryQuery ? undefined : query.trim() || undefined,
+          genre: activeCategoryQuery || undefined,
+          page: booksPage + 1,
+          append: true,
+        }).finally(() => {
+          appendInFlightRef.current = false;
+        });
+      },
+      { rootMargin: '260px 0px', threshold: 0.01 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [
+    searched,
+    loading,
+    loadingMore,
+    error,
+    hasMoreBooks,
+    booksPage,
+    query,
+    activeCategoryQuery,
+  ]);
 
   if (!ready) return <PageSkeleton />;
 
@@ -469,7 +805,29 @@ function BrowseContent() {
                   exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.22 }}>
 
                   <div className="hidden md:block">
+                    {topPicksLoading && (
+                      <div className="animate-pulse">
+                        <div className={cn('h-3 w-24 rounded mb-3', tk.skeleton)} />
+                        <div className={cn('h-9 w-4/5 rounded mb-2', tk.skeleton)} />
+                        <div className={cn('h-4 w-1/2 rounded mb-3', tk.skeleton)} />
+                        <div className="flex gap-1 mb-3">
+                          {[0, 1, 2, 3, 4].map((i) => (
+                            <div key={i} className={cn('h-4 w-4 rounded', tk.skeleton)} />
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mb-3">
+                          {[0, 1, 2].map((i) => (
+                            <div key={i} className={cn('h-6 w-20 rounded-full', tk.skeleton)} />
+                          ))}
+                        </div>
+                        <div className={cn('h-3 w-full rounded mb-2', tk.skeleton)} />
+                        <div className={cn('h-3 w-11/12 rounded mb-2', tk.skeleton)} />
+                        <div className={cn('h-3 w-4/5 rounded mb-4', tk.skeleton)} />
+                        <div className={cn('h-10 w-32 rounded-2xl', tk.skeleton)} />
+                      </div>
+                    )}
                     {(() => {
+                      if (topPicksLoading) return null;
                       const activeIdx = hoveredIdx ?? 0;
                       const b  = topPicks[activeIdx] ?? topPicks[0];
                       if (!b) return null;
@@ -534,16 +892,26 @@ function BrowseContent() {
                   </div>
 
                   <div className="md:hidden">
-                    <h1 className={cn('font-serif text-3xl font-black leading-tight mb-1', tk.text)}>
-                      Temukan buku<br /><span className="text-gold">favoritmu.</span>
-                    </h1>
-                    <p className={cn('text-sm', tk.muted)}>Dari fiksi klasik sampai sains modern.</p>
-                    <div className="flex md:hidden items-center justify-start mt-8">
-                      <Medal className="w-3.5 h-3.5 text-gold" />
-                      <span className="text-gold text-xs font-semibold uppercase tracking-wider">
-                        Pustara's Pick — kurasi dari Pustakrew 📚
-                      </span>
-                    </div>
+                    {topPicksLoading ? (
+                      <div className="animate-pulse">
+                        <div className={cn('h-9 w-3/4 rounded mb-2', tk.skeleton)} />
+                        <div className={cn('h-4 w-2/3 rounded mb-8', tk.skeleton)} />
+                        <div className={cn('h-3 w-40 rounded', tk.skeleton)} />
+                      </div>
+                    ) : (
+                      <>
+                        <h1 className={cn('font-serif text-3xl font-black leading-tight mb-1', tk.text)}>
+                          Temukan buku<br /><span className="text-gold">favoritmu.</span>
+                        </h1>
+                        <p className={cn('text-sm', tk.muted)}>Dari fiksi klasik sampai sains modern.</p>
+                        <div className="flex md:hidden items-center justify-start mt-8">
+                          <Medal className="w-3.5 h-3.5 text-gold" />
+                          <span className="text-gold text-xs font-semibold uppercase tracking-wider">
+                            Pustara's Pick — kurasi dari Pustakrew 📚
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -579,6 +947,7 @@ function BrowseContent() {
                               {b.title}
                             </h2>
                             <p className={cn('text-sm mb-3', tk.muted)}>{b.author}</p>
+                            <p className={cn('text-xs mb-3 font-medium', tk.muted)}>{getSourceLabel(b)}</p>
                             <div className="flex items-center gap-1 mb-4">
                               {[1,2,3,4,5].map(s => (
                                 <Star key={s} className={cn('w-4 h-4',
@@ -609,7 +978,7 @@ function BrowseContent() {
                       <div>
                         <h2 className={cn('font-serif text-2xl font-black leading-tight', tk.text)}>{sectionLabel}</h2>
                         {!loading && books.length > 0 && (
-                          <p className={cn('text-xs mt-0.5', tk.muted)}>{books.length} judul ditemukan</p>
+                          <p className={cn('text-xs mt-0.5', tk.muted)}>{booksTotalItems} judul ditemukan</p>
                         )}
                       </div>
                       <button
@@ -627,6 +996,38 @@ function BrowseContent() {
           {/* ── RIGHT (Top 3) ── */}
           <div className="flex-1 min-w-0 pt-0 md:pt-24">
             {(() => {
+              if (!searched && topPicksLoading) {
+                return (
+                  <>
+                    <div className="hidden md:block relative" style={{ height: 300 }}>
+                      <div className="absolute left-1/2" style={{ transform: 'translateX(-50%)', top: 0 }}>
+                        <div className={cn('w-[213px] h-[306px] rounded-2xl animate-pulse', tk.skeleton)} />
+                      </div>
+                      <div className="absolute left-1/2" style={{ transform: 'translateX(calc(-50% - 138px))', top: 45 }}>
+                        <div className={cn('w-[174px] h-[258px] rounded-2xl animate-pulse opacity-80', tk.skeleton)} />
+                      </div>
+                      <div className="absolute left-1/2" style={{ transform: 'translateX(calc(-50% + 152px))', top: 57 }}>
+                        <div className={cn('w-[174px] h-[258px] rounded-2xl animate-pulse opacity-80', tk.skeleton)} />
+                      </div>
+                    </div>
+
+                    <div className="md:hidden">
+                      <div className="flex gap-3 mb-4">
+                        {[0, 1, 2].map((i) => (
+                          <div key={i} className={cn('flex-1 rounded-2xl animate-pulse', tk.skeleton)} style={{ aspectRatio: '2/3' }} />
+                        ))}
+                      </div>
+                      <div className={cn('rounded-2xl border p-4 animate-pulse', dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker')}>
+                        <div className={cn('h-3 w-24 rounded mb-2', tk.skeleton)} />
+                        <div className={cn('h-5 w-3/4 rounded mb-2', tk.skeleton)} />
+                        <div className={cn('h-3 w-1/2 rounded mb-4', tk.skeleton)} />
+                        <div className={cn('h-9 w-full rounded-xl', tk.skeleton)} />
+                      </div>
+                    </div>
+                  </>
+                );
+              }
+
               const top3: BrowseBook[] = searched ? books.slice(0, 3) : topPicks;
 
               if (searched && top3.length < 3) {
@@ -642,7 +1043,15 @@ function BrowseContent() {
                       )}
                     >
                       {top3.map((b, i) => (
-                        <GridBookCard key={b.key} book={b} index={i} rank={i + 1} dark={dark} tk={tk} />
+                        <GridBookCard
+                          key={b.key}
+                          book={b}
+                          index={i}
+                          rank={i + 1}
+                          dark={dark}
+                          tk={tk}
+                          sourceLabel={getSourceLabel(b)}
+                        />
                       ))}
                     </div>
                   </div>
@@ -867,16 +1276,42 @@ function BrowseContent() {
             className="max-w-7xl mx-auto px-4 mt-8 pb-12"
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
             <h2 className={cn('font-serif text-lg font-bold mb-3', tk.text)}>Telusuri Kategori</h2>
+            <div className="flex items-center justify-between mb-2 min-h-[18px]">
+              <span className={cn('text-xs', tk.muted)}>
+                {categoriesLoading ? 'Memuat kategori...' : `${categories.length} kategori tersedia`}
+              </span>
+              {categoriesError && (
+                <span className="text-[11px] text-amber-500">{categoriesError}</span>
+              )}
+            </div>
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
-              {CATEGORIES.map((c, i) => (
-                <motion.button key={c.id} onClick={() => loadCategory(c.id)}
-                  className={cn('flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all', tk.chip)}
-                  initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.04 }} whileTap={{ scale: 0.95 }} whileHover={{ y: -3 }}>
-                  <span className="text-2xl"><c.icon className="w-6 h-6 text-gold/70" /></span>
-                  <span className="text-xs font-medium text-center leading-tight">{c.label}</span>
-                </motion.button>
-              ))}
+              {categoriesLoading
+                ? Array(8).fill(0).map((_, i) => (
+                    <div key={i} className={cn('p-3 rounded-2xl border animate-pulse', dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker')}>
+                      <div className={cn('w-6 h-6 rounded mx-auto mb-2', tk.skeleton)} />
+                      <div className={cn('h-2.5 w-12 rounded mx-auto', tk.skeleton)} />
+                    </div>
+                  ))
+                : categories.map((c, i) => (
+                    <motion.button
+                      key={c.id}
+                      type="button"
+                      onClick={() => loadCategory(c.query, c.label)}
+                      className={cn(
+                        'flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all',
+                        tk.chip,
+                        activeCategoryQuery.toLowerCase() === c.query.toLowerCase() && (
+                          dark
+                            ? 'border-gold/60 text-gold bg-gold/10'
+                            : 'border-gold text-navy-800 bg-gold/10'
+                        )
+                      )}
+                      initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.04 }} whileTap={{ scale: 0.95 }} whileHover={{ y: -3 }}>
+                      <span className="text-2xl"><c.icon className="w-6 h-6 text-gold/70" /></span>
+                      <span className="text-xs font-medium text-center leading-tight">{c.label}</span>
+                    </motion.button>
+                  ))}
             </div>
 
             <div id="popular" className="scroll-mt-28 flex items-center justify-between mt-10 mb-3">
@@ -888,7 +1323,7 @@ function BrowseContent() {
                 Lihat semua →
               </Link>
             </div>
-            <PopularSection dark={dark} tk={tk} books={popularBooks} />
+            <PopularSection dark={dark} tk={tk} books={popularBooks} loading={popularLoading} />
 
             <div id="ai-reco" className="scroll-mt-28 flex items-center justify-between mt-10 -mb-3">
               <div className="flex items-center gap-2">
@@ -896,22 +1331,24 @@ function BrowseContent() {
                 <h2 className={cn('font-serif text-lg font-bold', tk.text)}>PustarAI</h2>
                 <span className={cn('text-[10px] px-2 py-0.5 rounded-full border font-semibold', dark ? 'border-gold/30 text-gold/70' : 'border-gold/40 text-gold/80')}>Beta</span>
               </div>
-              <Link href="/recommendations/chat" className="text-gold text-xs font-medium hover:underline">
+              <Link href="/pustarai/chat" className="text-gold text-xs font-medium hover:underline">
                 Buka chat →
               </Link>
             </div>
             <AISection dark={dark} tk={tk} />
 
-            <div id="community" className="scroll-mt-28 flex items-center justify-between mt-10 mb-3">
+            <div id="genre-curation" className="scroll-mt-28 flex items-center justify-between mt-10 mb-3">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-gold" />
-                <h2 className={cn('font-serif text-lg font-bold', tk.text)}>Aktivitas Teman</h2>
+                <Sparkles className="w-4 h-4 text-gold" />
+                <h2 className={cn('font-serif text-lg font-bold', tk.text)}>Kurasi Berdasarkan Genre</h2>
               </div>
-              <Link href="/community" className={cn('text-xs font-semibold text-gold hover:underline')}>
-                Komunitas →
-              </Link>
             </div>
-            <FriendActivitySection dark={dark} tk={tk} />
+            <GenreShelvesSection
+              dark={dark}
+              tk={tk}
+              shelves={genreShelves}
+              loading={genreShelvesLoading}
+            />
           </motion.section>
         )}
 
@@ -937,7 +1374,7 @@ function BrowseContent() {
                 <p className={cn('font-semibold mb-1', tk.text)}>Koneksi Bermasalah</p>
                 <p className={cn('text-sm mb-5', tk.muted)}>{error}</p>
                 <button
-                  onClick={() => active ? loadCategory(active) : handleSearch(query)}
+                  onClick={() => activeCategoryQuery ? loadCategory(activeCategoryQuery, activeCategoryLabel) : handleSearch(query)}
                   className="flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-gold text-navy-900 text-sm font-semibold hover:bg-gold/90 transition-colors">
                   <RefreshCw className="w-4 h-4" /> Coba Lagi
                 </button>
@@ -954,7 +1391,15 @@ function BrowseContent() {
                 </p>
                 <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 lg:gap-4">
                   {rest.map((b, i) => (
-                    <GridBookCard key={b.key} book={b} index={i} rank={i + 4} dark={dark} tk={tk} />
+                    <GridBookCard
+                      key={b.key}
+                      book={b}
+                      index={i}
+                      rank={i + 4}
+                      dark={dark}
+                      tk={tk}
+                      sourceLabel={getSourceLabel(b)}
+                    />
                   ))}
                 </div>
               </div>
@@ -965,9 +1410,29 @@ function BrowseContent() {
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 lg:gap-4">
                   {books.map((b, i) => (
-                    <GridBookCard key={b.key} book={b} index={i} rank={i + 1} dark={dark} tk={tk} />
+                    <GridBookCard
+                      key={b.key}
+                      book={b}
+                      index={i}
+                      rank={i + 1}
+                      dark={dark}
+                      tk={tk}
+                      sourceLabel={getSourceLabel(b)}
+                    />
                   ))}
                 </div>
+              </div>
+            )}
+
+            {!loading && !error && books.length > 0 && (
+              <div ref={loadMoreRef} className="flex justify-center mt-8 min-h-[36px]">
+                {hasMoreBooks ? (
+                  <div className={cn('text-xs font-medium', tk.muted)}>
+                    {loadingMore ? 'Memuat hasil berikutnya...' : 'Scroll untuk memuat lebih banyak'}
+                  </div>
+                ) : (
+                  <div className={cn('text-xs font-medium', tk.muted)}>Semua hasil sudah dimuat</div>
+                )}
               </div>
             )}
           </motion.section>
@@ -978,7 +1443,21 @@ function BrowseContent() {
 }
 
 // ── GridBookCard ─────────────────────────────────────────────────────────────
-function GridBookCard({ book, index, rank, dark, tk }: { book: BrowseBook; index: number; rank: number; dark: boolean; tk: any; }) {
+function GridBookCard({
+  book,
+  index,
+  rank,
+  dark,
+  tk,
+  sourceLabel,
+}: {
+  book: BrowseBook;
+  index: number;
+  rank: number;
+  dark: boolean;
+  tk: any;
+  sourceLabel?: string;
+}) {
   const src       = book.coverUrl;
   const rating    = book.rating?.toFixed(1) || "4.5";
   const ratingNum = Number(rating);
@@ -1006,12 +1485,33 @@ function GridBookCard({ book, index, rank, dark, tk }: { book: BrowseBook; index
       </div>
       <p className={cn('text-[11px] font-medium mt-1.5 leading-tight line-clamp-2', dark ? 'text-white' : 'text-navy-900')}>{book.title}</p>
       <p className="text-slate-500 text-[10px] mt-0.5 truncate">{book.author}</p>
+      {sourceLabel && (
+        <p className={cn('text-[10px] mt-1 font-medium line-clamp-1', tk.muted)}>{sourceLabel}</p>
+      )}
     </motion.div>
   );
 }
 
 const pseudo2 = (n: number, mn: number, mx: number) => mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
-function PopularSection({ dark, tk, books }: { dark: boolean; tk: any; books: BrowseBook[] }) {
+function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; books: BrowseBook[]; loading: boolean }) {
+  if (loading) {
+    return (
+      <div className="flex gap-4 px-4 -mx-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+        {Array(6).fill(0).map((_, i) => (
+          <div key={i} className="flex-shrink-0 w-36 animate-pulse">
+            <div className={cn('w-full aspect-[2/3] rounded-xl mb-2', tk.skeleton)} />
+            <div className={cn('h-3 w-5/6 rounded mb-1.5', tk.skeleton)} />
+            <div className={cn('h-2.5 w-2/3 rounded mb-2', tk.skeleton)} />
+            <div className="flex items-center gap-1.5">
+              <div className={cn('h-4 w-12 rounded', tk.skeleton)} />
+              <div className={cn('h-3 w-20 rounded', tk.skeleton)} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   const items = books.length > 0 ? books : BROWSE_POPULAR_BOOKS;
   
   return (
@@ -1093,24 +1593,88 @@ function PopularSection({ dark, tk, books }: { dark: boolean; tk: any; books: Br
     </div>
   );
 }
-function FriendActivitySection({ dark, tk }: { dark: boolean; tk: any }) {
-  return (
-    <div className="flex flex-col gap-3">
-      {BROWSE_FRIEND_ACTIVITY.map((a, i) => (
-        <motion.div key={i} className={cn('flex items-center gap-3 p-3 rounded-2xl border transition-all', dark ? 'bg-navy-800/40 border-white/6 hover:bg-navy-800/60' : 'bg-white border-parchment-darker hover:bg-slate-50')} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}>
-          <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">{a.avatar}</div>
-          <div className="flex-1 min-w-0">
-            <p className={cn('text-sm leading-tight', tk.text)}>
-              <span className="font-semibold">{a.user}</span><span className={cn('font-normal', tk.muted)}> {a.action} </span><span className="font-semibold">{a.book}</span>
-            </p>
-            <p className={cn('text-xs mt-0.5', tk.muted)}>{a.time}</p>
-          </div>
-          <Link href={`/book/${a.key}`} className="flex-shrink-0">
-            <div className="w-9 h-12 rounded-lg overflow-hidden shadow-md">
-              <img src={a.coverUrl} alt={a.book} className="w-full h-full object-cover" loading="lazy" />
+function GenreShelvesSection({
+  dark,
+  tk,
+  shelves,
+  loading,
+}: {
+  dark: boolean;
+  tk: any;
+  shelves: GenreShelf[];
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        {Array(3).fill(0).map((_, idx) => (
+          <div
+            key={idx}
+            className={cn(
+              'p-4 rounded-2xl border animate-pulse',
+              dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker'
+            )}
+          >
+            <div className={cn('h-4 w-40 rounded mb-3', dark ? 'bg-white/10' : 'bg-slate-200')} />
+            <div className="flex gap-3">
+              {Array(5).fill(0).map((__, cardIdx) => (
+                <div key={cardIdx} className={cn('w-28 h-40 rounded-xl', dark ? 'bg-white/10' : 'bg-slate-200')} />
+              ))}
             </div>
-          </Link>
-          <Link href={`/book/${a.key}/reviews`} className={cn('flex-shrink-0 p-1.5 rounded-lg transition-colors', tk.muted, 'hover:text-gold')}><MessageCircle className="w-4 h-4" /></Link>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (shelves.length === 0) {
+    return (
+      <div className={cn('rounded-2xl border p-4 text-sm', dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker', tk.muted)}>
+        Kurasi genre belum tersedia.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      {shelves.map((shelf, shelfIdx) => (
+        <motion.div
+          key={shelf.id}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: shelfIdx * 0.05 }}
+          className={cn('rounded-2xl border p-4', dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker')}
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className={cn('font-serif text-base font-bold', tk.text)}>{shelf.label}</h3>
+            <button
+              type="button"
+              onClick={() => window.location.href = `/browse?q=${encodeURIComponent(shelf.label)}`}
+              className={cn('text-xs font-semibold text-gold hover:underline')}
+            >
+              Lihat semua →
+            </button>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            {shelf.books.map((book) => (
+              <Link key={`${shelf.id}-${book.key}`} href={`/book/${book.key}`} className="flex-shrink-0 w-28 group">
+                <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-sm transition-all group-hover:-translate-y-1', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
+                  {book.coverUrl ? (
+                    <img src={book.coverUrl} alt={book.title} className="w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center opacity-50">
+                      <BookOpen className="w-5 h-5" />
+                    </div>
+                  )}
+                </div>
+                <p className={cn('text-[11px] font-semibold mt-1.5 line-clamp-2', tk.text)}>{book.title}</p>
+                <p className={cn('text-[10px] line-clamp-1', tk.muted)}>{book.author}</p>
+              </Link>
+            ))}
+            {shelf.books.length === 0 && (
+              <p className={cn('text-xs', tk.muted)}>Belum ada buku pada kurasi ini.</p>
+            )}
+          </div>
         </motion.div>
       ))}
     </div>

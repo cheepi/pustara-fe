@@ -9,7 +9,7 @@ export interface FeedItem {
   time: string;
   user?: string; avatar?: string; loc?: string;
   action?: string; rating?: number; reviewText?: string;
-  bookKey?: string; bookTitle?: string; bookAuthor?: string; coverId?: number;
+  bookKey?: string; bookTitle?: string; bookAuthor?: string; coverId?: number; bookCoverUrl?: string;
   aiReason?: string;
   notifTitle?: string; notifBody?: string;
   rank?: number; reads?: number;

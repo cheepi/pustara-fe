@@ -8,9 +8,10 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
-import type { NotifType, NotificationItem } from '@/types/notifications';
+import type { NotificationItem } from '@/types/notifications';
 import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
 import { fetchNotifications } from '@/lib/notifications';
+import { NotificationType } from '@/types/database';
 
 const TABS = [
   { id: 'all',    label: 'Semua'    },
@@ -19,7 +20,7 @@ const TABS = [
   { id: 'social', label: 'Sosial'      },
 ];
 
-function typeIcon(type: NotifType, dark: boolean) {
+function typeIcon(type: NotificationType, dark: boolean) {
   const base = 'w-5 h-5';
   switch (type) {
     case 'borrow': return <BookOpen   className={cn(base, 'text-gold')}        />;
@@ -31,7 +32,7 @@ function typeIcon(type: NotifType, dark: boolean) {
   }
 }
 
-function typeBg(type: NotifType) {
+function typeBg(type: NotificationType) {
   switch (type) {
     case 'borrow': return 'bg-gold/15';
     case 'due':    return 'bg-red-400/15';

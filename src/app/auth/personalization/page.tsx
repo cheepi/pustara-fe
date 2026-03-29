@@ -9,6 +9,7 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import ComboLogo from '@/components/icons/ComboLogo';
 import { useUserStore } from '@/store/userStore';
 import type { AgeRange, Gender } from '@/types/personalization';
+import { saveSurvey, skipSurvey } from '@/lib/survey';
 
 const GENRES = [
   { label: 'Fiksi', emoji: '📖' },
@@ -72,18 +73,15 @@ export default function PersonalizationPage() {
     setError('');
     try {
       const token = await user.getIdToken();
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const response = await fetch(`${apiUrl}/survey/save`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const result = await saveSurvey(
+        {
           favoriteGenre: genres.join(',') || null,
           age: age || null,
           gender: gender || null,
-        }),
-      });
-      const data = await response.json();
-      if (!data.success) throw new Error(data.error || 'Gagal menyimpan preferensi');
+        },
+        token
+      );
+      if (!result.success) throw new Error(result.error || 'Gagal menyimpan preferensi');
       localStorage.setItem('pustara_personalized', 'true');
       localStorage.setItem('pustara_prefs', JSON.stringify({ gender, age, genres }));
       router.replace('/catalog');
@@ -94,9 +92,27 @@ export default function PersonalizationPage() {
     }
   }
 
-  function handleSkip() {
-    localStorage.setItem('pustara_personalized', 'true');
-    router.replace('/catalog');
+  async function handleSkip() {
+    if (!user) {
+      router.replace('/catalog');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const token = await user.getIdToken();
+      const result = await skipSurvey(token);
+      if (!result.success) throw new Error(result.error || 'Gagal menyimpan skip survey');
+
+      localStorage.setItem('pustara_personalized', 'true');
+      router.replace('/catalog');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
+    } finally {
+      setLoading(false);
+    }
   }
 
   const canProceed = gender !== '' || age !== '' || genres.length > 0;
