@@ -74,6 +74,14 @@ interface BackendRecommendationsResponse {
   users: BackendRecommendation[];
 }
 
+const STREAK_TIME_ZONE = 'Asia/Jakarta';
+const STREAK_DAY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: STREAK_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+
 function normalizeCoverUrl(input?: string | null): string {
   if (!input) return '';
   const value = String(input).trim();
@@ -105,7 +113,12 @@ function toDateKey(input?: string | null): string | null {
   if (!input) return null;
   const date = new Date(input);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString().slice(0, 10);
+  const parts = STREAK_DAY_FORMATTER.formatToParts(date);
+  const year = parts.find((p) => p.type === 'year')?.value;
+  const month = parts.find((p) => p.type === 'month')?.value;
+  const day = parts.find((p) => p.type === 'day')?.value;
+  if (!year || !month || !day) return null;
+  return `${year}-${month}-${day}`;
 }
 
 function pickProfileSubtitle(profile: unknown): string {
@@ -128,13 +141,12 @@ function calcStreakFromActivities(activities: BackendActivity[]): number {
 
   let streak = 0;
   const cursor = new Date();
-  cursor.setHours(0, 0, 0, 0);
 
   while (true) {
-    const key = cursor.toISOString().slice(0, 10);
-    if (!days.has(key)) break;
+    const key = toDateKey(cursor.toISOString());
+    if (!key || !days.has(key)) break;
     streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
+    cursor.setUTCDate(cursor.getUTCDate() - 1);
   }
 
   return streak;
@@ -162,7 +174,7 @@ export async function fetchTrendingFeedItems(topN = 5): Promise<FeedItem[]> {
 
 export async function fetchFeedActivities(limit = 8): Promise<FeedItem[]> {
   try {
-    const response = await apiGet<BackendActivityResponse>(`/feed/me/activity?limit=${limit}`);
+    const response = await apiGet<BackendActivityResponse>(`/feed/me/activity?limit=${limit}&include_network=1`);
 
     return response.activities.map((activity, idx) => ({
       id: `activity_${activity.session_id}_${idx}`,
@@ -199,7 +211,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
   try {
     const [profile, feedResponse, recoResponse, shelfData] = await Promise.all([
       getMyProfile(),
-      apiGet<BackendActivityResponse>('/feed/me/activity?limit=3'),
+      apiGet<BackendActivityResponse>('/feed/me/activity?limit=60'),
       apiGet<BackendRecommendationsResponse>('/feed/me/recommendations?limit=3'),
       fetchShelfData(),
     ]);
@@ -224,7 +236,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
 
     const profileStreak = Number(profile?.reading_streak ?? 0);
     const computedStreak = calcStreakFromActivities(feedResponse.activities);
-    const streak = Math.max(0, profileStreak || computedStreak);
+    const streak = Math.max(0, profileStreak, computedStreak);
 
     // Map recent reads from activities
     const recentReads = feedResponse.activities

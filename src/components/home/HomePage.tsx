@@ -21,6 +21,7 @@ import {
   coverBatchCache,
   type CoverRequest,
 } from '@/lib/coverBatch';
+import { fetchFeedSidebarPayload } from '@/lib/feed';
 
 const coverUrl = (id?: number, s = 'M') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
@@ -106,6 +107,7 @@ export default function HomePage() {
   const { books: popularBooks, loading: popularLoading } = useTrendingBooks(6);
   const { recommendations: aiReco, loading: aiLoading } = useRecommendations();
   const [aiCovers, setAiCovers] = useState<Map<string, string | null>>(new Map());
+  const [greetingStats, setGreetingStats] = useState({ dipinjam: 0, streak: 0, selesai: 0 });
 
   useEffect(() => {
     if (!aiReco || aiReco.length === 0) {
@@ -135,6 +137,32 @@ export default function HomePage() {
         setAiCovers(new Map());
       });
   }, [aiReco]);
+
+  useEffect(() => {
+    if (!user) {
+      setGreetingStats({ dipinjam: 0, streak: 0, selesai: 0 });
+      return;
+    }
+
+    let active = true;
+    fetchFeedSidebarPayload()
+      .then((payload) => {
+        if (!active) return;
+        setGreetingStats({
+          dipinjam: Number(payload.profile.dipinjam || 0),
+          streak: Number(payload.profile.streak || 0),
+          selesai: Number(payload.profile.selesai || 0),
+        });
+      })
+      .catch(() => {
+        if (!active) return;
+        setGreetingStats({ dipinjam: 0, streak: 0, selesai: 0 });
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [user?.uid]);
 
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
@@ -178,9 +206,9 @@ export default function HomePage() {
             <motion.div className="hidden sm:flex items-center gap-5 flex-shrink-0"
               initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
               {[
-                { icon: BookCopy,        val: '3',  label: 'Dipinjam'    },
-                { icon: Flame,           val: '12', label: 'Hari streak' },
-                { icon: CircleCheckBig,  val: '24', label: 'Selesai'     },
+                { icon: BookCopy,        val: String(greetingStats.dipinjam),  label: 'Dipinjam'    },
+                { icon: Flame,           val: String(greetingStats.streak), label: 'Hari streak' },
+                { icon: CircleCheckBig,  val: String(greetingStats.selesai), label: 'Selesai'     },
               ].map(({ icon: Icon, val, label }) => (
                 <div key={label} className="flex flex-col items-center justify-center">
                   <Icon className="w-6 h-6 text-gold/70" />
@@ -197,7 +225,7 @@ export default function HomePage() {
       <section className="mt-6 max-w-7xl mx-auto">
         <div className="flex items-center justify-between px-4 mb-4">
           <h2 className="font-serif text-lg font-bold" style={{ color: 'var(--text)' }}>Bacaan Populer</h2>
-          <Link href="/popular" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
+          <Link href="/browse#popular" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
         </div>
         {popularLoading
           ? <PopularSkeleton isLight={isLight} />

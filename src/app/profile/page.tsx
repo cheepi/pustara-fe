@@ -110,9 +110,8 @@ export default function ProfilePage() {
           wishlist: Number(profile.liked_books?.length ?? 0),
         });
 
-        const finishedCount = finished.length;
-        const streakBase = readingNow.length + finishedCount + Number(profile.liked_books?.length ?? 0);
-        const streak = Math.max(1, Math.min(30, streakBase));
+        const finishedCount = Math.max(Number(profile.total_read ?? 0), finished.length);
+        const streak = Math.max(0, Number(profile.reading_streak ?? 0));
         const ulasan = finishedCount;
 
         setStats([

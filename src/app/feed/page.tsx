@@ -258,6 +258,7 @@ function TrendingCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: a
 // ── AI Sidebar widget ─────────────────────────────────────────────────────────
 const SIDEBAR_SUGGESTIONS = ['Buku sedih tapi indah', 'Sastra Indonesia', 'Bacaan ringan'];
 const AI_WIDGET_COLLAPSE_STORAGE_KEY = 'feed.aiSidebarCollapsed';
+const RECENT_ACTIVITY_COLLAPSE_STORAGE_KEY = 'feed.recentActivityCollapsed';
 
 function AISidebarWidget({ dark, tk }: { dark: boolean; tk: any }) {
   const [input, setInput] = useState('');
@@ -414,7 +415,23 @@ export default function FeedPage() {
   const [recommendedUsers, setRecommendedUsers] = useState<RecommendedUser[]>([]);
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
   const [feedLoading, setFeedLoading] = useState(true);
+  const [recentReadsCollapsed, setRecentReadsCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      return window.localStorage.getItem(RECENT_ACTIVITY_COLLAPSE_STORAGE_KEY) !== '0';
+    } catch {
+      return true;
+    }
+  });
   const loaderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(RECENT_ACTIVITY_COLLAPSE_STORAGE_KEY, recentReadsCollapsed ? '1' : '0');
+    } catch {
+      // Ignore localStorage access failures.
+    }
+  }, [recentReadsCollapsed]);
 
   async function loadFeedData() {
     if (!ready || !user) return;
@@ -541,6 +558,9 @@ export default function FeedPage() {
         ? FEED.filter((i) => i.type === 'activity' && !selfNameSet.has(normalizeComparable(i.user)))
         : FEED.filter((i) => i.type === filter);
   const filtered    = allFiltered.slice(0, visibleCount);
+  const displayedRecentReads = recentReadsCollapsed
+    ? sidebar.recentReads.slice(0, 3)
+    : sidebar.recentReads;
 
   useEffect(() => { setVisibleCount(5); }, [filter]);
 
@@ -619,7 +639,20 @@ export default function FeedPage() {
               </div>
 
               <div className={cn('rounded-3xl border p-5', tk.card)}>
-                <p className={cn('text-xs font-semibold uppercase tracking-wider mb-4', tk.muted)}>Aktivitas Baru</p>
+                <div className="flex items-center justify-between mb-4">
+                  <p className={cn('text-xs font-semibold uppercase tracking-wider', tk.muted)}>Aktivitas Baru</p>
+                  <button
+                    type="button"
+                    onClick={() => setRecentReadsCollapsed((prev) => !prev)}
+                    className={cn(
+                      'p-1.5 rounded-lg border transition-colors',
+                      dark ? 'border-white/10 text-white/60 hover:bg-white/10' : 'border-slate-200 text-slate-500 hover:bg-slate-100'
+                    )}
+                    aria-label={recentReadsCollapsed ? 'Buka aktivitas baru' : 'Ringkas aktivitas baru'}
+                  >
+                    {recentReadsCollapsed ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
                 <div className="space-y-3">
                   {feedLoading && (
                     <div className="space-y-3 animate-pulse">
@@ -635,7 +668,7 @@ export default function FeedPage() {
                       ))}
                     </div>
                   )}
-                  {sidebar.recentReads.map((b) => (
+                  {displayedRecentReads.map((b) => (
                     <Link key={b.entryKey} href={`/read/${b.bookId}`}>
                       <div className="flex gap-3 group cursor-pointer">
                         <div className="w-10 h-14 rounded-xl overflow-hidden shadow-md flex-shrink-0">
@@ -660,6 +693,17 @@ export default function FeedPage() {
                   ))}
                   {!feedLoading && sidebar.recentReads.length === 0 && (
                     <p className={cn('text-xs', tk.muted)}>Belum ada aktivitas baca terbaru.</p>
+                  )}
+                  {!feedLoading && sidebar.recentReads.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setRecentReadsCollapsed((prev) => !prev)}
+                      className={cn('text-xs font-semibold transition-colors hover:text-gold', tk.muted)}
+                    >
+                      {recentReadsCollapsed
+                        ? `Tampilkan semua (${sidebar.recentReads.length})`
+                        : 'Tampilkan lebih sedikit'}
+                    </button>
                   )}
                 </div>
                 <Link href="/shelf"

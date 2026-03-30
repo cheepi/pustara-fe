@@ -79,10 +79,17 @@ export function useRecommendations(forceRefresh = false) {
         // IMPORTANT: jangan gunakan endpoint /recommendations/chat di auto-load.
         // Chat endpoint hanya dipakai saat user klik kirim di halaman chat.
         let recommendations: AiRecommendation[] = [];
-        if (genres.length > 0) {
+
+        // Authenticated users should always go through backend cold-start proxy
+        // so AI can switch to personalized mode based on interaction count.
+        if (user?.uid) {
           const res = await fetchColdStartRecommendations(genres, 10);
           recommendations = res.recommendations ?? [];
-        } else {
+        }
+
+        // Guest mode only: use trending fallback.
+        // For authenticated users, phase must stay personalized per-user.
+        if (!user?.uid && recommendations.length === 0) {
           const trending = await fetchTrending(10);
           recommendations = trending.map(toAiRecommendationFallback);
         }

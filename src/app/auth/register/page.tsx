@@ -264,7 +264,7 @@ export default function RegisterPage() {
                   type="text"
                   value={username}
                   onChange={e => setUsername(e.target.value)}
-                  placeholder="Nama Pengguna (contoh: syifaalfyy)"
+                  placeholder="Nama Pengguna (min. 3 karakter)"
                   className={inputBase}
                   minLength={3}
                   required
