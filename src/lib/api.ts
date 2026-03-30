@@ -42,7 +42,7 @@ function unwrapData<T>(json: unknown): T {
 export async function apiGet<T>(path: string): Promise<T> {
   const headers = await getAuthHeader();
   const res = await fetch(`${API_URL}${path}`, { headers });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -54,7 +54,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -66,7 +66,18 @@ export async function apiPostAllowAnonymous<T>(path: string, body: unknown): Pro
     headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  const json = await res.json();
+  return unwrapData<T>(json);
+}
+
+export async function apiDelete<T>(path: string): Promise<T> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'DELETE',
+    headers,
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -125,9 +136,19 @@ function normalizeAiRecommendation(raw: unknown): AiRecommendation {
   };
   const rawContent = (rawSignalMap.content ?? {}) as Record<string, unknown>;
   const rawCollab = (rawSignalMap.collab ?? {}) as Record<string, unknown>;
-  const contentScore = clamp01(rawContent.score ?? findSignalFromList('konten') ?? findSignalFromList('content'), 0);
-  const collabScore = clamp01(rawCollab.score ?? findSignalFromList('collab') ?? findSignalFromList('komunitas'), 0);
+  const contentScoreRaw = rawContent.score ?? findSignalFromList('konten') ?? findSignalFromList('content');
+  const collabScoreRaw = rawCollab.score ?? findSignalFromList('collab') ?? findSignalFromList('komunitas');
+  const hasExplicitSignals = contentScoreRaw !== undefined || collabScoreRaw !== undefined;
   const hybridScore = clamp01(rec.hybrid_score ?? rec.final_score, 0);
+  const fallbackDominant = rec.dominant_signal === 'collab' ? 'collab' : 'content';
+  const contentScore = clamp01(
+    contentScoreRaw,
+    hasExplicitSignals ? 0 : (fallbackDominant === 'content' ? hybridScore : 0),
+  );
+  const collabScore = clamp01(
+    collabScoreRaw,
+    hasExplicitSignals ? 0 : (fallbackDominant === 'collab' ? hybridScore : 0),
+  );
   const dominant = rec.dominant_signal === 'collab'
     ? 'collab'
     : rec.dominant_signal === 'content'
@@ -155,12 +176,12 @@ function normalizeAiRecommendation(raw: unknown): AiRecommendation {
     signals: {
       content: {
         score: contentScore,
-        weight: clamp01(rawContent.weight, 1),
+        weight: clamp01(rawContent.weight, hasExplicitSignals ? 1 : (dominant === 'content' ? 1 : 0)),
         label: String(rawContent.label ?? 'Kemiripan konten'),
       },
       collab: {
         score: collabScore,
-        weight: clamp01(rawCollab.weight, 0),
+        weight: clamp01(rawCollab.weight, hasExplicitSignals ? 0 : (dominant === 'collab' ? 1 : 0)),
         label: String(rawCollab.label ?? 'Sinyal komunitas'),
       },
     },

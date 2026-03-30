@@ -24,15 +24,20 @@ function toReaderBook(id: string, title: string, author: string, pdfUrl?: string
     id,
     title,
     author,
+    authors: [author],
+    cover_url: null,
+    file_url: pdfUrl || SAMPLE_PDF,
+    file_type: 'pdf',
     dueDate,
     daysLeft,
     pdfUrl: pdfUrl || SAMPLE_PDF,
+    total_pages: 0,
   };
 }
 
 export async function fetchReaderBook(bookId: string): Promise<ReaderBook> {
   try {
-    const res = await fetch(`${API_URL}/books/${bookId}/read`, { cache: 'no-store' });
+    const res = await fetch(`${API_URL}/books/${bookId}`, { cache: 'no-store' });
     if (res.ok) {
       const json = await res.json();
       const data = json?.data ?? json;
@@ -40,9 +45,14 @@ export async function fetchReaderBook(bookId: string): Promise<ReaderBook> {
         id: String(data.id ?? bookId),
         title: String(data.title ?? '-'),
         author: String(data.author ?? data.authors ?? '-'),
+        authors: Array.isArray(data.authors) ? data.authors : [String(data.author ?? data.authors ?? '-')],
+        cover_url: data.cover_url ?? null,
+        file_url: String(data.pdfUrl ?? data.fileUrl ?? data.file_url ?? SAMPLE_PDF),
+        file_type: 'pdf',
         dueDate: String(data.dueDate ?? formatDueDate(7).dueDate),
         daysLeft: Number(data.daysLeft ?? 7),
-        pdfUrl: String(data.pdfUrl ?? data.fileUrl ?? SAMPLE_PDF),
+        pdfUrl: String(data.pdfUrl ?? data.fileUrl ?? data.file_url ?? SAMPLE_PDF),
+        total_pages: Number(data.total_pages ?? 0),
       };
     }
   } catch {

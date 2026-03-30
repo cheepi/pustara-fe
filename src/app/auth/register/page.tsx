@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { signInWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
+import { updateMyProfile } from '@/lib/users';
 import { Eye, EyeOff, Mail, Lock, User, Star } from 'lucide-react';
 import Wordmark from '@/components/icons/Wordmark';
 import ComboLogo from '@/components/icons/ComboLogo';
@@ -35,6 +36,7 @@ export default function RegisterPage() {
   const isLight = theme === 'light';
 
   const [name, setName]         = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm]   = useState('');
@@ -48,6 +50,8 @@ export default function RegisterPage() {
     e.preventDefault();
     setError('');
     if (!captchaToken) { setError('Verifikasi CAPTCHA diperlukan sebelum mendaftar.'); return; }
+    if (!username.trim()) { setError('Nama pengguna wajib diisi.'); return; }
+    if (username.trim().length < 3) { setError('Nama pengguna minimal 3 karakter.'); return; }
     if (password !== confirm) { setError('Kata sandi tidak cocok.'); return; }
     if (password.length < 6)  { setError('Kata sandi minimal 6 karakter.'); return; }
     setLoading(true);
@@ -68,6 +72,21 @@ export default function RegisterPage() {
 
       const cred = await signInWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
+
+      const token = await cred.user.getIdToken();
+      await fetch(`${apiUrl}/auth/verify-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }).catch(() => {
+        // Ignore sync failures here; profile update below may still succeed.
+      });
+
+      await updateMyProfile({
+        name,
+        username,
+      });
+
       router.replace('/auth/personalization');
     } catch (err: any) {
       setError(friendlyError(err.code));
@@ -237,6 +256,19 @@ export default function RegisterPage() {
                 <User className={cn('absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4', iconCls)} />
                 <input type="text" value={name} onChange={e => setName(e.target.value)}
                   placeholder="Nama" className={inputBase} required />
+              </div>
+
+              <div className="relative">
+                <User className={cn('absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4', iconCls)} />
+                <input
+                  type="text"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="Nama Pengguna (contoh: syifaalfyy)"
+                  className={inputBase}
+                  minLength={3}
+                  required
+                />
               </div>
 
               <div className="relative">

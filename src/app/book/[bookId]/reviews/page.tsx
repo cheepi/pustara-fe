@@ -179,7 +179,7 @@ export default function ReviewsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
-                      <p className={cn('text-xs', tk.muted)}>{r.loc ?? '-'} · {r.time ?? '-'}</p>
+                      <p className={cn('text-xs', tk.muted)}>{r.loc} · {r.time ?? '-'}</p>
                     </div>
                     <div className="flex gap-0.5">
                       {[1,2,3,4,5].map(s => (

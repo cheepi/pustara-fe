@@ -6,13 +6,17 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 function normalizeNotification(raw: Record<string, unknown>, idx: number): NotificationItem {
   return {
     id: String(raw.id ?? `notif_${idx}`),
+    user_id: String(raw.user_id ?? ''),
+    book_id: raw.book_id !== undefined && raw.book_id !== null ? String(raw.book_id) : null,
+    actor_id: raw.actor_id !== undefined && raw.actor_id !== null ? String(raw.actor_id) : null,
     type: (raw.type as NotificationItem['type']) || 'system',
     title: String(raw.title ?? '-'),
     body: String(raw.body ?? raw.message ?? '-'),
     time: String(raw.time ?? '-'),
+    created_at: String(raw.created_at ?? raw.time ?? '-'),
     read: Boolean(raw.read ?? false),
     avatar: raw.avatar ? String(raw.avatar) : undefined,
-    bookCover: Number(raw.bookCover ?? raw.coverId ?? 0) || undefined,
+    bookCover: String(raw.bookCover ?? raw.coverId ?? '') || undefined,
   };
 }
 

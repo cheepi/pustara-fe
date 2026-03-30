@@ -6,6 +6,10 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 function normalizeReview(raw: Record<string, unknown>): Review {
   return {
+    id: String(raw.id ?? ''),
+    user_id: String(raw.user_id ?? ''),
+    book_id: String(raw.book_id ?? ''),
+    body: String(raw.text ?? raw.reviewText ?? raw.body ?? ''),
     name: String(raw.name ?? raw.user ?? 'Anonymous'),
     avatar: String(raw.avatar ?? 'U').slice(0, 1).toUpperCase(),
     rating: Number(raw.rating ?? 0),
@@ -13,6 +17,8 @@ function normalizeReview(raw: Record<string, unknown>): Review {
     time: String(raw.time ?? '-'),
     likes: Number(raw.likes ?? 0),
     loc: String(raw.loc ?? '-'),
+    created_at: String(raw.created_at ?? ''),
+    updated_at: String(raw.updated_at ?? ''),
   };
 }
 

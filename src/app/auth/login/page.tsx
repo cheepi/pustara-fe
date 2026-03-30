@@ -11,6 +11,7 @@ import Logo from '@/components/icons/Logo';
 import Wordmark from '@/components/icons/Wordmark';
 import ComboLogo from '@/components/icons/ComboLogo';
 import { useCaptcha, CaptchaWidget } from '@/hooks/useCaptcha';
+import { shouldGoToPersonalization } from '@/lib/survey';
 
 // Floating orb particles — purely CSS/motion, no external images needed
 const ORBS = [
@@ -64,9 +65,10 @@ export default function LoginPage() {
         return;
       }
 
-      await signInWithEmailAndPassword(auth, email, password);
-      const p = localStorage.getItem('pustara_personalized');
-      router.replace(p ? '/' : '/auth/personalization');
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const token = await cred.user.getIdToken();
+      const needPersonalization = await shouldGoToPersonalization(token);
+      router.replace(needPersonalization ? '/auth/personalization' : '/');
     } catch (err: any) {
       setError(friendlyError(err.code));
       resetCaptcha();
@@ -83,8 +85,9 @@ export default function LoginPage() {
     try {
       const result = await signInWithPopup(auth, googleProvider);
       const isNew = getAdditionalUserInfo(result)?.isNewUser;
-      const p = localStorage.getItem('pustara_personalized');
-      router.replace(isNew || !p ? '/auth/personalization' : '/');
+      const token = await result.user.getIdToken();
+      const needPersonalization = await shouldGoToPersonalization(token);
+      router.replace(isNew || needPersonalization ? '/auth/personalization' : '/');
     } catch (err: any) {
       setError(friendlyError(err.code));
       resetCaptcha();

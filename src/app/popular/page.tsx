@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { TrendingUp, Star, X, Search } from 'lucide-react';
+import { TrendingUp, Star, X, Search, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
@@ -40,9 +40,29 @@ export default function PopularPage() {
   useEffect(() => { document.title = 'Pustara | Bacaan Populer'; }, []);
 
   useEffect(() => {
+    let active = true;
     setLoading(true);
-    fetchPopularBooks(genre, 40).then(setBooks).finally(() => setLoading(false));
+    fetchPopularBooks(genre, 40)
+      .then((list) => {
+        if (!active) return;
+        setBooks(list);
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [genre]);
+
+  async function refreshPopular() {
+    setLoading(true);
+    const list = await fetchPopularBooks(genre, 40, true);
+    setBooks(list);
+    setLoading(false);
+  }
 
   const filtered = books.filter(b =>
     !search ||
@@ -103,6 +123,22 @@ export default function PopularPage() {
               {g}
             </button>
           ))}
+        </div>
+
+        <div className="flex items-center justify-between mb-4">
+          <p className={cn('text-xs', tk.muted)}>
+            Menampilkan {filtered.length} buku {genre !== 'Semua' ? `untuk genre ${genre}` : 'populer'}
+          </p>
+          <button
+            onClick={refreshPopular}
+            className={cn(
+              'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all',
+              dark ? 'border-white/10 bg-navy-700/40 text-slate-200 hover:bg-navy-700/70' : 'border-parchment-darker bg-white text-slate-700 hover:bg-slate-50'
+            )}
+          >
+            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+            Muat Ulang
+          </button>
         </div>
 
         {loading ? (
@@ -259,7 +295,6 @@ export default function PopularPage() {
 
               {filtered.length === 0 && (
                 <div className={cn('text-center py-20', tk.muted)}>
-                  <p className="text-4xl mb-3">😔</p>
                   <p className="font-semibold">Tidak ditemukan</p>
                   <p className="text-sm mt-1">Coba kata kunci yang berbeda</p>
                 </div>

@@ -1,8 +1,8 @@
 'use client';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Document, Page, pdfjs } from 'react-pdf';
+import dynamic from 'next/dynamic';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import {
@@ -15,8 +15,23 @@ import Link from 'next/link';
 import { fetchReaderBook } from '@/lib/reader';
 import type { ReaderBook } from '@/types/reader';
 
-// Setup pdf.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+// Lazy load react-pdf to avoid DOMMatrix error during SSR
+const Document = dynamic(
+  () => import('react-pdf').then((mod) => mod.Document),
+  { ssr: false, loading: () => <div>Loading PDF...</div> }
+);
+
+const Page = dynamic(
+  () => import('react-pdf').then((mod) => mod.Page),
+  { ssr: false }
+);
+
+let pdfjs: any = null;
+if (typeof window !== 'undefined') {
+  const pdfModule = require('react-pdf');
+  pdfjs = pdfModule.pdfjs;
+  pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+}
 
 // ── Reader Page ───────────────────────────────────────────────────────────────
 export default function ReadPage() {
@@ -50,14 +65,11 @@ export default function ReadPage() {
   const hideUITimer    = useRef<ReturnType<typeof setTimeout>>();
   const pageInputRef   = useRef<HTMLInputElement>(null);
 
+  // ALL HOOKS MUST BE BEFORE CONDITIONAL RETURNS
   useEffect(() => {
     if (!book) return;
     document.title = `Pustara | ${book.title}`;
   }, [book]);
-
-  if (loadingBook || !book) {
-    return <div className="flex h-screen items-center justify-center bg-[#1a1a1a] text-white/60">Memuat buku...</div>;
-  }
 
   // Reading timer
   useEffect(() => {
@@ -96,6 +108,22 @@ export default function ReadPage() {
   }, [pageNumber, numPages, isFullscreen]);
 
   // Fullscreen API
+  useEffect(() => {
+    const handler = () => {
+      if (!document.fullscreenElement) setIsFullscreen(false);
+    };
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  }, []);
+
+  useEffect(() => { setInputPage(String(pageNumber)); }, [pageNumber]);
+
+  // NOW check if book loaded
+  if (loadingBook || !book) {
+    return <div className="flex h-screen items-center justify-center bg-[#1a1a1a] text-white/60">Memuat buku...</div>;
+  }
+
+  // Fullscreen API functions
   function toggleFullscreen() {
     if (!document.fullscreenElement) {
       containerRef.current?.requestFullscreen();
@@ -108,13 +136,6 @@ export default function ReadPage() {
     document.exitFullscreen?.();
     setIsFullscreen(false);
   }
-  useEffect(() => {
-    const handler = () => {
-      if (!document.fullscreenElement) setIsFullscreen(false);
-    };
-    document.addEventListener('fullscreenchange', handler);
-    return () => document.removeEventListener('fullscreenchange', handler);
-  }, []);
 
   function nextPage() { setPageNumber(p => Math.min(p + 1, numPages)); }
   function prevPage() { setPageNumber(p => Math.max(p - 1, 1)); }
@@ -135,11 +156,9 @@ export default function ReadPage() {
     }
   }
 
-  useEffect(() => { setInputPage(String(pageNumber)); }, [pageNumber]);
-
   const progress   = numPages ? Math.round((pageNumber / numPages) * 100) : 0;
   const timeStr    = `${Math.floor(readingTime / 60)}m ${readingTime % 60}s`;
-  const isUrgent   = book.daysLeft <= 1;
+  const isUrgent = (book.daysLeft ?? Infinity) <= 1;
 
   return (
     <div ref={containerRef}

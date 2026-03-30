@@ -12,38 +12,37 @@ import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useAuthStore } from '@/store/authStore';
 import FollowingModal from '@/components/shared/FollowingModal';
+import {
+  getMyFollowersUsers,
+  getMyFollowingUsers,
+  getMyProfile,
+  getRecommendedUsers,
+  toggleFollowUser,
+  updateMyProfile,
+} from '@/lib/users';
+import { formatRelativeTime, getMyReadingSessions } from '@/lib/reading';
+import type { RecommendedUser } from '@/types/user';
 
-const coverUrl = (id?: number) =>
-  id ? `https://covers.openlibrary.org/b/id/${id}-M.jpg` : null;
+const coverSrc = (coverId?: number, coverUrl?: string) =>
+  coverUrl || (coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : null);
 
-const STATS = [
-  { label: 'Buku Dibaca', value: 24,   icon: BookOpen, color: 'text-gold'        },
-  { label: 'Streak',      value: '12', suffix: 'hari', icon: Flame,  color: 'text-orange-400' },
-  { label: 'Ulasan',      value: 18,   icon: Star,     color: 'text-blue-400'    },
-  { label: 'Wishlist',    value: 9,    icon: Heart,    color: 'text-rose-400'    },
-];
+type ActivityItem = {
+  type: 'selesai' | 'pinjam' | 'wishlist';
+  book: string;
+  author: string;
+  coverId?: number;
+  coverUrl?: string;
+  key: string;
+  rating: number | null;
+  time: string;
+};
 
-const GENRE_STATS = [
-  { genre: 'Fiksi',      count: 10, pct: 42 },
-  { genre: 'Sastra',     count: 6,  pct: 25 },
-  { genre: 'Romance',    count: 4,  pct: 17 },
-  { genre: 'Inspiratif', count: 3,  pct: 12 },
-  { genre: 'Sejarah',    count: 1,  pct: 4  },
-];
-
-const RECENT_ACTIVITY = [
-  { type: 'selesai',  book: 'Laskar Pelangi', author: 'Andrea Hirata',         coverId: 8231568,  key: 'd1', rating: 5,    time: '2 hari lalu'   },
-  { type: 'pinjam',   book: 'Bumi Manusia',   author: 'Pramoedya Ananta Toer', coverId: 8750787,  key: 'd2', rating: null, time: '4 hari lalu'   },
-  { type: 'selesai',  book: 'Perahu Kertas',  author: 'Dee Lestari',           coverId: 7886745,  key: 'd4', rating: 4,    time: '1 minggu lalu' },
-  { type: 'wishlist', book: 'Cantik Itu Luka',author: 'Eka Kurniawan',         coverId: 12699828, key: 'd3', rating: null, time: '1 minggu lalu' },
-  { type: 'selesai',  book: 'Negeri 5 Menara',author: 'Ahmad Fuadi',           coverId: 8913924,  key: 'd5', rating: 4,    time: '2 minggu lalu' },
-];
-
-const FOLLOWING_PREVIEW = [
-  { name: 'Ana', avatar: 'A', books: 31 },
-  { name: 'Shea',    avatar: 'S', books: 19 },
-  { name: 'Kamal',   avatar: 'K', books: 27 },
-];
+type FollowingPreviewItem = {
+  id: string;
+  name: string;
+  avatar: string;
+  books: number;
+};
 
 export default function ProfilePage() {
   const { theme } = useTheme();
@@ -55,6 +54,21 @@ export default function ProfilePage() {
   const [bio,       setBio]       = useState('Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
   const [draftName, setDraftName] = useState(name);
   const [draftBio,  setDraftBio]  = useState(bio);
+  const [saving, setSaving] = useState(false);
+  const [profileCounts, setProfileCounts] = useState({ followers: 0, following: 0, wishlist: 0 });
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const [followingPreview, setFollowingPreview] = useState<FollowingPreviewItem[]>([]);
+  const [followingUsers, setFollowingUsers] = useState<RecommendedUser[]>([]);
+  const [followerUsers, setFollowerUsers] = useState<RecommendedUser[]>([]);
+  const [suggestionUsers, setSuggestionUsers] = useState<RecommendedUser[]>([]);
+  const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
+  const [stats, setStats] = useState([
+    { label: 'Buku Dibaca', value: 0, icon: BookOpen, color: 'text-gold' },
+    { label: 'Streak', value: '0', suffix: 'hari', icon: Flame, color: 'text-orange-400' },
+    { label: 'Ulasan', value: 0, icon: Star, color: 'text-blue-400' },
+    { label: 'Wishlist', value: 0, icon: Heart, color: 'text-rose-400' },
+  ]);
+  const [genreStats, setGenreStats] = useState<Array<{ genre: string; count: number; pct: number }>>([]);
 
   // Modal state — which tab to open
   const [modalOpen, setModalOpen]       = useState(false);
@@ -71,12 +85,210 @@ export default function ProfilePage() {
     setDraftName(user?.displayName || 'Pembaca Pustara');
   }, [user]);
 
+  useEffect(() => {
+    let active = true;
+
+    Promise.all([
+      getMyProfile(),
+      getMyReadingSessions('reading', 20),
+      getMyReadingSessions('finished', 20),
+      getRecommendedUsers(3),
+      getMyFollowingUsers(30),
+      getMyFollowersUsers(30),
+    ])
+      .then(([profile, readingNow, finished, suggestions, following, followers]) => {
+        if (!active || !profile) return;
+
+        setName(profile.name || 'Pembaca Pustara');
+        setDraftName(profile.name || 'Pembaca Pustara');
+        setBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
+        setDraftBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
+
+        setProfileCounts({
+          followers: Number(profile.followers_count ?? 0),
+          following: Number(profile.following_count ?? 0),
+          wishlist: Number(profile.liked_books?.length ?? 0),
+        });
+
+        const finishedCount = finished.length;
+        const streakBase = readingNow.length + finishedCount + Number(profile.liked_books?.length ?? 0);
+        const streak = Math.max(1, Math.min(30, streakBase));
+        const ulasan = finishedCount;
+
+        setStats([
+          { label: 'Buku Dibaca', value: finishedCount, icon: BookOpen, color: 'text-gold' },
+          { label: 'Streak', value: String(streak), suffix: 'hari', icon: Flame, color: 'text-orange-400' },
+          { label: 'Ulasan', value: ulasan, icon: Star, color: 'text-blue-400' },
+          { label: 'Wishlist', value: Number(profile.liked_books?.length ?? 0), icon: Heart, color: 'text-rose-400' },
+        ]);
+
+        const allGenres = [
+          ...(profile.currently_reading ?? []).flatMap((book) => Array.isArray(book.genres) ? book.genres : []),
+          ...(profile.liked_books ?? []).flatMap((book) => Array.isArray(book.genres) ? book.genres : []),
+        ]
+          .map((genre) => String(genre).trim())
+          .filter(Boolean);
+
+        const genreMap = new Map<string, number>();
+        for (const genre of allGenres) {
+          genreMap.set(genre, (genreMap.get(genre) ?? 0) + 1);
+        }
+
+        const totalGenres = allGenres.length || 1;
+        const topGenres = Array.from(genreMap.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([genre, count]) => ({
+            genre,
+            count,
+            pct: Math.max(4, Math.round((count / totalGenres) * 100)),
+          }));
+
+        setGenreStats(topGenres);
+
+        const liveRecent: ActivityItem[] = [
+          ...readingNow.slice(0, 2).map((session) => ({
+            type: 'pinjam' as const,
+            book: session.title,
+            author: session.authors,
+            key: session.book_id,
+            coverUrl: session.cover_url,
+            rating: null,
+            time: formatRelativeTime(session.last_read_at || session.started_at),
+          })),
+          ...finished.slice(0, 3).map((session) => ({
+            type: 'selesai' as const,
+            book: session.title,
+            author: session.authors,
+            key: session.book_id,
+            coverUrl: session.cover_url,
+            rating: null,
+            time: formatRelativeTime(session.finished_at || session.last_read_at),
+          })),
+          ...(profile.liked_books ?? []).slice(0, 2).map((book) => ({
+            type: 'wishlist' as const,
+            book: book.title,
+            author: Array.isArray(book.authors) ? String(book.authors[0] ?? 'Unknown Author') : 'Unknown Author',
+            key: book.id,
+            coverUrl: book.cover_url || undefined,
+            rating: null,
+            time: formatRelativeTime(book.liked_at ?? undefined),
+          })),
+        ].slice(0, 6);
+
+        setRecentActivity(liveRecent);
+
+        setFollowingPreview(
+          following.slice(0, 4).map((item) => {
+            const displayName = item.display_name?.trim() || item.name?.trim() || item.username?.trim() || 'Pustara User';
+            return {
+              id: item.id,
+              name: displayName,
+              avatar: displayName.charAt(0).toUpperCase() || 'P',
+              books: Number(item.total_read ?? 0),
+            };
+          })
+        );
+
+        setFollowingUsers(following);
+        setFollowerUsers(followers);
+        setSuggestionUsers(suggestions);
+      })
+      .catch(() => {
+        // keep local fallback
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
   const email    = user?.email || 'user@email.com';
   const joinDate = 'Bergabung Maret 2026';
 
-  function saveEdit()   { setName(draftName); setBio(draftBio); setEditing(false); }
+  async function saveEdit() {
+    if (saving) return;
+    setSaving(true);
+
+    try {
+      const updated = await updateMyProfile({
+        name: draftName,
+        bio: draftBio,
+      });
+
+      if (updated) {
+        setName(updated.name || draftName);
+        setBio(updated.bio || draftBio);
+        setDraftName(updated.name || draftName);
+        setDraftBio(updated.bio || draftBio);
+      } else {
+        setName(draftName);
+        setBio(draftBio);
+      }
+
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
   function cancelEdit() { setDraftName(name); setDraftBio(bio); setEditing(false); }
+
+  async function handleFollowToggle(user: RecommendedUser) {
+    if (followLoadingIds.has(user.id)) return;
+
+    const action = user.is_following ? 'unfollow' : 'follow';
+    setFollowLoadingIds((prev) => {
+      const next = new Set(prev);
+      next.add(user.id);
+      return next;
+    });
+
+    try {
+      const result = await toggleFollowUser(user.id, action);
+      if (!result) return;
+
+      setSuggestionUsers((prev) => prev.map((item) => {
+        if (item.id !== user.id) return item;
+        return {
+          ...item,
+          is_following: result.is_following,
+          followers_count: result.target_followers_count,
+        };
+      }));
+
+      setFollowerUsers((prev) => prev.map((item) => {
+        if (item.id !== user.id) return item;
+        return {
+          ...item,
+          is_following: result.is_following,
+          followers_count: result.target_followers_count,
+        };
+      }));
+
+      setFollowingUsers((prev) => {
+        const exists = prev.some((item) => item.id === user.id);
+        if (result.is_following) {
+          if (exists) {
+            return prev.map((item) => item.id === user.id ? { ...item, is_following: true } : item);
+          }
+          return [{ ...user, is_following: true, followers_count: result.target_followers_count }, ...prev];
+        }
+        return prev.filter((item) => item.id !== user.id);
+      });
+
+      setProfileCounts((prev) => ({
+        ...prev,
+        following: Math.max(0, prev.following + (result.is_following ? 1 : -1)),
+      }));
+    } finally {
+      setFollowLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(user.id);
+        return next;
+      });
+    }
+  }
 
   const tk = {
     surface:  isLight ? 'bg-white border-parchment-darker'     : 'bg-navy-800/50 border-white/8',
@@ -127,8 +339,9 @@ export default function ProfilePage() {
                       className={cn('w-full max-w-md px-3 py-2 rounded-xl border text-sm outline-none resize-none transition-all', tk.input)} />
                     <div className="flex gap-2">
                       <button onClick={saveEdit}
+                        disabled={saving}
                         className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-gold text-navy-900 text-xs font-bold hover:bg-gold-light transition-colors">
-                        <Check className="w-3.5 h-3.5" /> Simpan
+                        <Check className="w-3.5 h-3.5" /> {saving ? 'Menyimpan...' : 'Simpan'}
                       </button>
                       <button onClick={cancelEdit}
                         className={cn('flex items-center gap-1.5 px-4 py-1.5 rounded-xl border text-xs font-medium transition-colors', tk.chip)}>
@@ -155,8 +368,8 @@ export default function ProfilePage() {
             {/* Follow counts — clickable, opens modal */}
             <div className="flex gap-5 flex-shrink-0">
               {([
-                { val: '12', lbl: 'Mengikuti', tab: 'following' },
-                { val: '38', lbl: 'Pengikut',  tab: 'followers' },
+                { val: String(profileCounts.following), lbl: 'Mengikuti', tab: 'following' },
+                { val: String(profileCounts.followers), lbl: 'Pengikut',  tab: 'followers' },
               ] as const).map(({ val, lbl, tab }) => (
                 <button key={lbl} onClick={() => openModal(tab)}
                   className="text-center group">
@@ -179,7 +392,7 @@ export default function ProfilePage() {
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.06 }}>
               <h2 className={cn('font-serif text-lg font-bold mb-4', tk.text)}>Statistik Baca</h2>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {STATS.map((s, i) => (
+                {stats.map((s, i) => (
                   <motion.div key={s.label}
                     className={cn('rounded-2xl p-3.5 text-center', isLight ? 'bg-parchment' : 'bg-navy-700/40')}
                     initial={{ opacity: 0, scale: 0.93 }} animate={{ opacity: 1, scale: 1 }}
@@ -196,7 +409,7 @@ export default function ProfilePage() {
               <div className="mt-5">
                 <p className={cn('text-xs font-semibold uppercase tracking-widest mb-3', tk.muted)}>Genre Favorit</p>
                 <div className="flex flex-col gap-2">
-                  {GENRE_STATS.map((g, i) => (
+                  {genreStats.map((g, i) => (
                     <div key={g.genre} className="flex items-center gap-3">
                       <span className={cn('text-xs w-20 flex-shrink-0', tk.text)}>{g.genre}</span>
                       <div className={cn('flex-1 h-1.5 rounded-full overflow-hidden', isLight ? 'bg-parchment-darker' : 'bg-navy-700')}>
@@ -216,8 +429,8 @@ export default function ProfilePage() {
               initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               <h2 className={cn('font-serif text-lg font-bold mb-4', tk.text)}>Aktivitas Terbaru</h2>
               <div className="flex flex-col gap-1">
-                {RECENT_ACTIVITY.map((a, i) => {
-                  const src = coverUrl(a.coverId);
+                {recentActivity.map((a, i) => {
+                  const src = coverSrc(a.coverId, a.coverUrl);
                   const ActIcon = a.type === 'selesai' ? CheckCircle : a.type === 'pinjam' ? BookOpen : Heart;
                   const actColor = a.type === 'selesai' ? 'text-emerald-400' : a.type === 'pinjam' ? 'text-blue-400' : 'text-rose-400';
                   const actLabel = a.type === 'selesai' ? 'Selesai membaca' : a.type === 'pinjam' ? 'Meminjam' : 'Menyimpan ke wishlist';
@@ -271,8 +484,8 @@ export default function ProfilePage() {
                 </button>
               </div>
               <div className="flex flex-col gap-3">
-                {FOLLOWING_PREVIEW.map((f, i) => (
-                  <motion.div key={f.name} className="flex items-center gap-3"
+                {followingPreview.map((f, i) => (
+                  <motion.div key={f.id} className="flex items-center gap-3"
                     initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.16 + i * 0.04 }}>
                     <div className="w-9 h-9 rounded-xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
@@ -305,7 +518,7 @@ export default function ProfilePage() {
               <h2 className={cn('font-serif text-lg font-bold mb-4', tk.text)}>Pintasan</h2>
               <div className="flex flex-col gap-1.5">
                 {[
-                  { href: '/shelf',    icon: BookMarked,  label: 'Rak Buku',     sub: `${STATS[0].value} buku`  },
+                  { href: '/shelf',    icon: BookMarked,  label: 'Rak Buku',     sub: `${stats[0].value} buku`  },
                   { href: '/browse',   icon: TrendingUp,  label: 'Eksplor Buku', sub: 'Temukan bacaan baru'     },
                   { href: '/settings', icon: Edit3,       label: 'Pengaturan',   sub: 'Tema & preferensi'       },
                 ].map(item => (
@@ -332,6 +545,11 @@ export default function ProfilePage() {
         open={modalOpen}
         onClose={() => setModalOpen(false)}
         initialTab={modalTab}
+        followingUsers={followingUsers}
+        followerUsers={followerUsers}
+        suggestionUsers={suggestionUsers}
+        loadingIds={followLoadingIds}
+        onToggleFollow={handleFollowToggle}
       />
     </div>
   );

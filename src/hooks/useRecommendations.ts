@@ -1,77 +1,45 @@
-// 'use client';
-// import { useEffect } from 'react';
-// import { useAiStore } from '@/store/aiStore';
-// import { fetchChatRecommendations } from '@/lib/api';
-// import { useAuthStore } from '@/store/authStore';
-
-// const CACHE_TTL_MS = 5 * 60 * 1000; // 5 menit
-
-// /**
-//  * Fetch rekomendasi personal untuk user yang sedang login.
-//  * Pakai preferred_genres dari user jika ada, fallback ke query generik.
-//  * Hasil di-cache di Zustand — gak refetch kalau belum 5 menit.
-//  */
-// export function useRecommendations(forceRefresh = false) {
-//   const { user } = useAuthStore();
-//   const {
-//     homeRecommendations,
-//     homeLoading,
-//     homeError,
-//     homeFetchedAt,
-//     setHomeRecommendations,
-//     setHomeLoading,
-//     setHomeError,
-//     setHomeFetchedAt,
-//   } = useAiStore();
-
-//   useEffect(() => {
-//     if (!user) return;
-
-//     const isStale = !homeFetchedAt || Date.now() - homeFetchedAt > CACHE_TTL_MS;
-//     if (!forceRefresh && !isStale && homeRecommendations.length > 0) return;
-
-//     async function load() {
-//       setHomeLoading(true);
-//       setHomeError(null);
-//       try {
-//         // Coba ambil preferensi genre dari localStorage (disimpan waktu onboarding)
-//         const storedPrefs = localStorage.getItem('pustara_prefs');
-//         const prefs = storedPrefs ? JSON.parse(storedPrefs) : null;
-//         const genres: string[] = prefs?.genres ?? [];
-
-//         // Bangun query: kalau ada genre pilihan, pakai itu. Kalau tidak, pakai fallback.
-//         const query =
-//           genres.length > 0
-//             ? genres.slice(0, 3).join(' ').toLowerCase()
-//             : 'buku populer sastra indonesia';
-
-//         const res = await fetchChatRecommendations(query, 10);
-//         setHomeRecommendations(res.recommendations);
-//         setHomeFetchedAt(Date.now());
-//       } catch (err) {
-//         setHomeError(err instanceof Error ? err.message : 'Gagal memuat rekomendasi');
-//       } finally {
-//         setHomeLoading(false);
-//       }
-//     }
-
-//     load();
-//     // eslint-disable-next-line react-hooks/exhaustive-deps
-//   }, [user, forceRefresh]);
-
-//   return {
-//     recommendations: homeRecommendations,
-//     loading: homeLoading,
-//     error: homeError,
-//   };
-// }
 'use client';
 import { useEffect } from 'react';
 import { useAiStore } from '@/store/aiStore';
-import { fetchChatRecommendations } from '@/lib/api';
+import { fetchColdStartRecommendations, fetchTrending } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
+import type { AiRecommendation } from '@/types/ai';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+
+function toAiRecommendationFallback(raw: {
+  book_id: string;
+  title: string;
+  authors: string;
+  cover_url?: string;
+  avg_rating: number;
+  reason_primary?: string;
+}): AiRecommendation {
+  return {
+    book_id: raw.book_id,
+    title: raw.title,
+    authors: raw.authors,
+    cover_url: raw.cover_url ?? null,
+    avg_rating: Number.isFinite(raw.avg_rating) ? raw.avg_rating : 0,
+    reason_primary: raw.reason_primary || 'Rekomendasi populer untuk kamu',
+    reason_secondary: null,
+    dominant_signal: 'content',
+    hybrid_score: 0,
+    phase: '❄️ Cold',
+    signals: {
+      content: {
+        score: 0,
+        weight: 1,
+        label: 'Kemiripan konten',
+      },
+      collab: {
+        score: 0,
+        weight: 0,
+        label: 'Sinyal komunitas',
+      },
+    },
+  };
+}
 
 export function useRecommendations(forceRefresh = false) {
   const { user, loading: authLoading } = useAuthStore();
@@ -99,21 +67,27 @@ export function useRecommendations(forceRefresh = false) {
       setHomeError(null);
       try {
         // Ambil preferensi genre dari localStorage (disimpan waktu onboarding)
-        let query = 'buku populer sastra indonesia';
+        let genres: string[] = [];
         try {
           const storedPrefs = localStorage.getItem('pustara_prefs');
           const prefs = storedPrefs ? JSON.parse(storedPrefs) : null;
-          const genres: string[] = prefs?.genres ?? [];
-          if (genres.length > 0) {
-            query = genres.slice(0, 3).join(' ').toLowerCase();
-          }
+          genres = Array.isArray(prefs?.genres) ? prefs.genres.slice(0, 3) : [];
         } catch {
-          // localStorage error — pakai fallback query
+          genres = [];
         }
 
-        const res = await fetchChatRecommendations(query, 10);
-        // res sudah di-unwrap oleh api.ts — langsung akses .recommendations
-        setHomeRecommendations(res.recommendations ?? []);
+        // IMPORTANT: jangan gunakan endpoint /recommendations/chat di auto-load.
+        // Chat endpoint hanya dipakai saat user klik kirim di halaman chat.
+        let recommendations: AiRecommendation[] = [];
+        if (genres.length > 0) {
+          const res = await fetchColdStartRecommendations(genres, 10);
+          recommendations = res.recommendations ?? [];
+        } else {
+          const trending = await fetchTrending(10);
+          recommendations = trending.map(toAiRecommendationFallback);
+        }
+
+        setHomeRecommendations(recommendations);
         setHomeFetchedAt(Date.now());
       } catch (err) {
         setHomeError(err instanceof Error ? err.message : 'Gagal memuat rekomendasi');

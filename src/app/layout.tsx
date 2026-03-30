@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import Script from 'next/script';
 import './globals.css';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
@@ -25,16 +26,21 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="id">
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: `
-          try {
-            var t = localStorage.getItem('pustara_theme');
-            if (t === 'light') document.documentElement.classList.add('light');
-          } catch(e) {}
-        `}} />
-      </head>
+    <html lang="id" suppressHydrationWarning>
+      <head />
       <body>
+        <Script
+          id="theme-script"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                var t = localStorage.getItem('pustara_theme');
+                if (t === 'light') document.documentElement.classList.add('light');
+              } catch(e) {}
+            `,
+          }}
+        />
         <ThemeProvider>
           <AuthProvider>{children}</AuthProvider>
           <FABGuard />

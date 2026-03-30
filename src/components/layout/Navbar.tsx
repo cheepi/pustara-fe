@@ -1,7 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import {
   Menu, X, Compass, Library, Bell, Bird,
@@ -24,6 +24,7 @@ export default function Navbar() {
 
   const { user }          = useAuthStore();
   const { theme, toggle } = useTheme();
+  const router            = useRouter();
   const pathname          = usePathname();
   const isLight           = theme === 'light';
 
@@ -74,6 +75,28 @@ export default function Navbar() {
 
   // Close overlays on route change
   useEffect(() => { setMenuOpen(false); setDropOpen(false); }, [pathname]);
+
+  // Warm up heavy routes when browser is idle for snappier navigation.
+  useEffect(() => {
+    if (!user) return;
+
+    const routes = ['/feed', '/shelf', '/browse', '/popular', '/notifications', '/profile'];
+    const prefetchAll = () => {
+      routes.forEach((route) => router.prefetch(route));
+    };
+
+    const ric = (window as unknown as { requestIdleCallback?: (cb: () => void) => number }).requestIdleCallback;
+    if (ric) {
+      const id = ric(prefetchAll);
+      return () => {
+        const cancel = (window as unknown as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback;
+        cancel?.(id);
+      };
+    }
+
+    const timeoutId = window.setTimeout(prefetchAll, 900);
+    return () => window.clearTimeout(timeoutId);
+  }, [router, user]);
 
   const firstName = user?.displayName?.split(' ')[0] || 'Akun';
   const initial   = (user?.displayName || user?.email || 'U')[0].toUpperCase();
@@ -351,28 +374,6 @@ export default function Navbar() {
                 <p className="text-xs truncate" style={{ color: 'var(--muted)' }}>{user.email}</p>
               </div>
             </div>
-
-            {/* Main nav */}
-            <nav className="flex flex-col gap-1 mb-3">
-              {NAV.map(({ href, label, icon: Icon }) => {
-                const isActive = pathname === href;
-                return (
-                  <Link key={href} href={href} onClick={() => setMenuOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-4 py-3.5 rounded-2xl text-base transition-all',
-                      isActive
-                        ? isLight ? 'bg-navy-800/10 text-navy-900 font-semibold' : 'bg-white/[0.12] text-white font-semibold'
-                        : isLight ? 'text-navy-700 hover:bg-navy-800/[0.05]'          : 'text-white/80 hover:bg-white/[0.06]'
-                    )}>
-                    <Icon className="w-5 h-5 flex-shrink-0 text-gold" />
-                    {label}
-                    {isActive && <span className="ml-auto w-1.5 h-1.5 rounded-full bg-gold" />}
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <div className="h-px mb-3" style={{ background: 'var(--border)' }} />
 
             {/* Secondary links */}
             <div className="flex flex-col gap-0.5 mb-3">

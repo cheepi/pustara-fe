@@ -39,14 +39,61 @@ function AiRecoCardSkeleton({ isLight }: { isLight: boolean }) {
 function PopularSkeleton({ isLight }: { isLight: boolean }) {
   const skel = isLight ? 'bg-parchment-darker' : 'bg-navy-700/60';
   return (
-    <div className="flex gap-4 px-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
-      {Array(6).fill(0).map((_, i) => (
-        <div key={i} className="flex-shrink-0 w-32">
-          <div className={cn('w-32 h-48 rounded-2xl animate-pulse mb-2', skel)} />
-          <div className={cn('h-2.5 w-3/4 rounded animate-pulse mb-1', skel)} />
-          <div className={cn('h-2 w-1/2 rounded animate-pulse', skel)} />
+    <div className="px-4">
+      <div className={cn(
+        'hidden lg:grid lg:grid-cols-[240px_1fr_240px] lg:items-center px-4 py-6 rounded-2xl',
+        isLight
+          ? 'bg-gradient-to-b from-parchment-dark/60 to-transparent'
+          : 'bg-gradient-to-b from-white/[0.04] to-transparent'
+      )}>
+        <div className="pr-6">
+          <div className={cn('h-3 w-24 rounded animate-pulse mb-3', skel)} />
+          <div className={cn('h-8 w-44 rounded animate-pulse mb-2', skel)} />
+          <div className={cn('h-4 w-32 rounded animate-pulse mb-4', skel)} />
+          <div className={cn('h-3 w-28 rounded animate-pulse', skel)} />
         </div>
-      ))}
+
+        <div className="flex flex-col items-center">
+          <div className="relative w-full flex items-center justify-center" style={{ height: 360 }}>
+            <div className={cn('absolute w-[190px] h-[276px] rounded-2xl animate-pulse opacity-65', skel)} style={{ transform: 'translateX(-130px) scale(0.72)' }} />
+            <div className={cn('absolute w-[190px] h-[276px] rounded-2xl animate-pulse', skel)} />
+            <div className={cn('absolute w-[190px] h-[276px] rounded-2xl animate-pulse opacity-65', skel)} style={{ transform: 'translateX(130px) scale(0.72)' }} />
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <div className={cn('w-6 h-6 rounded-full animate-pulse', skel)} />
+            <div className={cn('w-6 h-1.5 rounded-full animate-pulse', skel)} />
+            <div className={cn('w-1.5 h-1.5 rounded-full animate-pulse', skel)} />
+            <div className={cn('w-1.5 h-1.5 rounded-full animate-pulse', skel)} />
+            <div className={cn('w-6 h-6 rounded-full animate-pulse', skel)} />
+          </div>
+        </div>
+
+        <div className="pl-6 flex flex-col items-end">
+          <div className={cn('h-3 w-28 rounded animate-pulse mb-3', skel)} />
+          <div className={cn('h-3 w-44 rounded animate-pulse mb-2', skel)} />
+          <div className={cn('h-3 w-36 rounded animate-pulse mb-5', skel)} />
+          <div className={cn('h-9 w-28 rounded-xl animate-pulse', skel)} />
+        </div>
+      </div>
+
+      <div className="lg:hidden flex flex-col items-center">
+        <div className={cn(
+          'relative w-full flex items-center justify-center rounded-2xl',
+          isLight
+            ? 'bg-gradient-to-b from-parchment-dark/70 to-transparent'
+            : 'bg-gradient-to-b from-white/[0.04] to-transparent'
+        )} style={{ height: 260 }}>
+          <div className={cn('absolute w-[150px] h-[216px] rounded-2xl animate-pulse opacity-60', skel)} style={{ transform: 'translateX(-92px) scale(0.72)' }} />
+          <div className={cn('absolute w-[150px] h-[216px] rounded-2xl animate-pulse', skel)} />
+          <div className={cn('absolute w-[150px] h-[216px] rounded-2xl animate-pulse opacity-60', skel)} style={{ transform: 'translateX(92px) scale(0.72)' }} />
+        </div>
+        <div className="w-full mt-4 space-y-2 px-1">
+          <div className={cn('h-3 w-20 rounded animate-pulse', skel)} />
+          <div className={cn('h-6 w-3/4 rounded animate-pulse', skel)} />
+          <div className={cn('h-4 w-2/3 rounded animate-pulse', skel)} />
+          <div className={cn('h-9 w-32 rounded-xl animate-pulse mt-3', skel)} />
+        </div>
+      </div>
     </div>
   );
 }

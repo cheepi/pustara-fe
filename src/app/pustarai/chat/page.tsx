@@ -5,6 +5,8 @@ import { Sparkles, Send, Trash2, BookOpen, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
+import { Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
@@ -165,20 +167,50 @@ function AIMessage({
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
-export default function ChatAIPage() {
+function ChatAIContent() {
   const { theme } = useTheme();
   const isLight = theme === 'light';
   const { ready } = useProtectedRoute();
   const { chatHistory, chatLoading, sendMessage, clearChat } = useChatAI();
+  const searchParams = useSearchParams();
   const [input, setInput] = useState('');
   const [attachedBook, setAttachedBook] = useState<{ title: string; description: string } | null>(null);
   const { gender, age } = useUserStore();
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef  = useRef<HTMLInputElement>(null);
+  const bootstrappedRef = useRef(false);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatHistory, chatLoading]);
+
+  useEffect(() => {
+    if (bootstrappedRef.current) return;
+
+    const attachedTitle = searchParams.get('attachedTitle')?.trim() || '';
+    const attachedDesc = searchParams.get('attachedDesc')?.trim() || '';
+    const prefill = searchParams.get('prefill')?.trim() || '';
+    const autoSend = searchParams.get('autosend') === '1';
+
+    if (attachedTitle) {
+      setAttachedBook({ title: attachedTitle, description: attachedDesc });
+    }
+
+    if (prefill) {
+      setInput(prefill);
+    }
+
+    if (attachedTitle && prefill && autoSend && !chatLoading) {
+      sendMessage(prefill, {
+        gender,
+        age,
+        attachedBook: { title: attachedTitle, description: attachedDesc },
+      });
+      setInput('');
+    }
+
+    bootstrappedRef.current = true;
+  }, [searchParams, chatLoading, sendMessage, gender, age]);
 
   const handleSend = useCallback(() => {
     const text = input.trim();
@@ -360,5 +392,13 @@ export default function ChatAIPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function ChatAIPage() {
+  return (
+    <Suspense fallback={<PageSkeleton />}>
+      <ChatAIContent />
+    </Suspense>
   );
 }

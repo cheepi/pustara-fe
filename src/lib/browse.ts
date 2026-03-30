@@ -57,12 +57,12 @@ export async function fetchBrowseBooks(query: string, limit = 24): Promise<Brows
       key: b.id,
       title: b.title,
       author: b.authors?.join(', ') || 'Unknown',
-      coverUrl: b.cover_url || undefined,
+      coverUrl: b.cover_url ?? undefined,
       genres: b.genres || [],
       rating: b.avg_rating || 0,
-      year: b.year,
-      pages: b.pages,
-      desc: b.description,
+      year: b.year ?? undefined, 
+      pages: b.pages ?? undefined,
+      desc: b.description ?? undefined,
     }));
 
     if (query) {
@@ -101,16 +101,29 @@ export async function fetchBrowseBooks(query: string, limit = 24): Promise<Brows
   }
 }
 
-export async function fetchPopularBooks(genre: string, limit = 40): Promise<BrowseBook[]> {
+export async function fetchPopularBooks(genre: string, limit = 40, forceRefresh = false): Promise<BrowseBook[]> {
   const cacheKey = `popular_${genre}_${limit}`;
-  if (CACHE[cacheKey]) return CACHE[cacheKey];
+  if (!forceRefresh && CACHE[cacheKey]) return CACHE[cacheKey];
 
   try {
     const allBooks = await fetchAllBooks();
-    const normalizedGenre = genre.toLowerCase();
+    const tokens = getCategoryTokens(genre);
+    const byGenre = genre === 'Semua'
+      ? allBooks
+      : allBooks.filter((b) =>
+          (b.genres ?? []).some((g) => includesAnyToken(g, tokens))
+        );
+
+    // Fallback for books with sparse genre metadata.
     const filtered = genre === 'Semua'
       ? allBooks
-      : allBooks.filter((b) => b.genres.some((g) => g.toLowerCase().includes(normalizedGenre)));
+      : byGenre.length > 0
+        ? byGenre
+        : allBooks.filter((b) =>
+            includesAnyToken(b.title, tokens) ||
+            includesAnyToken((b.authors ?? []).join(', '), tokens) ||
+            includesAnyToken(b.description ?? '', tokens)
+          );
 
     const sorted = [...filtered].sort((a, b) => {
       const scoreA = a.avg_rating * Math.max(a.rating_count, 1);
@@ -122,7 +135,7 @@ export async function fetchPopularBooks(genre: string, limit = 40): Promise<Brow
       key: b.id,
       title: b.title,
       author: b.authors.join(', '),
-      coverUrl: b.cover_url,
+      coverUrl: b.cover_url ?? undefined,
       rating: b.avg_rating,
     }));
 
