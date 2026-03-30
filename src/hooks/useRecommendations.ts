@@ -21,20 +21,20 @@ function toAiRecommendationFallback(raw: {
     authors: raw.authors,
     cover_url: raw.cover_url ?? null,
     avg_rating: Number.isFinite(raw.avg_rating) ? raw.avg_rating : 0,
-    reason_primary: raw.reason_primary || 'Sedang ramai dibaca pembaca lain',
+    reason_primary: raw.reason_primary || 'Rekomendasi populer untuk kamu',
     reason_secondary: null,
-    dominant_signal: 'collab',
-    hybrid_score: 1,
-    phase: '🔥 Warm',
+    dominant_signal: 'content',
+    hybrid_score: 0,
+    phase: '❄️ Cold',
     signals: {
       content: {
         score: 0,
-        weight: 0,
+        weight: 1,
         label: 'Kemiripan konten',
       },
       collab: {
-        score: 1,
-        weight: 1,
+        score: 0,
+        weight: 0,
         label: 'Sinyal komunitas',
       },
     },
@@ -87,8 +87,9 @@ export function useRecommendations(forceRefresh = false) {
           recommendations = res.recommendations ?? [];
         }
 
-        // Guest mode (or fallback when personalized list is empty): use trending.
-        if (recommendations.length === 0) {
+        // Guest mode only: use trending fallback.
+        // For authenticated users, phase must stay personalized per-user.
+        if (!user?.uid && recommendations.length === 0) {
           const trending = await fetchTrending(10);
           recommendations = trending.map(toAiRecommendationFallback);
         }

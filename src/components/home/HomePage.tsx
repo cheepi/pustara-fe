@@ -225,7 +225,7 @@ export default function HomePage() {
       <section className="mt-6 max-w-7xl mx-auto">
         <div className="flex items-center justify-between px-4 mb-4">
           <h2 className="font-serif text-lg font-bold" style={{ color: 'var(--text)' }}>Bacaan Populer</h2>
-          <Link href="/popular" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
+          <Link href="/browse#popular" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
         </div>
         {popularLoading
           ? <PopularSkeleton isLight={isLight} />
