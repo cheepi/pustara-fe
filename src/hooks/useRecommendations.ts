@@ -21,20 +21,20 @@ function toAiRecommendationFallback(raw: {
     authors: raw.authors,
     cover_url: raw.cover_url ?? null,
     avg_rating: Number.isFinite(raw.avg_rating) ? raw.avg_rating : 0,
-    reason_primary: raw.reason_primary || 'Rekomendasi populer untuk kamu',
+    reason_primary: raw.reason_primary || 'Sedang ramai dibaca pembaca lain',
     reason_secondary: null,
-    dominant_signal: 'content',
-    hybrid_score: 0,
-    phase: '❄️ Cold',
+    dominant_signal: 'collab',
+    hybrid_score: 1,
+    phase: '🔥 Warm',
     signals: {
       content: {
         score: 0,
-        weight: 1,
+        weight: 0,
         label: 'Kemiripan konten',
       },
       collab: {
-        score: 0,
-        weight: 0,
+        score: 1,
+        weight: 1,
         label: 'Sinyal komunitas',
       },
     },
@@ -79,10 +79,16 @@ export function useRecommendations(forceRefresh = false) {
         // IMPORTANT: jangan gunakan endpoint /recommendations/chat di auto-load.
         // Chat endpoint hanya dipakai saat user klik kirim di halaman chat.
         let recommendations: AiRecommendation[] = [];
-        if (genres.length > 0) {
+
+        // Authenticated users should always go through backend cold-start proxy
+        // so AI can switch to personalized mode based on interaction count.
+        if (user?.uid) {
           const res = await fetchColdStartRecommendations(genres, 10);
           recommendations = res.recommendations ?? [];
-        } else {
+        }
+
+        // Guest mode (or fallback when personalized list is empty): use trending.
+        if (recommendations.length === 0) {
           const trending = await fetchTrending(10);
           recommendations = trending.map(toAiRecommendationFallback);
         }

@@ -162,7 +162,7 @@ export async function fetchTrendingFeedItems(topN = 5): Promise<FeedItem[]> {
 
 export async function fetchFeedActivities(limit = 8): Promise<FeedItem[]> {
   try {
-    const response = await apiGet<BackendActivityResponse>(`/feed/me/activity?limit=${limit}`);
+    const response = await apiGet<BackendActivityResponse>(`/feed/me/activity?limit=${limit}&include_network=1`);
 
     return response.activities.map((activity, idx) => ({
       id: `activity_${activity.session_id}_${idx}`,
