@@ -9,11 +9,11 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { useToast } from '@/components/feedback/ToastProvider';
 import { useAuthStore } from '@/store/authStore';
 import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Navbar from '@/components/layout/Navbar';
-import type { Toast, ToastType } from '@/types/settings';
 
 // ── Toggle Switch ──────────────────────────────────────────────────────────────
 function Toggle({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }) {
@@ -148,6 +148,7 @@ function Modal({ open, onClose, title, children }: {
 export default function PrivacySecurityPage() {
   const router   = useRouter();
   const { theme } = useTheme();
+  const { showToast } = useToast();
   const { user }  = useAuthStore();
   const isLight   = theme === 'light';
 
@@ -184,16 +185,6 @@ export default function PrivacySecurityPage() {
   const [dlLoading, setDlLoading] = useState(false);
   const [dlDone,    setDlDone]    = useState(false);
 
-  // ── Toast ──
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  let toastId = 0;
-
-  function addToast(msg: string, type: ToastType = 'success') {
-    const id = ++toastId;
-    setToasts(t => [...t, { id, msg, type }]);
-    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 3500);
-  }
-
   // ── Change password handler ──
   async function handleChangePassword() {
     setPwError('');
@@ -208,7 +199,7 @@ export default function PrivacySecurityPage() {
       await updatePassword(user, newPw);
       setModal(null);
       setOldPw(''); setNewPw(''); setConfirmPw('');
-      addToast('Kata sandi berhasil diperbarui!');
+      showToast('Kata sandi berhasil diperbarui!', 'success');
     } catch (e: any) {
       const msg =
         e.code === 'auth/wrong-password'    ? 'Kata sandi lama salah.' :
@@ -228,7 +219,7 @@ export default function PrivacySecurityPage() {
     await new Promise(r => setTimeout(r, 2000));
     setDlLoading(false);
     setDlDone(true);
-    addToast('Data berhasil diekspor!');
+    showToast('Data berhasil diekspor!', 'success');
   }
 
   // ── Input style helper ──
@@ -245,6 +236,10 @@ export default function PrivacySecurityPage() {
     { device: 'Firefox · macOS',     loc: 'Depok, ID',   time: '3 hari lalu',    current: false },
   ];
   const [activeSessions, setActiveSessions] = useState(sessions);
+
+  function addToast(arg0: string, arg1: string) {
+    throw new Error('Function not implemented.');
+  }
 
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
@@ -617,31 +612,6 @@ export default function PrivacySecurityPage() {
         </div>
       </Modal>
 
-      {/* ══════════════════════════════════════════
-          TOAST STACK
-      ══════════════════════════════════════════ */}
-      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 items-center pointer-events-none">
-        <AnimatePresence>
-          {toasts.map(t => (
-            <motion.div key={t.id}
-              className={cn(
-                'flex items-center gap-2.5 px-4 py-3 rounded-2xl shadow-xl text-sm font-medium border pointer-events-auto',
-                t.type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' :
-                t.type === 'error'   ? 'bg-red-500/10 border-red-500/20 text-red-400' :
-                                       'border text-sm'
-              )}
-              style={t.type === 'info' ? { background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--text)' } : undefined}
-              initial={{ opacity: 0, y: 16, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 8, scale: 0.95 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 30 }}>
-              {t.type === 'success' && <CheckCircle className="w-4 h-4 flex-shrink-0" />}
-              {t.type === 'error'   && <AlertTriangle className="w-4 h-4 flex-shrink-0" />}
-              {t.msg}
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
     </div>
   );
 }

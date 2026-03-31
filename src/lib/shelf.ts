@@ -9,6 +9,10 @@ const EMPTY_SHELF_DATA: ShelfData = {
   riwayat: [],
 };
 
+const SHELF_MEMORY_CACHE_TTL_MS = 30_000;
+let shelfMemoryCache: { data: ShelfData; fetchedAt: number } | null = null;
+let shelfInFlight: Promise<ShelfData> | null = null;
+
 function normalizeGenre(input: unknown): string {
   if (Array.isArray(input) && input.length > 0) return String(input[0]);
   if (typeof input === 'string' && input.trim()) return input.trim();
@@ -123,10 +127,20 @@ async function tryApiDeleteWithFallback<T>(paths: string[]): Promise<T> {
   throw lastError || new Error('No valid endpoint found');
 }
 
-export async function fetchShelfData(): Promise<ShelfData> {
+export async function fetchShelfData(options?: { force?: boolean }): Promise<ShelfData> {
+  const force = Boolean(options?.force);
+  if (!force && shelfMemoryCache && Date.now() - shelfMemoryCache.fetchedAt < SHELF_MEMORY_CACHE_TTL_MS) {
+    return shelfMemoryCache.data;
+  }
+
+  if (!force && shelfInFlight) {
+    return shelfInFlight;
+  }
+
   const candidatePaths = ['/shelf/me', '/api/shelf/me', '/users/me/shelf'];
 
-  try {
+  shelfInFlight = (async () => {
+    try {
     let response: BackendShelfResponse | null = null;
     let lastError: unknown = null;
 
@@ -148,17 +162,22 @@ export async function fetchShelfData(): Promise<ShelfData> {
       throw lastError || new Error('Shelf endpoint not found');
     }
 
-    const dibaca = response.dibaca.map((session) => ({
-      key: session.id,
-      title: session.title,
-      author: Array.isArray(session.authors) ? session.authors.join(', ') : String(session.authors),
-      coverUrl: session.cover_url,
-      genre: 'Sedang dibaca',
-      progress: Math.max(0, Math.min(100, Math.round(Number(session.progress_percentage ?? 0)))),
-      lastRead: formatRelativeTime(session.last_read_at || session.started_at || undefined),
-      totalPages: Number(session.total_pages ?? 0),
-      currentPage: Number(session.current_page ?? 0),
-    }));
+    const dibaca = response.dibaca
+      .map((session) => {
+        const progress = Math.max(0, Math.min(100, Math.round(Number(session.progress_percentage ?? 0))));
+        return {
+          key: session.id,
+          title: session.title,
+          author: Array.isArray(session.authors) ? session.authors.join(', ') : String(session.authors),
+          coverUrl: session.cover_url,
+          genre: 'Sedang dibaca',
+          progress,
+          lastRead: formatRelativeTime(session.last_read_at || session.started_at || undefined),
+          totalPages: Number(session.total_pages ?? 0),
+          currentPage: Number(session.current_page ?? 0),
+        };
+      })
+      .filter((session) => session.progress > 0);
 
     const pinjaman = response.pinjaman.map((loan) => ({
       key: loan.id,
@@ -194,7 +213,7 @@ export async function fetchShelfData(): Promise<ShelfData> {
       rating: Number(book.avg_rating ?? 0),
     }));
 
-    return {
+    const nextData: ShelfData = {
       pinjaman,
       dibaca,
       wishlist,
@@ -206,10 +225,17 @@ export async function fetchShelfData(): Promise<ShelfData> {
         total_read: riwayat.length,
       },
     };
+    shelfMemoryCache = { data: nextData, fetchedAt: Date.now() };
+    return nextData;
   } catch (error) {
     console.warn('Error fetching shelf data:', error);
     return EMPTY_SHELF_DATA;
+  } finally {
+    shelfInFlight = null;
   }
+  })();
+
+  return shelfInFlight;
 }
 
 export async function fetchMyBookShelfStatus(bookId: string): Promise<ShelfBookStatusResponse> {

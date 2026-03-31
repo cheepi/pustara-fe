@@ -93,14 +93,28 @@ function CoverThumb({ coverId, src, size = 'sm' }: { coverId?: number; src?: str
 
 // ── Card components ───────────────────────────────────────────────────────────
 function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark: boolean; tk: any; liked: boolean; onLike: () => void }) {
+  const actorProfileHref = item.actorId ? `/profile/${item.actorId}` : null;
+
   return (
     <div className={cn('rounded-3xl border p-5 transition-all', tk.card)}>
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-10 h-10 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-          {item.avatar}
-        </div>
+        {actorProfileHref ? (
+          <Link href={actorProfileHref}
+            className="w-10 h-10 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0 hover:bg-gold/30 transition-colors"
+            aria-label={`Buka profil ${item.user || 'user'}`}>
+            {item.avatar}
+          </Link>
+        ) : (
+          <div className="w-10 h-10 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
+            {item.avatar}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
-          <p className={cn('text-sm font-semibold', tk.text)}>{item.user}</p>
+          {actorProfileHref ? (
+            <Link href={actorProfileHref} className={cn('text-sm font-semibold hover:text-gold transition-colors', tk.text)}>{item.user}</Link>
+          ) : (
+            <p className={cn('text-sm font-semibold', tk.text)}>{item.user}</p>
+          )}
           <p className={cn('text-xs', tk.muted)}>{item.loc} · {item.time}</p>
         </div>
         <div className="flex items-center gap-0.5">
@@ -221,6 +235,11 @@ function TrendingCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: a
   const author = item.trendingBook?.authors ?? item.bookAuthor ?? '';
   const rating = item.trendingBook?.avg_rating?.toFixed(1) ?? getRating(item.coverId);
   const href = item.trendingBook ? `/book/${item.trendingBook.book_id}` : `/book/${item.bookKey}`;
+  const rawTrendingScore = Number(item.trendingBook?.trending_score ?? 0);
+  const hasTrendingScore = Number.isFinite(rawTrendingScore) && rawTrendingScore > 0;
+  const trendingScoreLabel = rawTrendingScore >= 100
+    ? Math.round(rawTrendingScore).toLocaleString('id-ID')
+    : rawTrendingScore.toFixed(1);
 
   return (
     <div className={cn('rounded-3xl border p-5 transition-all flex gap-4 items-center', tk.card)}>
@@ -245,8 +264,8 @@ function TrendingCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: a
             <span className="text-gold text-xs font-bold">{rating}</span>
           </div>
           {item.reads && <span className={cn('text-xs', tk.muted)}>{item.reads.toLocaleString()}x dibaca</span>}
-          {item.trendingBook?.trending_score && (
-            <span className={cn('text-xs', tk.muted)}>🔥 skor {Math.round(item.trendingBook.trending_score)}</span>
+          {hasTrendingScore && (
+            <span className={cn('text-xs', tk.muted)}>🔥 skor {trendingScoreLabel}</span>
           )}
         </div>
       </div>
@@ -472,8 +491,13 @@ export default function FeedPage() {
         return !(byName || byEmailPrefix || byId);
       }).slice(0, 5);
 
+      const filteredActivities = activities.filter((activity) => {
+        const actorName = normalizeComparable(activity.user);
+        return !actorName || (actorName !== authName && actorName !== authEmailPrefix);
+      });
+
       setTrendingItems(trending);
-      setActivityItems(activities);
+      setActivityItems(filteredActivities);
       setSidebar(patchedPayload);
       setRecommendedUsers(filteredUsers);
     } catch {
@@ -512,14 +536,20 @@ export default function FeedPage() {
       const result = await toggleFollowUser(user.id, action);
       if (!result) return;
 
-      setRecommendedUsers((prev) => prev.map((item) => {
-        if (item.id !== user.id) return item;
-        return {
-          ...item,
-          is_following: result.is_following,
-          followers_count: result.target_followers_count,
-        };
-      }));
+      setRecommendedUsers((prev) => {
+        if (result.is_following) {
+          return prev.filter((item) => item.id !== user.id);
+        }
+
+        return prev.map((item) => {
+          if (item.id !== user.id) return item;
+          return {
+            ...item,
+            is_following: result.is_following,
+            followers_count: result.target_followers_count,
+          };
+        });
+      });
     } finally {
       setFollowLoadingIds((prev) => {
         const next = new Set(prev);
@@ -829,7 +859,13 @@ export default function FeedPage() {
 
                     return (
                     <div key={u.id} className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">{initial}</div>
+                      <Link
+                        href={`/profile/${u.id}`}
+                        className="w-9 h-9 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0 hover:bg-gold/30 transition-colors"
+                        aria-label={`Buka profil ${displayName}`}
+                      >
+                        {initial}
+                      </Link>
                       <div className="flex-1 min-w-0">
                         <p className={cn('text-sm font-semibold', tk.text)}>{displayName}</p>
                         <p className={cn('text-xs', tk.muted)}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>

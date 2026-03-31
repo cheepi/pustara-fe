@@ -12,6 +12,7 @@ import Wordmark from '@/components/icons/Wordmark';
 import ComboLogo from '@/components/icons/ComboLogo';
 import { useCaptcha, CaptchaWidget } from '@/hooks/useCaptcha';
 import { shouldGoToPersonalization } from '@/lib/survey';
+import { useTheme } from '@/components/theme/ThemeProvider';
 
 // Floating orb particles — purely CSS/motion, no external images needed
 const ORBS = [
@@ -35,6 +36,8 @@ const BOOKS = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const { theme } = useTheme();
+  const isLight = theme === 'light';
   const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw]     = useState(false);
@@ -94,6 +97,38 @@ export default function LoginPage() {
     }
     finally { setLoading(false); }
   }
+
+  const rightBg = isLight ? 'bg-parchment' : 'bg-navy-900';
+  const mobileHeaderTitle = isLight ? 'text-navy-900' : 'text-white';
+  const mobileHeaderText = isLight ? 'text-slate-500' : 'text-slate-500';
+  const mobileBack = isLight ? 'text-slate-500 hover:text-slate-700' : 'text-slate-400 hover:text-slate-200';
+  const card = isLight ? 'bg-white' : 'bg-navy-800';
+  const heading = isLight ? 'text-navy-900' : 'text-white';
+  const subText = isLight ? 'text-slate-500' : 'text-slate-400';
+  const linkCls = isLight ? 'text-navy-700' : 'text-gold';
+  const inputShell = (focused: boolean) => cn(
+    'relative flex items-center border rounded-2xl transition-all duration-200',
+    isLight
+      ? (focused ? 'border-navy-500 ring-2 ring-navy-200/50 bg-white' : 'border-slate-200 bg-slate-50')
+      : (focused ? 'border-gold/60 ring-2 ring-gold/20 bg-navy-700/80' : 'border-white/10 bg-navy-700/60')
+  );
+  const inputText = isLight ? 'text-slate-800 placeholder-slate-400' : 'text-white placeholder-white/35';
+  const inputIcon = (focused: boolean) => isLight
+    ? (focused ? 'text-navy-600' : 'text-slate-400')
+    : (focused ? 'text-gold' : 'text-white/35');
+  const eyeBtn = isLight ? 'text-slate-400 hover:text-slate-600' : 'text-white/35 hover:text-white/70';
+  const forgotLink = isLight ? 'text-slate-500 hover:text-navy-700' : 'text-slate-400 hover:text-gold';
+  const submitBtn = isLight ? 'bg-navy-800 hover:bg-navy-700 text-white' : 'bg-gold hover:bg-gold-light text-navy-900';
+  const divider = isLight ? 'bg-slate-100' : 'bg-white/10';
+  const dividerText = isLight ? 'text-slate-400' : 'text-white/35';
+  const googleBtn = isLight
+    ? 'border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+    : 'border-white/12 text-white/80 hover:bg-white/5 hover:border-white/25';
+  const bottomText = isLight ? 'text-slate-400' : 'text-white/40';
+  const errorCls = isLight
+    ? 'bg-red-50 border-red-200 text-red-600'
+    : 'bg-red-900/20 border-red-500/30 text-red-300';
+  const captchaErrorCls = isLight ? 'text-red-600' : 'text-red-300';
 
   return (
     <main className="min-h-screen flex">
@@ -204,43 +239,54 @@ export default function LoginPage() {
       </div>
 
       {/* ══ RIGHT ══ */}
-      <div className="flex-1 flex flex-col bg-navy-900">
+      <div className={cn('flex-1 flex flex-col', rightBg)}>
 
         {/* Mobile header */}
-        <div className="lg:hidden relative overflow-hidden bg-navy-900 flex-shrink-0 pt-10 pb-12 px-6 min-h-[260px] flex flex-col">
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_80%,rgba(201,168,76,0.12)_0%,transparent_65%)]" />
+        <div className={cn(
+          'lg:hidden relative overflow-hidden flex-shrink-0 pt-8 pb-9 px-6 min-h-[220px] flex flex-col',
+          isLight ? 'bg-parchment' : 'bg-navy-900'
+        )}>
+          <div className={cn(
+            'absolute inset-0',
+            isLight
+              ? 'bg-[radial-gradient(ellipse_at_50%_80%,rgba(15,32,58,0.08)_0%,transparent_70%)]'
+              : 'bg-[radial-gradient(ellipse_at_50%_80%,rgba(201,168,76,0.12)_0%,transparent_65%)]'
+          )} />
           <div className="absolute -right-10 top-1/5 -translate-y-1/2 pointer-events-none z-0">
             <Logo className="w-72 h-72 blur-[7px]" />
           </div>
-          <Link href="/" className="relative z-10 flex items-center gap-1.5 text-slate-400 text-sm mb-auto w-fit hover:text-slate-200 transition-colors">
+          <Link href="/" className={cn('relative z-10 flex items-center gap-1.5 text-sm mb-auto w-fit transition-colors', mobileBack)}>
             <ArrowLeft className="w-4 h-4" /> Kembali
           </Link>
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
             <Wordmark />
-            <h1 className="text-2xl font-bold text-white mb-1">Selamat Datang</h1>
-            <p className="text-slate-500 text-sm">Masuk ke akun untuk kembali membaca</p>
+            <h1 className={cn('text-2xl font-bold mb-1', mobileHeaderTitle)}>Selamat Datang</h1>
+            <p className={cn('text-sm', mobileHeaderText)}>Masuk ke akun untuk kembali membaca</p>
           </motion.div>
         </div>
 
         {/* Form card */}
         <motion.div
-          className="z-10 flex-1 bg-white rounded-[2rem] lg:rounded-none mb-8 mx-4 lg:m-0
-                     flex flex-col justify-center px-6 pb-4 lg:px-14 xl:px-20"
+          className={cn(
+            'z-10 flex-1 rounded-[2rem] lg:rounded-none mb-8 mx-4 lg:m-0',
+            'flex flex-col justify-center px-6 pb-8 pt-3 lg:px-14 lg:py-10 xl:px-20',
+            card
+          )}
           initial={{ opacity: 0, y: 32 }} animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25, duration: 0.5, ease: [0.22, 1, 0.36, 1] }}>
 
-          <div className="w-full max-w-sm mx-auto lg:mx-0">
+          <div className="w-full max-w-sm mx-auto lg:max-w-md">
             <div className="hidden lg:block mb-8">
-              <h2 className="font-serif text-3xl font-black text-navy-900 mb-1">Selamat datang</h2>
-              <p className="text-slate-500 text-sm">
+              <h2 className={cn('font-serif text-3xl font-black mb-1', heading)}>Selamat datang</h2>
+              <p className={cn('text-sm', subText)}>
                 Belum punya akun?{' '}
-                <Link href="/auth/register" className="text-navy-700 font-semibold hover:underline">Daftar gratis</Link>
+                <Link href="/auth/register" className={cn('font-semibold hover:underline', linkCls)}>Daftar gratis</Link>
               </p>
             </div>
 
             <AnimatePresence>
               {error && (
-                <motion.div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-xl"
+                <motion.div className={cn('mb-4 px-4 py-3 border text-sm rounded-xl', errorCls)}
                   initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
                   {error}
                 </motion.div>
@@ -248,42 +294,36 @@ export default function LoginPage() {
             </AnimatePresence>
 
             <form onSubmit={handleLogin} className="flex flex-col gap-3">
-              <div className={cn(
-                'relative flex items-center border rounded-2xl transition-all duration-200 bg-slate-50',
-                focusedField === 'email' ? 'border-navy-500 ring-2 ring-navy-200/50 bg-white' : 'border-slate-200'
-              )}>
-                <Mail className={cn('absolute left-4 w-4 h-4 transition-colors', focusedField === 'email' ? 'text-navy-600' : 'text-slate-400')} />
+              <div className={inputShell(focusedField === 'email')}>
+                <Mail className={cn('absolute left-4 w-4 h-4 transition-colors', inputIcon(focusedField === 'email'))} />
                 <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email"
                   onFocus={() => setFocusedField('email')} onBlur={() => setFocusedField(null)}
-                  className="w-full pl-11 pr-4 py-3.5 bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none rounded-2xl"
+                  className={cn('w-full pl-11 pr-4 py-3.5 bg-transparent text-sm outline-none rounded-2xl', inputText)}
                   required />
               </div>
 
-              <div className={cn(
-                'relative flex items-center border rounded-2xl transition-all duration-200 bg-slate-50',
-                focusedField === 'password' ? 'border-navy-500 ring-2 ring-navy-200/50 bg-white' : 'border-slate-200'
-              )}>
-                <Lock className={cn('absolute left-4 w-4 h-4 transition-colors', focusedField === 'password' ? 'text-navy-600' : 'text-slate-400')} />
+              <div className={inputShell(focusedField === 'password')}>
+                <Lock className={cn('absolute left-4 w-4 h-4 transition-colors', inputIcon(focusedField === 'password'))} />
                 <input type={showPw ? 'text' : 'password'} value={password}
                   onChange={e => setPassword(e.target.value)} placeholder="Kata Sandi"
                   onFocus={() => setFocusedField('password')} onBlur={() => setFocusedField(null)}
-                  className="w-full pl-11 pr-11 py-3.5 bg-transparent text-sm text-slate-800 placeholder-slate-400 outline-none rounded-2xl"
+                  className={cn('w-full pl-11 pr-11 py-3.5 bg-transparent text-sm outline-none rounded-2xl', inputText)}
                   required />
                 <button type="button" onClick={() => setShowPw(!showPw)}
-                  className="absolute right-4 text-slate-400 hover:text-slate-600 transition-colors">
+                  className={cn('absolute right-4 transition-colors', eyeBtn)}>
                   {showPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
 
               <div className="flex justify-end -mt-1">
-                <Link href="#" className="text-xs text-slate-500 hover:text-navy-700 hover:underline transition-colors">Lupa Sandi?</Link>
+                <Link href="#" className={cn('text-xs hover:underline transition-colors', forgotLink)}>Lupa Sandi?</Link>
               </div>
 
               <CaptchaWidget captchaRef={captchaRef} />
-              {captchaError && <p className="text-xs text-red-600 -mt-1">{captchaError}</p>}
+              {captchaError && <p className={cn('text-xs -mt-1', captchaErrorCls)}>{captchaError}</p>}
 
               <motion.button type="submit" disabled={loading}
-                className="w-full py-3.5 bg-navy-800 text-white rounded-2xl font-semibold text-sm hover:bg-navy-700 disabled:opacity-50 transition-colors relative overflow-hidden"
+                className={cn('w-full py-3.5 rounded-2xl font-semibold text-sm disabled:opacity-50 transition-colors relative overflow-hidden', submitBtn)}
                 whileTap={{ scale: 0.98 }}>
                 <AnimatePresence mode="wait">
                   {loading
@@ -297,20 +337,20 @@ export default function LoginPage() {
             </form>
 
             <div className="flex items-center gap-3 my-4">
-              <div className="flex-1 h-px bg-slate-100" />
-              <span className="text-xs text-slate-400 font-medium">atau</span>
-              <div className="flex-1 h-px bg-slate-100" />
+              <div className={cn('flex-1 h-px', divider)} />
+              <span className={cn('text-xs font-medium', dividerText)}>atau</span>
+              <div className={cn('flex-1 h-px', divider)} />
             </div>
 
             <motion.button onClick={handleGoogle} disabled={loading}
-              className="w-full py-3 border border-slate-200 rounded-2xl text-sm font-medium text-slate-700 flex items-center justify-center gap-2.5 hover:bg-slate-50 hover:border-slate-300 transition-all"
+              className={cn('w-full py-3 border rounded-2xl text-sm font-medium flex items-center justify-center gap-2.5 transition-all', googleBtn)}
               whileTap={{ scale: 0.98 }}>
               <GoogleIcon /> Masuk dengan Google
             </motion.button>
 
-            <p className="text-center text-xs text-slate-400 mt-5">
+            <p className={cn('text-center text-xs mt-5', bottomText)}>
               Belum memiliki akun?{' '}
-              <Link href="/auth/register" className="text-navy-700 font-semibold hover:underline">Daftar</Link>
+              <Link href="/auth/register" className={cn('font-semibold hover:underline', linkCls)}>Daftar</Link>
             </p>
           </div>
         </motion.div>

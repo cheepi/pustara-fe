@@ -262,7 +262,7 @@ export default function HomePage() {
                 })
               : (
                 <p className="text-sm px-1 py-8" style={{ color: 'var(--muted)' }}>
-                  Rekomendasi belum tersedia. Pastikan server AI berjalan.
+                  Rekomendasi belum tersedia. Hubungi <Link href=" " target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">@Pustakrew</Link> jika menurutmu ini tidak seharusnya terjadi.
                 </p>
               )
           }

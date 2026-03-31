@@ -3,6 +3,9 @@ export interface BrowseBook {
   title: string;
   author: string;
   coverUrl?: string;
+  available?: boolean;
+  availableCount?: number;
+  totalStock?: number;
   genres?: string[];
   rating?: number;
   year?: number;

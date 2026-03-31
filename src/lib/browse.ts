@@ -33,11 +33,19 @@ function includesAnyToken(text: string, tokens: string[]): boolean {
 
 function mapToBrowseBook(raw: Record<string, unknown>): BrowseBook {
   const authors = Array.isArray(raw.authors) ? raw.authors.map(String).join(', ') : String(raw.author ?? raw.authors ?? 'Unknown');
+  const availableRaw = Number(raw.available ?? raw.available_count ?? NaN);
+  const totalStockRaw = Number(raw.total_stock ?? raw.totalStock ?? NaN);
+  const hasAvailable = Number.isFinite(availableRaw);
+  const hasStock = Number.isFinite(totalStockRaw);
+
   return {
     key: String(raw.id ?? raw.key ?? ''),
     title: String(raw.title ?? ''),
     author: authors,
     coverUrl: String(raw.cover_url ?? raw.coverUrl ?? ''),
+    available: hasAvailable ? availableRaw > 0 : true,
+    availableCount: hasAvailable ? availableRaw : undefined,
+    totalStock: hasStock ? totalStockRaw : undefined,
     genres: Array.isArray(raw.genres) ? raw.genres.map(String) : [],
     rating: Number(raw.avg_rating ?? raw.rating ?? 0),
     year: Number(raw.year ?? 0) || undefined,

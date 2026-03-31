@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { useToast } from '@/components/feedback/ToastProvider';
 import { fetchShelfData, returnBorrowedBookForMe } from '@/lib/shelf';
 import { removeSavedBookForMe } from '@/lib/shelf';
 import type {
@@ -43,6 +44,9 @@ const TAB_ACCENTS: Record<ShelfTabId, string> = {
 
 type ShelfChaosMode = 'rapi' | 'natural' | 'berantakan';
 const SHELF_CHAOS_STORAGE_KEY = 'pustara:shelf-chaos-mode';
+const SHELF_TAB_STORAGE_KEY = 'pustara:shelf-active-tab';
+const SHELF_DATA_STORAGE_KEY = 'pustara:shelf-data-cache-v2';
+const SHELF_DATA_STORAGE_TTL_MS = 5 * 60 * 1000;
 
 const CHAOS_OPTIONS: Array<{ id: ShelfChaosMode; label: string }> = [
   { id: 'rapi', label: 'Rapi' },
@@ -70,7 +74,7 @@ function ShelfStage({ children, isLight }: { children: React.ReactNode; isLight:
     <div
       className={cn(
         'relative rounded-3xl border p-4 md:p-6 overflow-hidden',
-        isLight ? 'bg-white border-parchment-darker' : 'bg-navy-800/45 border-white/10'
+        isLight ? 'bg-white border-parchment-darker' : 'bg-navy-900 border-white/15'
       )}
     >
       <div
@@ -179,8 +183,8 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
         const layerSrc = layerBook ? coverUrl(layerBook.coverId, layerBook.coverUrl) : null;
         const layerBottom = isLying
           ? isCompanionLayer
-            ? 16
-            : 6 + (layerIndex + 1) * 6
+            ? 38
+            :  (layerIndex + 1) * 2
           : (layerIndex + 1) * 2;
 
         return (
@@ -204,23 +208,41 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
             }}
           >
             {layerSrc && (
-              <img
-                src={layerSrc}
-                alt={layerBook?.title || book.title}
-                className="absolute w-full h-full object-cover opacity-78"
-                style={
-                  isLying
-                    ? {
-                        width: '170%',
-                        height: '170%',
-                        left: '-35%',
-                        top: '-35%',
-                        transform: 'rotate(90deg)',
-                        transformOrigin: 'center',
-                      }
-                    : { left: 0, top: 0 }
-                }
-              />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span
+                  className="text-white/90 font-semibold text-[10px] leading-tight px-1 z-10"
+                  style={{
+                    writingMode: isLying ? 'horizontal-tb' : 'vertical-rl',
+                    textOrientation: isLying ? 'initial' : 'mixed',
+                    transform: isLying ? 'none' : 'rotate(180deg)',
+                    maxHeight: isLying ? '24px' : '100px',
+                    maxWidth: isLying ? '76px' : 'none',
+                    overflow: 'hidden',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 1,
+                    WebkitBoxOrient: isLying ? 'horizontal' : 'vertical',
+                  }}
+                >
+                  {layerBook?.title || book.title}
+                </span>
+                <img
+                  src={layerSrc}
+                  alt={layerBook?.title || book.title}
+                  className="absolute w-full h-full object-cover opacity-80"
+                  style={
+                    isLying
+                      ? {
+                          width: '100%',
+                          height: '350%',
+                          left: '5%',
+                          top: 'auto',
+                          transform: 'rotate(90deg)',
+                          transformOrigin: 'center',
+                        }
+                      : { left: 0, top: 0 }
+                  }
+                />
+              </div>
             )}
           </div>
         );
@@ -274,9 +296,9 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
               isLying
                 ? {
                     width: '170%',
-                    height: '170%',
-                    left: '-35%',
-                    top: '-35%',
+                    height: '350%',
+                    left: 'auto',
+                    top: isMobile ? '-70%' : 'auto',
                     transform: 'rotate(90deg)',
                     transformOrigin: 'center',
                   }
@@ -298,6 +320,7 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
               display: '-webkit-box',
               WebkitLineClamp: 1,
               WebkitBoxOrient: isLying ? 'horizontal' : 'vertical',
+              pointerEvents: 'none',
             }}
           >
             {book.title}
@@ -382,7 +405,7 @@ function ShelfPlank({ books, selectedId, newIds, isLight, chaosMode, onSelect }:
       {books.length === 0 ? (
         <div className={cn(
           'relative rounded-xl border px-5 py-8 min-h-[132px] flex items-center justify-center gap-2 text-sm',
-          isLight ? 'bg-amber-50/60 border-amber-200/60' : 'bg-navy-800/70 border-white/8'
+          isLight ? 'bg-amber-50/60 border-amber-200/60' : 'bg-navy-900 border-white/12'
         )} style={{ color: 'var(--muted)' }}>
           <BookMarked className="w-4 h-4 opacity-40" />
           <span className="opacity-40">Rak masih kosong</span>
@@ -392,10 +415,10 @@ function ShelfPlank({ books, selectedId, newIds, isLight, chaosMode, onSelect }:
           <div key={`tier-${tierIndex}`} className="relative">
             <div className={cn(
               'relative rounded-t-xl border border-b-0 pb-0',
-              'flex items-end overflow-x-hidden overflow-y-visible',
+              'flex items-end overflow-visible',
               isMobile ? 'gap-1' : 'gap-2',
               isMobile ? 'px-4 pt-6 min-h-[148px]' : 'px-5 pt-5 min-h-[132px]',
-              isLight ? 'bg-amber-50/60 border-amber-200/60' : 'bg-navy-800/70 border-white/8'
+              isLight ? 'bg-amber-50/60 border-amber-200/60' : 'bg-navy-900 border-white/12'
             )}>
               <PlankDust />
 
@@ -441,7 +464,6 @@ function ShelfPlank({ books, selectedId, newIds, isLight, chaosMode, onSelect }:
                     posture = canUseLying && hash % 13 === 0 ? 'lying' : hash % 2 === 0 ? 'lean-left' : hash % 3 === 0 ? 'lean-right' : 'upright';
                   }
 
-                  // Make the top shelf visibly chaotic by guaranteeing horizontal stacks.
                   if (shouldForceTopSingleLying || shouldForceDoubleLying) {
                     posture = 'lying';
                   }
@@ -450,7 +472,6 @@ function ShelfPlank({ books, selectedId, newIds, isLight, chaosMode, onSelect }:
                     posture = 'lying';
                   }
 
-                  // Guided top pattern: 2 standing, 1 lying, 3 standing, 1 double-lying stack.
                   if (useGuidedTopPattern && i <= guidedDoubleLyingIndex) {
                     if (shouldForceTopSingleLying || shouldForceDoubleLying) {
                       posture = 'lying';
@@ -520,7 +541,7 @@ function ShelfPlank({ books, selectedId, newIds, isLight, chaosMode, onSelect }:
               'h-3 rounded-b-md border border-t-0',
               isLight
                 ? 'bg-amber-200/80 border-amber-300/60 shadow-[0_3px_0_rgba(0,0,0,0.08)]'
-                : 'bg-navy-700/80 border-white/5 shadow-[0_3px_0_rgba(0,0,0,0.3)]'
+                : 'bg-navy-800 border-white/12 shadow-[0_3px_0_rgba(0,0,0,0.35)]'
             )} />
           </div>
         ))
@@ -559,7 +580,7 @@ function BookDetailDrawer({
       <motion.div
         className={cn(
           'mt-2 rounded-2xl border overflow-hidden',
-          isLight ? 'bg-white border-parchment-darker' : 'bg-navy-800/60 border-white/8'
+          isLight ? 'bg-white border-parchment-darker' : 'bg-navy-900 border-white/15 shadow-[0_20px_40px_rgba(0,0,0,0.45)]'
         )}
         initial={{ opacity: 0, height: 0, y: -8 }}
         animate={{ opacity: 1, height: 'auto', y: 0 }}
@@ -604,14 +625,14 @@ function BookDetailDrawer({
                   isOverdue ? 'bg-red-500/15 text-red-400 border-red-500/30'
                   : isUrgent ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                   : isLight ? 'bg-navy-50 text-navy-600 border-navy-200'
-                  : 'bg-white/5 text-white/60 border-white/10'
+                  : 'bg-navy-800 text-white/80 border-white/15'
                 )}>
                   <Calendar className="w-3 h-3" />
                   {isOverdue ? 'Jatuh tempo hari ini!' : `${daysLeft}h lagi`}
                 </div>
               )}
               {isBaca && (
-                <div className={cn('flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-xl border', isLight ? 'bg-navy-50 text-navy-600 border-navy-200' : 'bg-white/5 text-white/60 border-white/10')}>
+                <div className={cn('flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-xl border', isLight ? 'bg-navy-50 text-navy-600 border-navy-200' : 'bg-navy-800 text-white/80 border-white/15')}>
                   <Calendar className="w-3 h-3" />
                   {baca.lastRead}
                 </div>
@@ -643,29 +664,32 @@ function BookDetailDrawer({
               <Link href={`/read/${book.key}`}>
                 <motion.button
                   whileTap={{ scale: 0.96 }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gold text-navy-900 text-xs font-bold hover:bg-gold-light transition-colors">
-                  <Play className="w-3 h-3" /> Lanjut Baca
+                  className="flex items-center justify-center gap-1.5 p-2.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold bg-gold text-navy-900 hover:bg-gold-light transition-colors">
+                  <Play className="w-3.5 h-3.5 sm:w-3 sm:h-3" /> 
+                  <span className="hidden sm:inline">Lanjut</span>
                 </motion.button>
               </Link>
 
-              {/* Kembalikan — only shown for dipinjam, kept subtle */}
               {!isBaca && onReturn && (
                 <motion.button
                   onClick={onReturn}
                   disabled={Boolean(returning)}
                   whileTap={{ scale: 0.96 }}
                   className={cn(
-                    'flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border transition-colors',
+                    'flex items-center justify-center gap-1.5 p-2.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold border transition-colors',
                     isLight
                       ? 'border-red-200 text-red-600 hover:bg-red-50'
                       : 'border-red-500/30 text-red-300 hover:bg-red-500/10'
                   )}
                 >
-                  <RotateCcw className="w-3 h-3" /> {returning ? 'Memproses...' : 'Kembalikan'}
+                  <RotateCcw className="w-3.5 h-3.5 sm:w-3 sm:h-3" /> 
+                  
+                  <span className="hidden sm:inline">
+                    {returning ? 'Memproses...' : 'Kembalikan'}
+                  </span>
                 </motion.button>
               )}
 
-              {/* "Tutup" text button — matches screenshot */}
               <motion.button
                 onClick={onClose}
                 whileTap={{ scale: 0.96 }}
@@ -673,7 +697,7 @@ function BookDetailDrawer({
                   'flex items-center gap-1 px-4 py-2 rounded-xl text-xs font-bold border transition-colors',
                   isLight
                     ? 'border-parchment-darker text-slate-500 hover:bg-parchment'
-                    : 'border-white/10 text-white/40 hover:bg-white/5'
+                    : 'border-white/15 text-white/70 hover:bg-navy-800'
                 )}>
                 <X className="w-3 h-3" /> Tutup
               </motion.button>
@@ -687,15 +711,23 @@ function BookDetailDrawer({
 
 export default function RakBukuPage() {
   const { theme } = useTheme();
+  const { showToast } = useToast();
   const isLight = theme === 'light';
 
-  const [tab, setTab] = useState<ShelfTabId>('dipinjam');
+  const [tab, setTab] = useState<ShelfTabId>(() => {
+    if (typeof window === 'undefined') return 'dipinjam';
+    const saved = window.localStorage.getItem(SHELF_TAB_STORAGE_KEY);
+    if (saved === 'dipinjam' || saved === 'dibaca' || saved === 'wishlist' || saved === 'riwayat') {
+      return saved;
+    }
+    return 'dipinjam';
+  });
   const [shelfData, setShelfData] = useState<ShelfData>(EMPTY_SHELF_DATA);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [newBookKeys, setNewBookKeys] = useState<Set<string>>(new Set());
   const [returningBookKey, setReturningBookKey] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingReturnBook, setPendingReturnBook] = useState<PinjamanBook | null>(null);
+  const [isMobileViewport, setIsMobileViewport] = useState(false);
   const [chaosMode, setChaosMode] = useState<ShelfChaosMode>(() => {
     if (typeof window === 'undefined') return 'natural';
     const saved = window.localStorage.getItem(SHELF_CHAOS_STORAGE_KEY);
@@ -709,6 +741,18 @@ export default function RakBukuPage() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem(SHELF_CHAOS_STORAGE_KEY, chaosMode);
   }, [chaosMode]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(SHELF_TAB_STORAGE_KEY, tab);
+  }, [tab]);
+
+  useEffect(() => {
+    const syncViewport = () => setIsMobileViewport(window.innerWidth < 1024);
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    return () => window.removeEventListener('resize', syncViewport);
+  }, []);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -727,27 +771,54 @@ export default function RakBukuPage() {
   }, []);
 
   useEffect(() => { document.title = 'Pustara | Rak Buku'; }, []);
-  const refreshShelf = () => fetchShelfData().then(setShelfData).catch(() => setShelfData(EMPTY_SHELF_DATA));
+  const refreshShelf = (force = false) =>
+    fetchShelfData({ force })
+      .then((data) => {
+        setShelfData(data);
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(
+            SHELF_DATA_STORAGE_KEY,
+            JSON.stringify({ savedAt: Date.now(), data })
+          );
+        }
+      })
+      .catch(() => setShelfData(EMPTY_SHELF_DATA));
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const rawCache = window.localStorage.getItem(SHELF_DATA_STORAGE_KEY);
+        if (rawCache) {
+          const parsed = JSON.parse(rawCache) as { savedAt?: number; data?: ShelfData };
+          if (
+            parsed?.savedAt &&
+            parsed?.data &&
+            Date.now() - parsed.savedAt < SHELF_DATA_STORAGE_TTL_MS
+          ) {
+            setShelfData(parsed.data);
+          }
+        }
+      } catch {
+        // Ignore malformed cache and continue with network fetch.
+      }
+    }
+
     refreshShelf();
   }, []);
 
   async function handleReturnBook(bookKey: string) {
-    setActionError(null);
-    setActionMessage(null);
     setReturningBookKey(bookKey);
     try {
       await returnBorrowedBookForMe(bookKey);
-      await refreshShelf();
+      await refreshShelf(true);
       setSelectedKey(null);
-      setActionMessage('Buku berhasil dikembalikan.');
+      showToast('Buku berhasil dikembalikan.', 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal mengembalikan buku.';
       if (message.includes('401')) {
-        setActionError('Sesi login berakhir. Silakan login ulang.');
+        showToast('Sesi login berakhir. Silakan login ulang.', 'error');
       } else {
-        setActionError('Gagal mengembalikan buku. Coba lagi sebentar.');
+        showToast('Gagal mengembalikan buku. Coba lagi sebentar.', 'error');
       }
     } finally {
       setReturningBookKey(null);
@@ -756,10 +827,10 @@ export default function RakBukuPage() {
 
   const tk = {
     bg: isLight ? 'bg-parchment' : '',
-    surface: isLight ? 'bg-white border-parchment-darker' : 'bg-navy-800/50 border-white/8',
+    surface: isLight ? 'bg-white border-parchment-darker' : 'bg-navy-900 border-white/15',
     text: isLight ? 'text-navy-900' : 'text-white',
     muted: isLight ? 'text-slate-500' : 'text-slate-400',
-    chip: isLight ? 'bg-navy-50 border-navy-200 text-navy-700' : 'bg-white/5 border-white/10 text-white/60',
+    chip: isLight ? 'bg-navy-50 border-navy-200 text-navy-700' : 'bg-navy-800 border-white/15 text-white/80',
   };
 
   const tabCounts: Record<ShelfTabId, number> = {
@@ -781,7 +852,7 @@ export default function RakBukuPage() {
     <div className={cn('min-h-screen transition-colors duration-300', tk.bg)} style={{ background: 'var(--bg)' }}>
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 pt-6 pb-20">
+      <main className={cn('max-w-7xl mx-auto px-4 pt-6 pb-20', isMobileViewport && selectedBook ? 'pb-56' : '')}>
         <motion.div className="mb-6" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
           <p className="text-gold/70 text-sm font-medium mb-0.5">Koleksi kamu,</p>
           <h1 className={cn('font-serif text-3xl lg:text-4xl font-black', tk.text)}>Rak Buku</h1>
@@ -878,13 +949,6 @@ export default function RakBukuPage() {
           </div>
         )}
 
-        {actionMessage && (
-          <p className="text-sm text-emerald-600 mb-4">{actionMessage}</p>
-        )}
-        {actionError && (
-          <p className="text-sm text-red-500 mb-4">{actionError}</p>
-        )}
-
         <AnimatePresence mode="wait">
           <motion.div key={tab}
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
@@ -921,14 +985,14 @@ export default function RakBukuPage() {
                         </p>
                       </div>
 
-                      <div>
+                      <div className="hidden lg:block">
                         <AnimatePresence>
                           {selectedBook && tab === 'dipinjam' ? (
                             <BookDetailDrawer
                               book={selectedBook}
                               isLight={isLight}
                               mode="dipinjam"
-                              onReturn={() => handleReturnBook(selectedBook.key)}
+                              onReturn={() => setPendingReturnBook(selectedBook as PinjamanBook)}
                               returning={returningBookKey === selectedBook.key}
                               onClose={() => setSelectedKey(null)}
                             />
@@ -936,7 +1000,7 @@ export default function RakBukuPage() {
                             <motion.div
                               className={cn(
                                 'mt-2 rounded-2xl border p-6 text-sm',
-                                isLight ? 'bg-white border-parchment-darker text-slate-500' : 'bg-navy-800/60 border-white/8 text-slate-300'
+                                isLight ? 'bg-white border-parchment-darker text-slate-500' : 'bg-navy-900 border-white/15 text-slate-300'
                               )}
                               initial={{ opacity: 0, y: 6 }}
                               animate={{ opacity: 1, y: 0 }}
@@ -971,7 +1035,7 @@ export default function RakBukuPage() {
                         </p>
                       </div>
 
-                      <div>
+                      <div className="hidden lg:block">
                         <AnimatePresence>
                           {selectedBook && tab === 'dibaca' ? (
                             <BookDetailDrawer
@@ -984,7 +1048,7 @@ export default function RakBukuPage() {
                             <motion.div
                               className={cn(
                                 'mt-2 rounded-2xl border p-6 text-sm',
-                                isLight ? 'bg-white border-parchment-darker text-slate-500' : 'bg-navy-800/60 border-white/8 text-slate-300'
+                                isLight ? 'bg-white border-parchment-darker text-slate-500' : 'bg-navy-900 border-white/15 text-slate-300'
                               )}
                               initial={{ opacity: 0, y: 6 }}
                               animate={{ opacity: 1, y: 0 }}
@@ -1011,6 +1075,93 @@ export default function RakBukuPage() {
               </ShelfStage>
             )}
           </motion.div>
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {isMobileViewport && selectedBook && (tab === 'dipinjam' || tab === 'dibaca') && (
+            <motion.div
+              initial={{ y: 80, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 80, opacity: 0 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 30 }}
+              className={cn(
+                'fixed left-4 right-4 bottom-4 z-40 rounded-2xl',
+                isLight ? '' : 'bg-navy-950]'
+              )}
+            >
+              <BookDetailDrawer
+                book={selectedBook}
+                isLight={isLight}
+                mode={tab === 'dipinjam' ? 'dipinjam' : 'dibaca'}
+                onReturn={tab === 'dipinjam' ? () => setPendingReturnBook(selectedBook as PinjamanBook) : undefined}
+                returning={tab === 'dipinjam' ? returningBookKey === selectedBook.key : false}
+                onClose={() => setSelectedKey(null)}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {pendingReturnBook && (
+            <motion.div
+              className="fixed inset-0 z-[80] flex items-center justify-center px-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <button
+                type="button"
+                className="absolute inset-0 bg-black/55"
+                onClick={() => setPendingReturnBook(null)}
+                aria-label="Tutup konfirmasi"
+              />
+
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 8 }}
+                transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+                className={cn(
+                  'relative w-full max-w-md rounded-2xl border p-5 shadow-[0_20px_40px_rgba(0,0,0,0.45)]',
+                  isLight ? 'bg-white border-parchment-darker' : 'bg-navy-900 border-white/15'
+                )}
+              >
+                <p className={cn('text-base font-bold', isLight ? 'text-navy-900' : 'text-white')}>
+                  Konfirmasi pengembalian
+                </p>
+                <p className={cn('text-sm mt-2', isLight ? 'text-slate-600' : 'text-slate-300')}>
+                  Kembalikan buku <span className="font-semibold">{pendingReturnBook.title}</span> sekarang?
+                </p>
+
+                <div className="mt-5 flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setPendingReturnBook(null)}
+                    className={cn(
+                      'px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors',
+                      isLight
+                        ? 'border-parchment-darker text-slate-600 hover:bg-parchment'
+                        : 'border-white/15 text-slate-200 hover:bg-navy-800'
+                    )}
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const key = pendingReturnBook.key;
+                      setPendingReturnBook(null);
+                      await handleReturnBook(key);
+                    }}
+                    className="px-3.5 py-2 rounded-xl text-sm font-bold bg-red-500 text-white hover:bg-red-400 transition-colors"
+                    disabled={Boolean(returningBookKey)}
+                  >
+                    Ya, kembalikan
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
         </AnimatePresence>
       </main>
     </div>

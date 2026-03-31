@@ -225,13 +225,13 @@ export default function RegisterPage() {
         {/* Form card */}
         <motion.div
           className={cn(
-            'flex-1 px-6 pb-10 lg:flex lg:flex-col lg:justify-center lg:px-14 xl:px-20',
+            'flex-1 px-6 pb-10 pt-2 lg:flex lg:flex-col lg:justify-center lg:items-center lg:px-14 lg:py-10 xl:px-20',
             'rounded-[2rem] lg:rounded-none mb-8 mx-4 lg:m-0',
             card
           )}
           initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
 
-          <div className="w-full max-w-sm mx-auto lg:mx-0">
+          <div className="w-full max-w-sm mx-auto lg:max-w-md">
             <div className="hidden lg:block mb-8">
               <h2 className={cn('font-serif text-3xl font-black mb-1', heading)}>Buat akun baru</h2>
               <p className={cn('text-sm', subText)}>
