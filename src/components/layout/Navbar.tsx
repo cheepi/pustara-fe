@@ -20,6 +20,7 @@ export default function Navbar() {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [dropOpen,   setDropOpen]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { user }          = useAuthStore();
@@ -101,6 +102,11 @@ export default function Navbar() {
   const firstName = user?.displayName?.split(' ')[0] || 'Akun';
   const initial   = (user?.displayName || user?.email || 'U')[0].toUpperCase();
 
+  async function handleConfirmLogout() {
+    setLogoutConfirmOpen(false);
+    await signOut(auth);
+  }
+
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-50 pointer-events-none">
@@ -122,7 +128,7 @@ export default function Navbar() {
             {/* ── Logo: icon overflows bar top/bottom, wordmark inside ── */}
             <Link href="/" className="flex items-center gap-1 flex-shrink-0 -ml-1">
             <MotionLogo
-              className="w-auto drop-shadow-lg flex-shrink-0 relative z-10"
+              className="w-auto drop-shadow-lg flex-shrink-0 relative z-10 focus:outline-none"
               style={{
                 height: typeof window !== "undefined" && window.innerWidth < 768 ? "80px" : "86px",
                 marginTop: typeof window !== "undefined" && window.innerWidth < 768 ? "0px" : "-10px",
@@ -269,7 +275,7 @@ export default function Navbar() {
                             ))}
                           </div>
                           <div>
-                            <button onClick={() => { setDropOpen(false); signOut(auth); }}
+                            <button onClick={() => { setDropOpen(false); setLogoutConfirmOpen(true); }}
                               className={cn('w-full text-left px-4 py-2.5 text-sm font-medium transition-colors', dropLogout)}>
                               Keluar
                             </button>
@@ -406,11 +412,62 @@ export default function Navbar() {
             <div className="h-px mb-3" style={{ background: 'var(--border)' }} />
 
             {/* Logout */}
-            <button onClick={() => { setMenuOpen(false); signOut(auth); }}
+            <button onClick={() => { setMenuOpen(false); setLogoutConfirmOpen(true); }}
               className="w-full flex items-center px-4 py-3 rounded-2xl text-sm font-semibold text-red-400 hover:bg-red-400/[0.08] transition-all">
               Keluar dari Akun
             </button>
           </div>
+        </div>
+      )}
+
+      {logoutConfirmOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/55"
+            onClick={() => setLogoutConfirmOpen(false)}
+            aria-label="Tutup konfirmasi logout"
+          />
+
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            className={cn(
+              'relative w-full max-w-md rounded-2xl border p-5 shadow-[0_20px_40px_rgba(0,0,0,0.45)]',
+              isLight ? 'bg-white border-slate-200' : 'bg-navy-900 border-white/15'
+            )}
+          >
+            <p className={cn('text-base font-bold', isLight ? 'text-slate-900' : 'text-white')}>
+              Konfirmasi logout
+            </p>
+            <p className={cn('text-sm mt-2', isLight ? 'text-slate-600' : 'text-slate-300')}>
+              Kamu yakin ingin keluar dari akun sekarang?
+            </p>
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setLogoutConfirmOpen(false)}
+                className={cn(
+                  'px-3.5 py-2 rounded-xl text-sm font-semibold border transition-colors',
+                  isLight
+                    ? 'border-slate-200 text-slate-600 hover:bg-slate-50'
+                    : 'border-white/15 text-slate-200 hover:bg-navy-800'
+                )}
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmLogout}
+                className="px-3.5 py-2 rounded-xl text-sm font-bold bg-red-500 text-white hover:bg-red-400 transition-colors"
+              >
+                Ya, logout
+              </button>
+            </div>
+          </motion.div>
         </div>
       )}
 

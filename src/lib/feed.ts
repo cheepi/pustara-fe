@@ -37,6 +37,7 @@ export interface FeedSidebarPayload {
 
 interface BackendActivity {
   type: string;
+  actor_id?: string | null;
   book: {
     id: string;
     title: string;
@@ -121,6 +122,16 @@ function toDateKey(input?: string | null): string | null {
   return `${year}-${month}-${day}`;
 }
 
+function previousDateKey(dateKey: string | null): string | null {
+  if (!dateKey) return null;
+  const [year, month, day] = dateKey.split('-').map((value) => Number(value));
+  if (!year || !month || !day) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() - 1);
+  return toDateKey(date.toISOString());
+}
+
 function pickProfileSubtitle(profile: unknown): string {
   if (!profile || typeof profile !== 'object') return 'Pembaca aktif';
   const source = profile as { bio?: unknown; status?: unknown; description?: unknown };
@@ -140,13 +151,12 @@ function calcStreakFromActivities(activities: BackendActivity[]): number {
   if (days.size === 0) return 0;
 
   let streak = 0;
-  const cursor = new Date();
+  let cursorKey = toDateKey(new Date().toISOString());
 
   while (true) {
-    const key = toDateKey(cursor.toISOString());
-    if (!key || !days.has(key)) break;
+    if (!cursorKey || !days.has(cursorKey)) break;
     streak += 1;
-    cursor.setUTCDate(cursor.getUTCDate() - 1);
+    cursorKey = previousDateKey(cursorKey);
   }
 
   return streak;
@@ -179,6 +189,7 @@ export async function fetchFeedActivities(limit = 8): Promise<FeedItem[]> {
     return response.activities.map((activity, idx) => ({
       id: `activity_${activity.session_id}_${idx}`,
       type: 'activity',
+      actorId: activity.actor_id ? String(activity.actor_id) : undefined,
       time: formatRelativeTime(activity.timestamp || undefined),
       user: activity.actor_name,
       avatar: toInitials(activity.actor_name).charAt(0),

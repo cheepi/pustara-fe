@@ -126,6 +126,32 @@ function clamp01(value: unknown, fallback = 0): number {
   return n;
 }
 
+function normalizeTrendingPages(raw: Record<string, unknown>): number {
+  return Math.max(
+    0,
+    toFiniteNumber(
+      raw.pages
+      ?? raw.page_count
+      ?? raw.num_pages
+      ?? raw.number_of_pages,
+      0,
+    ),
+  );
+}
+
+function normalizeTrendingScore(raw: Record<string, unknown>): number {
+  const score = toFiniteNumber(
+    raw.trending_score
+    ?? raw.trendingScore
+    ?? raw.score
+    ?? raw.trend_score,
+    0,
+  );
+
+  if (score > 0 && score <= 1) return score * 100;
+  return Math.max(0, score);
+}
+
 function normalizeAiRecommendation(raw: unknown): AiRecommendation {
   const rec = (raw ?? {}) as Record<string, unknown>;
   const rawSignalMap = (rec.signals_map ?? rec.signals ?? {}) as Record<string, unknown>;
@@ -201,10 +227,10 @@ function normalizeTrendingBook(raw: unknown): TrendingBook {
         : [],
     description: typeof book.description === 'string' ? book.description : undefined,
     year: book.year ? String(book.year) : undefined,
-    pages: toFiniteNumber(book.pages, 0),
+    pages: normalizeTrendingPages(book),
     avg_rating: toFiniteNumber(book.avg_rating, 0),
     cover_url: book.cover_url ? String(book.cover_url) : undefined,
-    trending_score: toFiniteNumber(book.trending_score ?? book.score, 0),
+    trending_score: normalizeTrendingScore(book),
     reason_primary: book.reason_primary ? String(book.reason_primary) : undefined,
   };
 }

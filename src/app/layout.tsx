@@ -4,6 +4,7 @@ import Script from 'next/script';
 import './globals.css';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
+import { ToastProvider } from '@/components/feedback/ToastProvider';
 import FABGuard from '@/components/layout/FABGuard';
 
 export const metadata: Metadata = {
@@ -42,8 +43,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           }}
         />
         <ThemeProvider>
-          <AuthProvider>{children}</AuthProvider>
-          <FABGuard />
+          <ToastProvider>
+            <AuthProvider>{children}</AuthProvider>
+            <FABGuard />
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

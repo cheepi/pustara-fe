@@ -7,6 +7,7 @@ export interface FeedItem {
   id: string;
   type: FeedItemType;
   time: string;
+  actorId?: string;
   user?: string; avatar?: string; loc?: string;
   action?: string; rating?: number; reviewText?: string;
   bookKey?: string; bookTitle?: string; bookAuthor?: string; coverId?: number; bookCoverUrl?: string;

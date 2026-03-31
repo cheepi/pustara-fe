@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Medal, Star, BookOpen, ArrowRight, X, Calendar, 
   FileText, WifiOff, RefreshCw, TrendingUp, Sparkles,
   Landmark, FlaskConical, Brain, User, Heart, Cpu, 
+  Leaf, Wand2, Rocket, Cat, Flame, Feather, Notebook, Baby, Ghost, Sword, Globe
   } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
@@ -64,6 +65,18 @@ function normalizeCategoryId(value: string): string {
 
 function pickCategoryIcon(label: string) {
   const text = label.toLowerCase();
+
+  if (text.includes('alam') || text.includes('nature') || text.includes('lingkungan')) return Leaf;
+  if (text.includes('fantasi') || text.includes('fantasy') || text.includes('magic')) return Wand2;
+  if (text.includes('ilmiah') || text.includes('sci-fi') || text.includes('science fiction')) return Rocket;
+  if (text.includes('distopia') || text.includes('dystopia') || text.includes('apocalypse')) return Flame;
+  if (text.includes('fabel') || text.includes('hewan') || text.includes('animal')) return Cat;
+  if (text.includes('anak') || text.includes('children') || text.includes('kids')) return Baby;
+  if (text.includes('diary') || text.includes('jurnal') || text.includes('journal')) return Notebook;
+  if (text.includes('esai') || text.includes('puisi') || text.includes('poem')) return Feather;
+  if (text.includes('horor') || text.includes('horror') || text.includes('hantu')) return Ghost;
+  if (text.includes('aksi') || text.includes('action') || text.includes('petualangan')) return Sword;
+  if (text.includes('diaspora') || text.includes('budaya') || text.includes('culture')) return Globe;
   if (text.includes('sejarah') || text.includes('history')) return Landmark;
   if (text.includes('sains') || text.includes('science')) return FlaskConical;
   if (text.includes('sastra') || text.includes('literature') || text.includes('novel') || text.includes('fiksi') || text.includes('fiction')) return BookOpen;
@@ -72,6 +85,9 @@ function pickCategoryIcon(label: string) {
   if (text.includes('misteri') || text.includes('mystery') || text.includes('thriller')) return Search;
   if (text.includes('teknologi') || text.includes('technology') || text.includes('computer') || text.includes('programming')) return Cpu;
   if (text.includes('psikologi') || text.includes('filsafat') || text.includes('pemikiran')) return Brain;
+
+  if (text.includes('sastra') || text.includes('literature') || text.includes('novel') || text.includes('fiksi') || text.includes('fiction')) return BookOpen;
+  
   return BookOpen;
 }
 
@@ -99,12 +115,19 @@ function mapToBrowseBook(book: Record<string, unknown>): BrowseBook {
   const authors = Array.isArray(book.authors)
     ? book.authors.map(String).join(', ')
     : String(book.author ?? book.authors ?? 'Unknown');
+  const availableRaw = Number(book.available ?? book.available_count ?? NaN);
+  const totalStockRaw = Number(book.total_stock ?? book.totalStock ?? NaN);
+  const hasAvailable = Number.isFinite(availableRaw);
+  const hasStock = Number.isFinite(totalStockRaw);
 
   return {
     key: String(book.id ?? ''),
     title: String(book.title ?? ''),
     author: authors,
     coverUrl: String(book.cover_url ?? ''),
+    available: hasAvailable ? availableRaw > 0 : true,
+    availableCount: hasAvailable ? availableRaw : undefined,
+    totalStock: hasStock ? totalStockRaw : undefined,
     genres: Array.isArray(book.genres) ? book.genres.map(String) : [],
     rating: Number(book.avg_rating ?? 0),
     year: Number(book.year ?? 0) || undefined,
@@ -226,7 +249,7 @@ export function AISection({ dark, tk }: { dark: boolean; tk: any }) {
                 ))
               : (
                 <p className="text-sm px-1 py-8" style={{ color: 'var(--muted)' }}>
-                  Rekomendasi belum tersedia. Pastikan server AI berjalan.
+                  Rekomendasi belum tersedia. Hubungi <Link href=" " target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">@Pustakrew</Link> jika menurutmu ini tidak seharusnya terjadi.
                 </p>
               )
           }
@@ -471,6 +494,9 @@ function BrowseContent() {
             title: item.title,
             author: Array.isArray(item.authors) ? item.authors.join(', ') : 'Unknown',
             coverUrl: item.cover_url || undefined,
+            available: Number(item.available ?? 0) > 0,
+            availableCount: Number(item.available ?? 0),
+            totalStock: Number(item.total_stock ?? 0),
             genres: Array.isArray(item.genres) ? item.genres : [],
             rating: Number(item.avg_rating || 0),
             year: item.year ? Number(item.year) : undefined,
@@ -532,6 +558,9 @@ function BrowseContent() {
             title: String(book.title ?? ''),
             author: Array.isArray(book.authors) ? book.authors.join(', ') : 'Unknown',
             coverUrl: String(book.cover_url ?? ''),
+            available: Number(book.available ?? 0) > 0,
+            availableCount: Number(book.available ?? 0),
+            totalStock: Number(book.total_stock ?? 0),
             genres: Array.isArray(book.genres) ? book.genres.map(String) : [],
             rating: Number(book.avg_rating ?? 0),
             year: Number(book.year ?? 0) || undefined,
@@ -700,6 +729,7 @@ function BrowseContent() {
     ? `Kategori ${activeCategoryLabel}`
     : query ? `Hasil "${query}"` : '';
   const hasMoreBooks = booksPage < booksTotalPages;
+  const compactDesktopResults = searched && books.length > 0 && books.length <= 3;
 
   function getSourceLabel(book: BrowseBook): string {
     if (activeCategoryLabel) return `Genre: ${activeCategoryLabel}`;
@@ -762,7 +792,10 @@ function BrowseContent() {
       <Navbar />
 
       <section className="max-w-7xl mx-auto px-4 pt-5 pb-2">
-        <div className="hidden md:flex items-center justify-end gap-2 mt-8 -mb-12 mr-52">
+        <div className={cn(
+          'hidden md:flex items-center justify-end gap-2 mt-8 -mb-12',
+          compactDesktopResults ? 'mr-2 opacity-0 pointer-events-none' : 'mr-52'
+        )}>
           <Medal className="w-3.5 h-3.5 text-gold" />
           <span className="text-gold text-xs font-semibold uppercase tracking-wider">
             {searched ? 'Top 3 Hasil Terbaik' : 'Pustara\'s Pick — kurasi dari Pustakrew'}
@@ -994,7 +1027,10 @@ function BrowseContent() {
           </div>
 
           {/* ── RIGHT (Top 3) ── */}
-          <div className="flex-1 min-w-0 pt-0 md:pt-24">
+          <div className={cn(
+            'flex-1 min-w-0 pt-0',
+            compactDesktopResults ? 'md:pt-6 md:max-w-[300px] md:mr-auto' : 'md:pt-24'
+          )}>
             {(() => {
               if (!searched && topPicksLoading) {
                 return (
@@ -1032,14 +1068,13 @@ function BrowseContent() {
 
               if (searched && top3.length < 3) {
                 return (
-                  <div className="mt-2 md:mt-10">
-                    <p className={cn('text-xs font-semibold uppercase tracking-wider mb-3', tk.muted)}>
-                      Hasil Pencarian
-                    </p>
+                  <div className="mt-2 md:mt-3">
                     <div
                       className={cn(
-                        'grid gap-3',
-                        top3.length === 1 ? 'grid-cols-1 max-w-[220px]' : 'grid-cols-2 max-w-[460px]'
+                        'grid gap-3 mr-auto',
+                        top3.length === 1
+                          ? 'grid-cols-1 w-[220px]'
+                          : 'grid-cols-2 w-full max-w-[460px]'
                       )}
                     >
                       {top3.map((b, i) => (
@@ -1352,7 +1387,7 @@ function BrowseContent() {
           </motion.section>
         )}
 
-        {searched && (
+        {searched && (loading || error || books.length === 0 || books.length > 3) && (
           <motion.section key="results"
             className="max-w-7xl mx-auto px-4 mt-6 pb-12"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -1461,6 +1496,7 @@ function GridBookCard({
   const src       = book.coverUrl;
   const rating    = book.rating?.toFixed(1) || "4.5";
   const ratingNum = Number(rating);
+  const isAvailable = book.available !== false;
 
   return (
     <motion.div className="cursor-pointer group"
@@ -1469,6 +1505,14 @@ function GridBookCard({
       onClick={() => window.location.href = `/book/${book.key}`}>
       <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-md relative', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
         {src && <img src={src} alt={book.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />}
+        <div className={cn(
+          'absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold border backdrop-blur-sm',
+          isAvailable
+            ? 'bg-emerald-500/85 text-white border-emerald-300/60'
+            : 'bg-rose-500/85 text-white border-rose-300/60'
+        )}>
+          {isAvailable ? 'Available' : 'Tidak tersedia'}
+        </div>
         <div className="absolute top-1.5 left-1.5 w-5 h-5 bg-black/55 backdrop-blur-sm rounded-full flex items-center justify-center">
           <span className="text-white/80 text-[9px] font-bold">{rank}</span>
         </div>
@@ -1527,6 +1571,7 @@ function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; 
           'bg-slate-300 text-slate-700', 
           'bg-amber-600 text-amber-100'
         ];
+        const isAvailable = b.available !== false;
 
         return (
           <Link key={b.key} href={`/book/${b.key}`} className="flex-shrink-0">
@@ -1563,6 +1608,15 @@ function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; 
                       <BookOpen className="w-6 h-6" />
                     </div>
                   )}
+                </div>
+
+                <div className={cn(
+                  'absolute top-1.5 right-1.5 z-10 px-1.5 py-0.5 rounded-full text-[9px] font-bold border backdrop-blur-sm',
+                  isAvailable
+                    ? 'bg-emerald-500/85 text-white border-emerald-300/60'
+                    : 'bg-rose-500/85 text-white border-rose-300/60'
+                )}>
+                  {isAvailable ? 'Available' : 'Tidak tersedia'}
                 </div>
               </div>
 
@@ -1658,7 +1712,7 @@ function GenreShelvesSection({
           <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
             {shelf.books.map((book) => (
               <Link key={`${shelf.id}-${book.key}`} href={`/book/${book.key}`} className="flex-shrink-0 w-28 group">
-                <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-sm transition-all group-hover:-translate-y-1', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
+                <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-sm transition-all group-hover:-translate-y-1 relative', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
                   {book.coverUrl ? (
                     <img src={book.coverUrl} alt={book.title} className="w-full h-full object-cover" loading="lazy" />
                   ) : (
@@ -1666,6 +1720,14 @@ function GenreShelvesSection({
                       <BookOpen className="w-5 h-5" />
                     </div>
                   )}
+                  <div className={cn(
+                    'absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold border backdrop-blur-sm',
+                    book.available !== false
+                      ? 'bg-emerald-500/85 text-white border-emerald-300/60'
+                      : 'bg-rose-500/85 text-white border-rose-300/60'
+                  )}>
+                    {book.available !== false ? 'Available' : 'Tidak tersedia'}
+                  </div>
                 </div>
                 <p className={cn('text-[11px] font-semibold mt-1.5 line-clamp-2', tk.text)}>{book.title}</p>
                 <p className={cn('text-[10px] line-clamp-1', tk.muted)}>{book.author}</p>
