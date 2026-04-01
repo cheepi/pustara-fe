@@ -1,31 +1,74 @@
 import { auth } from './firebase';
+import type { User } from 'firebase/auth';
 import type { AiRecommendation } from '@/types/ai';
 import { apiCaches } from './cache';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-// ── Auth helper ───────────────────────────────────────────────────────────────
-async function getAuthHeader(): Promise<Record<string, string>> {
-  return new Promise((resolve) => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
+const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
+let cachedAuthHeader: Record<string, string> | null = null;
+let cachedAuthUid: string | null = null;
+let cachedAuthAt = 0;
+
+function clearAuthCache() {
+  cachedAuthHeader = null;
+  cachedAuthUid = null;
+  cachedAuthAt = 0;
+}
+
+async function resolveCurrentUser(): Promise<User | null> {
+  if (auth.currentUser) return auth.currentUser;
+
+  return new Promise<User | null>((resolve) => {
+    const unsubscribe = auth.onAuthStateChanged((user) => {
       unsubscribe();
-      if (user) {
-        const token = await user.getIdToken();
-        resolve({ Authorization: `Bearer ${token}` });
-      } else {
-        resolve({});
-      }
+      resolve(user);
     });
   });
+}
+
+// ── Auth helper ───────────────────────────────────────────────────────────────
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const user = await resolveCurrentUser();
+  if (!user) {
+    clearAuthCache();
+    return {};
+  }
+
+  const now = Date.now();
+  if (cachedAuthHeader && cachedAuthUid === user.uid && (now - cachedAuthAt) < TOKEN_CACHE_TTL_MS) {
+    return cachedAuthHeader;
+  }
+
+  try {
+    const token = await user.getIdToken();
+    cachedAuthHeader = { Authorization: `Bearer ${token}` };
+    cachedAuthUid = user.uid;
+    cachedAuthAt = now;
+    return cachedAuthHeader;
+  } catch {
+    clearAuthCache();
+    return {};
+  }
 }
 
 async function getOptionalAuthHeader(): Promise<Record<string, string>> {
   const user = auth.currentUser;
   if (!user) return {};
+
+  const now = Date.now();
+  if (cachedAuthHeader && cachedAuthUid === user.uid && (now - cachedAuthAt) < TOKEN_CACHE_TTL_MS) {
+    return cachedAuthHeader;
+  }
+
   try {
     const token = await user.getIdToken();
-    return { Authorization: `Bearer ${token}` };
+    cachedAuthHeader = { Authorization: `Bearer ${token}` };
+    cachedAuthUid = user.uid;
+    cachedAuthAt = now;
+    return cachedAuthHeader;
   } catch {
+    clearAuthCache();
     return {};
   }
 }

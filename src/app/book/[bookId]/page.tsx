@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { useToast } from '@/components/feedback/ToastProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import ReviewModal from '@/components/shared/ReviewModal';
@@ -25,6 +26,7 @@ export default function BookDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { theme } = useTheme();
+  const { showToast } = useToast();
   const isLight = theme === 'light';
   const { user, loading: authLoading } = useAuth();
   const bookKey = params?.bookId as string;
@@ -32,6 +34,13 @@ export default function BookDetailPage() {
   const [loadingBook, setLoadingBook] = useState(true);
   const [relatedBooks, setRelatedBooks] = useState<BookDetail[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
+
+  useEffect(() => {
+    document.body.classList.add('panel-scroll-lock');
+    return () => {
+      document.body.classList.remove('panel-scroll-lock');
+    };
+  }, []);
 
   useEffect(() => {
     async function fetchBookDetail() {
@@ -96,8 +105,16 @@ export default function BookDetailPage() {
   const [wishlisted, setWishlisted] = useState(false);
   const [borrowed,   setBorrowed]   = useState(false);
   const [actionLoading, setActionLoading] = useState<'borrow' | 'wishlist' | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+
+  async function refreshBookSnapshot() {
+    if (!bookKey) return;
+    try {
+      const latest = await getBookById(bookKey);
+      if (latest) setBook(latest);
+    } catch {
+      // Keep existing UI snapshot when refresh fails.
+    }
+  }
 
   useEffect(() => {
     if (!book) return;
@@ -138,22 +155,25 @@ export default function BookDetailPage() {
       return;
     }
 
-    setActionError(null);
-    setActionMessage(null);
     setActionLoading('wishlist');
     try {
       if (wishlisted) {
         await removeSavedBookForMe(book.id);
         setWishlisted(false);
-        setActionMessage('Buku dihapus dari simpanan.');
+        showToast('Buku dihapus dari simpanan.', 'success');
       } else {
         await saveBookForMe(book.id);
         setWishlisted(true);
-        setActionMessage('Buku berhasil disimpan ke wishlist.');
+        showToast('Buku berhasil disimpan ke wishlist.', 'success');
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal memperbarui wishlist.';
-      setActionError(message.includes('401') ? 'Silakan login ulang untuk menyimpan buku.' : 'Gagal memperbarui wishlist. Coba lagi.');
+      showToast(
+        message.includes('401')
+          ? 'Silakan login ulang untuk menyimpan buku.'
+          : 'Gagal memperbarui wishlist. Coba lagi.',
+        'error'
+      );
     } finally {
       setActionLoading(null);
     }
@@ -181,22 +201,28 @@ export default function BookDetailPage() {
   async function handleConfirm() {
     if (!book) return;
 
-    setActionError(null);
-    setActionMessage(null);
     setActionLoading('borrow');
     try {
       await borrowBookForMe(book.id);
       setBorrowed(true);
+      setBook((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          available: Math.max(Number(prev.available || 0) - 1, 0),
+        };
+      });
       setModal('success');
-      setActionMessage('Peminjaman berhasil diproses.');
+      showToast('Peminjaman berhasil diproses.', 'success');
+      refreshBookSnapshot();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal meminjam buku.';
       if (message.includes('409')) {
-        setActionError('Buku sedang tidak tersedia. Silakan masuk antrean.');
+        showToast('Buku sedang tidak tersedia. Silakan masuk antrean.', 'error');
       } else if (message.includes('401')) {
-        setActionError('Sesi login berakhir. Silakan login kembali.');
+        showToast('Sesi login berakhir. Silakan login kembali.', 'error');
       } else {
-        setActionError('Gagal meminjam buku. Coba lagi sebentar.');
+        showToast('Gagal meminjam buku. Coba lagi sebentar.', 'error');
       }
       setModal('none');
     } finally {
@@ -232,26 +258,44 @@ export default function BookDetailPage() {
   };
 
   return (
-    <div className={cn('min-h-screen transition-colors duration-300', tk.bg)}>
+    <div className={cn('min-h-screen lg:h-screen flex flex-col transition-colors duration-300 overflow-x-hidden lg:overflow-hidden', tk.bg)}>
       <Navbar />
 
-      <main className="max-w-7xl mx-auto px-4 pt-6 pb-20">
+      <main className="max-w-7xl w-full mx-auto px-4 pt-6 pb-20 lg:pb-6 flex-1 min-h-0 lg:h-full overflow-y-auto overflow-x-hidden no-scrollbar lg:overflow-hidden flex flex-col">
 
-        <motion.button onClick={() => router.back()}
-          className={cn('flex items-center gap-1.5 text-sm font-medium mb-6 transition-colors', tk.muted, 'hover:text-gold')}
-          initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}>
-          <ArrowLeft className="w-4 h-4" /> Kembali
-        </motion.button>
-
-        <div className="lg:flex lg:gap-12 lg:items-start">
+        <div className="lg:flex lg:gap-12 lg:items-start lg:flex-1 lg:min-h-0 overflow-x-hidden">
 
           {/* LEFT — cover + actions */}
-          <motion.aside className="lg:w-[300px] lg:flex-shrink-0 lg:sticky lg:top-24 self-start"
+          <motion.aside className="lg:w-[300px] lg:flex-shrink-0 self-start lg:h-full lg:overflow-y-auto lg:no-scrollbar overflow-x-hidden"
             initial={{ opacity: 0, x: -24 }} animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.4 }}>
 
+            <motion.button
+              onClick={() => router.back()}
+              className={cn('lg:hidden inline-flex items-center gap-1.5 text-sm font-medium mb-5 transition-colors', tk.muted, 'hover:text-gold')}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+            >
+              <ArrowLeft className="w-4 h-4" /> Kembali
+            </motion.button>
+
             <div className="relative flex justify-center lg:justify-start mb-6 lg:mb-5">
-              <div className="relative">
+              <motion.button
+                onClick={() => router.back()}
+                className={cn(
+                  'hidden lg:inline-flex absolute top-2 left-2 z-20 items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border transition-colors',
+                  tk.muted,
+                  isLight
+                    ? 'bg-white/80 border-parchment-darker hover:text-gold hover:border-gold/40'
+                    : 'bg-navy-900/70 border-white/10 hover:text-gold hover:border-gold/40'
+                )}
+                initial={{ opacity: 0, x: -8 }}
+                animate={{ opacity: 1, x: 0 }}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" /> Kembali
+              </motion.button>
+
+              <div className="relative overflow-hidden rounded-3xl">
                 <div className="absolute inset-0 bg-gold/10 blur-2xl rounded-3xl scale-110 pointer-events-none" />
                 <div className="relative w-48 lg:w-full aspect-[2/3] rounded-2xl overflow-hidden shadow-2xl ring-1 ring-gold/20">
                   {src
@@ -362,17 +406,11 @@ export default function BookDetailPage() {
                 </motion.button>
               </div>
 
-              {actionMessage && (
-                <p className="text-xs text-emerald-600 text-center mt-1">{actionMessage}</p>
-              )}
-              {actionError && (
-                <p className="text-xs text-red-500 text-center mt-1">{actionError}</p>
-              )}
             </div>
           </motion.aside>
 
           {/* RIGHT — info */}
-          <motion.div className="flex-1 mt-8 lg:mt-0"
+          <motion.div className="flex-1 mt-8 lg:mt-0 lg:h-full lg:overflow-y-auto lg:no-scrollbar lg:pr-1"
             initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}>
 

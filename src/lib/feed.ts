@@ -132,6 +132,21 @@ function previousDateKey(dateKey: string | null): string | null {
   return toDateKey(date.toISOString());
 }
 
+function dateKeyToUtcDate(dateKey: string | null): Date | null {
+  if (!dateKey) return null;
+  const [year, month, day] = dateKey.split('-').map((value) => Number(value));
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function diffDays(latest: string, previous: string): number {
+  const a = dateKeyToUtcDate(latest);
+  const b = dateKeyToUtcDate(previous);
+  if (!a || !b) return Number.NaN;
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.round((a.getTime() - b.getTime()) / dayMs);
+}
+
 function pickProfileSubtitle(profile: unknown): string {
   if (!profile || typeof profile !== 'object') return 'Pembaca aktif';
   const source = profile as { bio?: unknown; status?: unknown; description?: unknown };
@@ -150,13 +165,20 @@ function calcStreakFromActivities(activities: BackendActivity[]): number {
 
   if (days.size === 0) return 0;
 
-  let streak = 0;
-  let cursorKey = toDateKey(new Date().toISOString());
+  const sortedDays = Array.from(days).sort((a, b) => {
+    const da = dateKeyToUtcDate(a);
+    const db = dateKeyToUtcDate(b);
+    return (db?.getTime() || 0) - (da?.getTime() || 0);
+  });
 
-  while (true) {
-    if (!cursorKey || !days.has(cursorKey)) break;
-    streak += 1;
-    cursorKey = previousDateKey(cursorKey);
+  let streak = 1;
+  for (let i = 1; i < sortedDays.length; i += 1) {
+    const diff = diffDays(sortedDays[i - 1], sortedDays[i]);
+    if (diff === 1) {
+      streak += 1;
+      continue;
+    }
+    break;
   }
 
   return streak;

@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="id" suppressHydrationWarning>
       <head />
-      <body>
+      <body className="min-h-screen overflow-x-hidden overflow-y-auto">
         <Script
           id="theme-script"
           strategy="beforeInteractive"
@@ -44,8 +44,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         />
         <ThemeProvider>
           <ToastProvider>
-            <AuthProvider>{children}</AuthProvider>
-            <FABGuard />
+            <div className="min-h-screen w-full flex flex-col">
+              <AuthProvider>{children}</AuthProvider>
+              <FABGuard />
+            </div>
           </ToastProvider>
         </ThemeProvider>
       </body>

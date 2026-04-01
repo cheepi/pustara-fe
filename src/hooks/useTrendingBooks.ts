@@ -1,6 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { fetchTrending, type TrendingBook } from '@/lib/api';
+import { getBookById } from '@/lib/books';
 import type { PopularBook } from '@/components/shared/PopularCarousel';
 import {
   batchFetchCovers,
@@ -37,12 +38,56 @@ export function useTrendingBooks(limit = 6) {
         }));
 
         const coverMap = await coverBatchCache.fetch(coverRequests);
+
+        const toPositiveInt = (value: unknown): number | undefined => {
+          const parsed = Number(value);
+          if (!Number.isFinite(parsed)) return undefined;
+          const normalized = Math.round(parsed);
+          return normalized > 0 ? normalized : undefined;
+        };
+
+        const toYearText = (value: unknown): string | undefined => {
+          if (value === null || value === undefined) return undefined;
+          const text = String(value).trim();
+          if (!text || text === '0') return undefined;
+          return text;
+        };
+
+        const missingMetaIds = trending
+          .filter((b) => !toYearText(b.year) || !toPositiveInt(b.pages))
+          .map((b) => String(b.book_id));
+
+        const fallbackById = new Map<string, { year?: string; pages?: number }>();
+        if (missingMetaIds.length > 0) {
+          const fallbackRows = await Promise.all(
+            missingMetaIds.map(async (id) => {
+              try {
+                const detail = await getBookById(id);
+                return [id, {
+                  year: toYearText(detail?.year),
+                  pages: toPositiveInt(detail?.pages ?? detail?.total_pages),
+                }] as const;
+              } catch {
+                return [id, {}] as const;
+              }
+            })
+          );
+
+          for (const [id, meta] of fallbackRows) {
+            fallbackById.set(id, meta);
+          }
+        }
+
         const converted: PopularBook[] = trending.map((b, i) => {
           const cover = getCoverFromMap(coverMap, b.title, b.authors);
           const coverIdRaw = cover?.coverId;
           const coverId = coverIdRaw !== null && coverIdRaw !== undefined
             ? Number(coverIdRaw)
             : undefined;
+          const fallbackMeta = fallbackById.get(String(b.book_id));
+          const resolvedYear = toYearText(b.year) || fallbackMeta?.year || '';
+          const resolvedPages = toPositiveInt(b.pages) || fallbackMeta?.pages;
+
           return {
             key: b.book_id,
             title: b.title,
@@ -54,8 +99,8 @@ export function useTrendingBooks(limit = 6) {
               b.description ||
               b.reason_primary ||
               `Trending di Pustara — rating ${b.avg_rating?.toFixed(1) ?? '?'}/5`,
-            year: b.year || '',
-            pages: b.pages || 0,
+            year: resolvedYear,
+            pages: resolvedPages,
             avgRating: b.avg_rating,
             rank: i + 1,
           };

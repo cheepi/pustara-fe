@@ -23,6 +23,21 @@ import {
 } from '@/lib/coverBatch';
 import { fetchFeedSidebarPayload } from '@/lib/feed';
 
+const REQUEST_BOOK_SUBJECT = encodeURIComponent('Request Buku Baru Pustara');
+const REQUEST_BOOK_BODY = encodeURIComponent(
+  'Halo Pustakrew!\n\nAku mau request buku baru dong buat di Pustara:\n\nJudul: \nPenulis: \n\nTengkyu!'
+);
+const EMAIL_ADMIN = (
+  process.env.NEXT_PUBLIC_EMAIL_ADMIN
+  || process.env.NEXT_PUBLIC_ADMIN_CONTACT_EMAIL
+  || ''
+).trim();
+const HAS_ADMIN_EMAIL = EMAIL_ADMIN.length > 0;
+const REQUEST_BOOK_MAILTO = HAS_ADMIN_EMAIL
+  ? `mailto:${EMAIL_ADMIN}?subject=${REQUEST_BOOK_SUBJECT}&body=${REQUEST_BOOK_BODY}`
+  : '';
+const PUSTAKREW_CONTACT_HREF = HAS_ADMIN_EMAIL ? REQUEST_BOOK_MAILTO : '/community';
+
 const coverUrl = (id?: number, s = 'M') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
 
@@ -262,7 +277,9 @@ export default function HomePage() {
                 })
               : (
                 <p className="text-sm px-1 py-8" style={{ color: 'var(--muted)' }}>
-                  Rekomendasi belum tersedia. Hubungi <Link href=" " target="_blank" rel="noopener noreferrer" className="text-gold hover:underline">@Pustakrew</Link> jika menurutmu ini tidak seharusnya terjadi.
+                  Rekomendasi belum tersedia. Hubungi{' '}
+                  <Link href={PUSTAKREW_CONTACT_HREF} className="text-gold hover:underline">@Pustakrew</Link>{' '}
+                  jika menurutmu ini tidak seharusnya terjadi.
                 </p>
               )
           }

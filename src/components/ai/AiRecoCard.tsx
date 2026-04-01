@@ -372,7 +372,7 @@ export default function AiRecoCard({ reco, index = 0, isLight, coverUrl: propCov
                       className="text-[10px] font-medium px-2 py-0.5 rounded-full mt-1 inline-block"
                       style={{ background: 'var(--surface2)', color: 'var(--muted)' }}
                     >
-                      {reco.phase} · Score: {hybridScorePct}%
+                      {reco.phase} · {reco.dominant_signal ? `Sinyal dominan: ${label}` : 'Sinyal dominan: -'}
                     </span>
                   </div>
                 </div>

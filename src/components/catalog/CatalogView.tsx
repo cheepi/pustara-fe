@@ -1,14 +1,16 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Sun, Moon, Medal, TrendingUp, X, SearchX } from 'lucide-react';
+import { Search, Sun, Moon, Medal, TrendingUp, X, SearchX, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import { CTASection } from './CTASection';
 import PopularCarousel, { PopularBook } from '@/components/shared/PopularCarousel';
+import { GenreShelfSection } from '@/components/shared/GenreShelfSection';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import Link from 'next/link';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
+import { useGenreShelves } from '@/hooks/useGenreShelves';
 import { fetchBrowseBooks, fetchTopPustakrew } from '@/lib/browse';
 import { BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';
 import type { BrowseBook } from '@/types/browse';
@@ -16,26 +18,6 @@ import type { BrowseBook } from '@/types/browse';
 // ── Types & constants ──────────────────────────────────────────────────────────
 const coverUrl = (id?: number, s = 'M') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
-
-const GENRE_QUERIES: Record<string, string> = {
-  trending:   'subject:fiction&sort=rating',
-  fiction:    'subject:fiction',
-  history:    'subject:history',
-  science:    'subject:science',
-  philosophy: 'subject:philosophy',
-  biography:  'subject:biography',
-  romance:    'subject:romance',
-};
-
-const GENRES = [
-  { id: 'trending',   label: 'Terpopuler', emoji: '🔥' },
-  { id: 'fiction',    label: 'Fiksi',      emoji: '📖' },
-  { id: 'history',    label: 'Sejarah',    emoji: '🏛️' },
-  { id: 'science',    label: 'Sains',      emoji: '🔬' },
-  { id: 'philosophy', label: 'Filsafat',   emoji: '🧠' },
-  { id: 'biography',  label: 'Biografi',   emoji: '👤' },
-  { id: 'romance',    label: 'Romansa',    emoji: '💕' },
-];
 
 const RANK_STYLE = [
   { badge: 'bg-yellow-400 text-yellow-900', ring: 'ring-yellow-400/40', z: 'z-30', label: '#1' },
@@ -48,14 +30,18 @@ export default function CatalogView() {
   const { theme, toggle } = useTheme();
   const dark = theme === 'dark';
 
-  const [genre, setGenre]     = useState('trending');
   const [books, setBooks]     = useState<BrowseBook[]>([]);
   const [top3, setTop3]       = useState<BrowseBook[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [search, setSearch]   = useState('');
   const [timer, setTimer]     = useState<ReturnType<typeof setTimeout>>();
 
   const { books: popularBooks, loading: popularLoading } = useTrendingBooks(6);
+  const {
+    shelves: genreShelves,
+    loading: genreShelvesLoading,
+    error: genreShelvesError,
+  } = useGenreShelves({ targetGenres: ['Coming-of-age', 'Misteri', 'Drama', 'Fiksi', 'Sejarah', 'Romance', 'Non-fiksi'], booksLimit: 10 });
   const popularFallbackBooks: PopularBook[] = BROWSE_POPULAR_BOOKS.map((b) => ({
     key: b.key,
     title: b.title,
@@ -93,26 +79,20 @@ export default function CatalogView() {
     fetchTopPustakrew(3).then(setTop3).catch(() => setTop3([]));
   }, []);
 
-  // ── Load by genre ──
-  const load = useCallback(async (g: string) => {
-    setLoading(true);
-    const query = GENRE_QUERIES[g] || `subject:${g}`;
-    try { setBooks(await fetchBrowseBooks(query)); }
-    catch { setBooks([]); }
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { load(genre); }, [genre, load]);
-
   // ── Debounced search ──
   function handleSearch(q: string) {
     setSearch(q);
     clearTimeout(timer);
-    if (!q) { load(genre); return; }
+    if (!q.trim()) {
+      setBooks([]);
+      setLoading(false);
+      return;
+    }
+    // Show skeleton immediately while waiting for debounced request.
+    setLoading(true);
     const t = setTimeout(async () => {
-      setLoading(true);
       try {
-        setBooks(await fetchBrowseBooks(q));
+        setBooks(await fetchBrowseBooks(q.trim()));
       } finally { setLoading(false); }
     }, 450);
     setTimer(t);
@@ -121,7 +101,8 @@ export default function CatalogView() {
   // const sectionLabel = search
   //   ? `Hasil "${search}"`
   //   : GENRES.find(g => g.id === genre)?.label ?? '';
- const sectionLabel = `${search ? `Hasil untuk "${search}"` :''}`;
+  const hasSearched = search.trim().length > 0;
+  const sectionLabel = hasSearched ? `Hasil untuk "${search.trim()}"` : '';
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
       <Navbar />
@@ -255,14 +236,13 @@ export default function CatalogView() {
         </div>
         <PopularCarousel books={popularBooksForCarousel} isLight={!dark} />
       </section>
-
       {/* ══════════════════════════════════════════
           SEARCH + GENRE FILTER
       ══════════════════════════════════════════ */}
-      <section className="max-w-7xl mx-auto px-4 mt-10">
+      <section className="max-w-7xl mx-auto px-4 mt-8">
         <div className="mb-4">
-          <h2 className={cn('font-serif text-2xl font-black mb-1', tk.text)}>Katalog Buku</h2>
-          <p className={cn('text-sm', tk.muted)}>Temukan buku yang kamu cari</p>
+          <h2 className={cn('font-serif text-2xl font-black mb-1', tk.text)}>Cari Buku</h2>
+          <p className={cn('text-sm', tk.muted)}>Lihat apakah buku yang kamu cari ada di Pustara</p>
         </div>
 
         {/* Search bar */}
@@ -279,31 +259,20 @@ export default function CatalogView() {
           />
           {search && (
             <button
-              onClick={() => { setSearch(''); load(genre); }}
+              onClick={() => {
+                setSearch('');
+                setBooks([]);
+                setLoading(false);
+                clearTimeout(timer);
+              }}
               className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors">
               <X className="w-4 h-4" />
             </button>
           )}
         </div>
-
-        {/* Genre chips
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-5" style={{ scrollbarWidth: 'none' }}>
-          {GENRES.map(g => (
-            <button key={g.id}
-              onClick={() => { setGenre(g.id); setSearch(''); }}
-              className={cn(
-                'flex-shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold transition-all border',
-                genre === g.id && !search ? tk.chipActive : tk.chip
-              )}>
-              <span>{g.emoji}</span> {g.label}
-            </button>
-          ))}
-        </div> */}
       </section>
 
-      {/* ══════════════════════════════════════════
-          BOOKS GRID
-      ══════════════════════════════════════════ */}
+      {hasSearched && (
       <section className="max-w-7xl mx-auto px-4 pb-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className={cn('font-serif text-lg font-bold')}>
@@ -336,7 +305,7 @@ export default function CatalogView() {
               <p className="text-sm mt-1">Coba kata kunci yang berbeda</p>
             </motion.div>
           ) : (
-            <motion.div key={`grid-${genre}-${search}`}
+            <motion.div key={`grid-${search}`}
               className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 xl:grid-cols-10 gap-3 lg:gap-4"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
               {books.map((b, i) => (
@@ -345,6 +314,21 @@ export default function CatalogView() {
             </motion.div>
           )}
         </AnimatePresence>
+      </section>
+      )}
+
+      <section className="max-w-7xl mx-auto px-4 mt-10">
+        <div className="flex items-center gap-2 mb-3">
+          <Sparkles className="w-4 h-4 text-gold" />
+          <h2 className={cn('font-serif text-lg font-bold', tk.text)}>Kurasi Berdasarkan Genre</h2>
+        </div>
+        <GenreShelfSection
+          dark={dark}
+          tk={tk}
+          shelves={genreShelves}
+          loading={genreShelvesLoading}
+          error={genreShelvesError}
+        />
       </section>
 
       {/* ══════════════════════════════════════════
