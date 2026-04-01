@@ -12,6 +12,12 @@ export interface UpdateMyProfilePayload {
   preferred_genres?: string[];
 }
 
+export interface UsernameAvailabilityResult {
+  available: boolean;
+  normalizedUsername: string;
+  message: string;
+}
+
 async function getOptionalAuthHeader(): Promise<Record<string, string>> {
   const user = auth.currentUser;
   if (!user) return {};
@@ -279,5 +285,59 @@ export async function updateMyProfile(payload: UpdateMyProfilePayload): Promise<
   } catch (err) {
     console.warn('[users] updateMyProfile gagal:', err);
     return null;
+  }
+}
+
+export async function checkUsernameAvailability(input: string): Promise<UsernameAvailabilityResult> {
+  const normalizedUsername = String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_\-\s.]/g, ' ')
+    .replace(/[.\-\s]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  if (!normalizedUsername) {
+    return {
+      available: false,
+      normalizedUsername: '',
+      message: 'Nama pengguna wajib diisi.',
+    };
+  }
+
+  if (normalizedUsername.length < 3 || normalizedUsername.length > 24) {
+    return {
+      available: false,
+      normalizedUsername,
+      message: 'Nama pengguna harus 3-24 karakter.',
+    };
+  }
+
+  try {
+    const params = new URLSearchParams({ username: normalizedUsername });
+    const res = await fetch(`${API_URL}/users/username-availability?${params.toString()}`, {
+      cache: 'no-store',
+    });
+    const payload = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      return {
+        available: false,
+        normalizedUsername,
+        message: String(payload?.message || 'Gagal memeriksa username.'),
+      };
+    }
+
+    return {
+      available: Boolean(payload?.available),
+      normalizedUsername: String(payload?.username || normalizedUsername),
+      message: String(payload?.message || ''),
+    };
+  } catch {
+    return {
+      available: false,
+      normalizedUsername,
+      message: 'Koneksi bermasalah. Coba lagi.',
+    };
   }
 }

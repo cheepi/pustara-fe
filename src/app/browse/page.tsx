@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef, type ComponentType } from 'react';
+import { useState, useEffect, useMemo, useRef, type ComponentType } from 'react';
 import { useSearchParams, useRouter, usePathname, ReadonlyURLSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Medal, Star, BookOpen, ArrowRight, X, Calendar, 
@@ -23,6 +23,9 @@ import { fetchTopPustakrew } from '@/lib/browse';
 import type { BrowseBook } from '@/types/browse';
 import { BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';
 import { getBooks, getGenres, searchBooks } from '@/lib/books';
+import { useTrendingBooks } from '@/hooks/useTrendingBooks';
+import { useGenreShelves } from '@/hooks/useGenreShelves';
+import { GenreShelfSection } from '@/components/shared/GenreShelfSection';
 import { JSX } from 'react/jsx-runtime';
 import { Suspense } from 'react';
 
@@ -135,12 +138,6 @@ function mapToBrowseBook(book: Record<string, unknown>): BrowseBook {
     desc: String(book.description ?? ''),
   };
 }
-
-type GenreShelf = {
-  id: string;
-  label: string;
-  books: BrowseBook[];
-};
 
 const RANK_STYLE = [
   {
@@ -363,10 +360,26 @@ function BrowseContent() {
   const [error,      setError]      = useState<string | null>(null);
   const [searched,   setSearched]   = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
-  const [popularBooks, setPopularBooks] = useState<BrowseBook[]>(BROWSE_POPULAR_BOOKS);
-  const [popularLoading, setPopularLoading] = useState(true);
-  const [genreShelves, setGenreShelves] = useState<GenreShelf[]>([]);
-  const [genreShelvesLoading, setGenreShelvesLoading] = useState(false);
+  const { books: trendingPopularBooks, loading: popularLoading } = useTrendingBooks(12);
+  const popularBooks = useMemo<BrowseBook[]>(() => {
+    return trendingPopularBooks.map((book) => ({
+      key: String(book.key ?? ''),
+      title: String(book.title ?? ''),
+      author: String(book.author ?? 'Unknown'),
+      coverUrl: String(book.coverUrl ?? ''),
+      available: true,
+      genres: Array.isArray(book.genre) ? book.genre : [],
+      rating: Number(book.avgRating ?? 0),
+      year: book.year ? Number(book.year) || undefined : undefined,
+      pages: Number(book.pages ?? 0) || undefined,
+      desc: String(book.desc ?? ''),
+    }));
+  }, [trendingPopularBooks]);
+  const {
+    shelves: genreShelves,
+    loading: genreShelvesLoading,
+    error: genreShelvesError,
+  } = useGenreShelves({ limit: 16, booksLimit: 8 });
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -439,84 +452,6 @@ function BrowseContent() {
 
     return () => {
       mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (categories.length === 0) {
-      setGenreShelves([]);
-      return;
-    }
-
-    let active = true;
-    setGenreShelvesLoading(true);
-
-    const curated = categories.slice(0, 4);
-    Promise.all(
-      curated.map(async (category) => {
-        const result = await getBooks({ genre: category.query, page: 1, limit: 8 });
-        const mapped = result.data.map((item) => mapToBrowseBook(item as unknown as Record<string, unknown>));
-        return {
-          id: category.id,
-          label: category.label,
-          books: mapped,
-        } as GenreShelf;
-      })
-    )
-      .then((shelves) => {
-        if (!active) return;
-        setGenreShelves(shelves.filter((shelf) => shelf.books.length > 0));
-      })
-      .catch(() => {
-        if (!active) return;
-        setGenreShelves([]);
-      })
-      .finally(() => {
-        if (!active) return;
-        setGenreShelvesLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [categories]);
-
-  useEffect(() => {
-    let active = true;
-    setPopularLoading(true);
-    getBooks({ page: 1, limit: 12, sort: 'avg_rating', order: 'DESC' })
-      .then((result) => {
-        if (!active) return;
-        const mapped = result.data
-          .filter((item) => item.id && item.title)
-          .map((item) => ({
-            key: item.id,
-            title: item.title,
-            author: Array.isArray(item.authors) ? item.authors.join(', ') : 'Unknown',
-            coverUrl: item.cover_url || undefined,
-            available: Number(item.available ?? 0) > 0,
-            availableCount: Number(item.available ?? 0),
-            totalStock: Number(item.total_stock ?? 0),
-            genres: Array.isArray(item.genres) ? item.genres : [],
-            rating: Number(item.avg_rating || 0),
-            year: item.year ? Number(item.year) : undefined,
-            pages: item.pages || undefined,
-            desc: item.description || '',
-          } as BrowseBook));
-
-        setPopularBooks(mapped.length > 0 ? mapped : BROWSE_POPULAR_BOOKS);
-      })
-      .catch(() => {
-        if (!active) return;
-        setPopularBooks(BROWSE_POPULAR_BOOKS);
-      })
-      .finally(() => {
-        if (!active) return;
-        setPopularLoading(false);
-      });
-
-    return () => {
-      active = false;
     };
   }, []);
 
@@ -1378,11 +1313,12 @@ function BrowseContent() {
                 <h2 className={cn('font-serif text-lg font-bold', tk.text)}>Kurasi Berdasarkan Genre</h2>
               </div>
             </div>
-            <GenreShelvesSection
+            <GenreShelfSection
               dark={dark}
               tk={tk}
               shelves={genreShelves}
               loading={genreShelvesLoading}
+              error={genreShelvesError}
             />
           </motion.section>
         )}
@@ -1556,7 +1492,15 @@ function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; 
     );
   }
 
-  const items = books.length > 0 ? books : BROWSE_POPULAR_BOOKS;
+  const items = books;
+
+  if (items.length === 0) {
+    return (
+      <div className={cn('rounded-2xl border p-4 text-sm', dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker', tk.muted)}>
+        Belum ada bacaan populer saat ini.
+      </div>
+    );
+  }
   
   return (
     <div className="flex gap-4 px-4 -mx-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -1647,102 +1591,6 @@ function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; 
     </div>
   );
 }
-function GenreShelvesSection({
-  dark,
-  tk,
-  shelves,
-  loading,
-}: {
-  dark: boolean;
-  tk: any;
-  shelves: GenreShelf[];
-  loading: boolean;
-}) {
-  if (loading) {
-    return (
-      <div className="space-y-5">
-        {Array(3).fill(0).map((_, idx) => (
-          <div
-            key={idx}
-            className={cn(
-              'p-4 rounded-2xl border animate-pulse',
-              dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker'
-            )}
-          >
-            <div className={cn('h-4 w-40 rounded mb-3', dark ? 'bg-white/10' : 'bg-slate-200')} />
-            <div className="flex gap-3">
-              {Array(5).fill(0).map((__, cardIdx) => (
-                <div key={cardIdx} className={cn('w-28 h-40 rounded-xl', dark ? 'bg-white/10' : 'bg-slate-200')} />
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (shelves.length === 0) {
-    return (
-      <div className={cn('rounded-2xl border p-4 text-sm', dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker', tk.muted)}>
-        Kurasi genre belum tersedia.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-5">
-      {shelves.map((shelf, shelfIdx) => (
-        <motion.div
-          key={shelf.id}
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: shelfIdx * 0.05 }}
-          className={cn('rounded-2xl border p-4', dark ? 'bg-navy-800/40 border-white/6' : 'bg-white border-parchment-darker')}
-        >
-          <div className="flex items-center justify-between mb-3">
-            <h3 className={cn('font-serif text-base font-bold', tk.text)}>{shelf.label}</h3>
-            <button
-              type="button"
-              onClick={() => window.location.href = `/browse?q=${encodeURIComponent(shelf.label)}`}
-              className={cn('text-xs font-semibold text-gold hover:underline')}
-            >
-              Lihat semua →
-            </button>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-            {shelf.books.map((book) => (
-              <Link key={`${shelf.id}-${book.key}`} href={`/book/${book.key}`} className="flex-shrink-0 w-28 group">
-                <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-sm transition-all group-hover:-translate-y-1 relative', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
-                  {book.coverUrl ? (
-                    <img src={book.coverUrl} alt={book.title} className="w-full h-full object-cover" loading="lazy" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center opacity-50">
-                      <BookOpen className="w-5 h-5" />
-                    </div>
-                  )}
-                  <div className={cn(
-                    'absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold border backdrop-blur-sm',
-                    book.available !== false
-                      ? 'bg-emerald-500/85 text-white border-emerald-300/60'
-                      : 'bg-rose-500/85 text-white border-rose-300/60'
-                  )}>
-                    {book.available !== false ? 'Available' : 'Tidak tersedia'}
-                  </div>
-                </div>
-                <p className={cn('text-[11px] font-semibold mt-1.5 line-clamp-2', tk.text)}>{book.title}</p>
-                <p className={cn('text-[10px] line-clamp-1', tk.muted)}>{book.author}</p>
-              </Link>
-            ))}
-            {shelf.books.length === 0 && (
-              <p className={cn('text-xs', tk.muted)}>Belum ada buku pada kurasi ini.</p>
-            )}
-          </div>
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
 export default function BrowsePage() {
   return (
     <Suspense fallback={<PageSkeleton />}>

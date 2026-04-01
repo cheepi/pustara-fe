@@ -63,7 +63,7 @@ export default function LoginPage() {
 
       if (!precheck.ok) {
         const payload = await precheck.json().catch(() => ({}));
-        setError(payload?.error || 'Verifikasi login gagal.');
+        setError(resolveFriendlyAuthError(payload?.error || payload?.message || 'Verifikasi login gagal.'));
         resetCaptcha();
         return;
       }
@@ -73,7 +73,7 @@ export default function LoginPage() {
       const needPersonalization = await shouldGoToPersonalization(token);
       router.replace(needPersonalization ? '/auth/personalization' : '/');
     } catch (err: any) {
-      setError(friendlyError(err.code));
+      setError(resolveFriendlyAuthError(err?.code || err?.message || 'Terjadi kesalahan saat masuk.'));
       resetCaptcha();
     }
     finally { setLoading(false); }
@@ -92,7 +92,7 @@ export default function LoginPage() {
       const needPersonalization = await shouldGoToPersonalization(token);
       router.replace(isNew || needPersonalization ? '/auth/personalization' : '/');
     } catch (err: any) {
-      setError(friendlyError(err.code));
+      setError(resolveFriendlyAuthError(err?.code || err?.message || 'Terjadi kesalahan saat masuk dengan Google.'));
       resetCaptcha();
     }
     finally { setLoading(false); }
@@ -370,15 +370,35 @@ function GoogleIcon() {
   );
 }
 
-function friendlyError(code: string) {
-  const m: Record<string,string> = {
-    'auth/user-not-found':    'Email tidak terdaftar.',
-    'auth/wrong-password':    'Kata sandi salah.',
-    'auth/invalid-email':     'Format email tidak valid.',
+function resolveFriendlyAuthError(input: unknown): string {
+  const raw = String(input ?? '').trim();
+  if (!raw) return 'Terjadi kesalahan. Coba lagi.';
+
+  const normalized = raw.toLowerCase();
+  const compact = normalized.replace(/[\s-]+/g, '_');
+
+  const map: Record<string, string> = {
+    'auth/user-not-found': 'Email tidak terdaftar.',
+    'auth/wrong-password': 'Kata sandi salah.',
+    'auth/invalid-email': 'Format email tidak valid.',
     'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi nanti.',
-    'auth/invalid-credential':'Email atau kata sandi salah.',
+    'auth/invalid-credential': 'Email atau kata sandi salah.',
+    'invalid_login_credentials': 'Email atau kata sandi salah.',
+    'invalid_login_credential': 'Email atau kata sandi salah.',
+    'invalid_login_cred': 'Email atau kata sandi salah.',
+    'invalid_credential': 'Email atau kata sandi salah.',
+    'wrong_password': 'Kata sandi salah.',
+    'email_not_found': 'Email tidak terdaftar.',
+    'user_not_found': 'Email tidak terdaftar.',
+    'too_many_attempts_try_later': 'Terlalu banyak percobaan. Coba lagi nanti.',
   };
-  return m[code] || 'Terjadi kesalahan. Coba lagi.';
+
+  if (map[normalized]) return map[normalized];
+  if (map[compact]) return map[compact];
+  if (normalized.includes('invalid_login_cred')) return 'Email atau kata sandi salah.';
+  if (normalized.includes('invalid credential')) return 'Email atau kata sandi salah.';
+
+  return 'Terjadi kesalahan saat masuk. Coba lagi.';
 }
 
 

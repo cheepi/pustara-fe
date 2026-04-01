@@ -111,7 +111,7 @@ export default function Navbar() {
     <>
       <header className="fixed top-0 left-0 right-0 z-50 pointer-events-none">
         <div
-          className="pointer-events-auto ml-6 mr-3 mt-3 rounded-2xl lg:max-w-7xl lg:ml-[5vw] lg:mr-3 border"
+          className="pointer-events-auto mx-3 mt-3 rounded-2xl lg:max-w-7xl lg:mx-auto border"
           style={{
             backdropFilter:       'blur(20px)',
             WebkitBackdropFilter: 'blur(20px)',

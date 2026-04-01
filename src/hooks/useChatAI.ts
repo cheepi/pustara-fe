@@ -37,7 +37,19 @@ export function useChatAI() {
       return;
     }
 
-    addChatMessage({ role: 'user', content: trimmedInput, timestamp: Date.now() });
+    const attachedBook = context?.attachedBook
+      ? {
+          title: String(context.attachedBook.title || '').trim(),
+          description: String(context.attachedBook.description || '').trim(),
+        }
+      : undefined;
+
+    addChatMessage({
+      role: 'user',
+      content: trimmedInput,
+      attachedBook: attachedBook?.title ? attachedBook : undefined,
+      timestamp: Date.now(),
+    });
     setChatLoading(true);
 
     try {

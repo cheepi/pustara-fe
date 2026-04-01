@@ -1,12 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { signInWithEmailAndPassword, signInWithPopup, updateProfile } from 'firebase/auth';
 import { auth, googleProvider } from '@/lib/firebase';
-import { updateMyProfile } from '@/lib/users';
-import { Eye, EyeOff, Mail, Lock, User, Star } from 'lucide-react';
+import { checkUsernameAvailability, updateMyProfile } from '@/lib/users';
+import { Check, Eye, EyeOff, Mail, Lock, User, Star, X } from 'lucide-react';
 import Wordmark from '@/components/icons/Wordmark';
 import ComboLogo from '@/components/icons/ComboLogo';
 import { cn } from '@/lib/utils';
@@ -44,7 +44,57 @@ export default function RegisterPage() {
   const [showCf, setShowCf]     = useState(false);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'available' | 'unavailable'>('idle');
+  const [usernameHint, setUsernameHint] = useState('');
+  const usernameCheckCache = useRef<Map<string, { available: boolean; message: string }>>(new Map());
+  const usernameCheckSeq = useRef(0);
   const { token: captchaToken, error: captchaError, captchaRef, reset: resetCaptcha } = useCaptcha();
+
+  useEffect(() => {
+    const normalized = username
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_\-\s.]/g, ' ')
+      .replace(/[.\-\s]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    if (!normalized) {
+      setUsernameStatus('idle');
+      setUsernameHint('');
+      return;
+    }
+
+    if (normalized.length < 3 || normalized.length > 24) {
+      setUsernameStatus('unavailable');
+      setUsernameHint('Nama pengguna harus 3-24 karakter.');
+      return;
+    }
+
+    const cached = usernameCheckCache.current.get(normalized);
+    if (cached) {
+      setUsernameStatus(cached.available ? 'available' : 'unavailable');
+      setUsernameHint(cached.message);
+      return;
+    }
+
+    setUsernameStatus('checking');
+    const seq = ++usernameCheckSeq.current;
+    const timer = window.setTimeout(async () => {
+      const result = await checkUsernameAvailability(normalized);
+      if (seq !== usernameCheckSeq.current) return;
+      usernameCheckCache.current.set(result.normalizedUsername || normalized, {
+        available: result.available,
+        message: result.message,
+      });
+      setUsernameStatus(result.available ? 'available' : 'unavailable');
+      setUsernameHint(result.message);
+    }, 350);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [username]);
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +102,9 @@ export default function RegisterPage() {
     if (!captchaToken) { setError('Verifikasi CAPTCHA diperlukan sebelum mendaftar.'); return; }
     if (!username.trim()) { setError('Nama pengguna wajib diisi.'); return; }
     if (username.trim().length < 3) { setError('Nama pengguna minimal 3 karakter.'); return; }
+    if (username.trim().length > 24) { setError('Nama pengguna maksimal 24 karakter.'); return; }
+    if (usernameStatus === 'checking') { setError('Sedang memeriksa ketersediaan username...'); return; }
+    if (usernameStatus === 'unavailable') { setError(usernameHint || 'Username tidak tersedia.'); return; }
     if (password !== confirm) { setError('Kata sandi tidak cocok.'); return; }
     if (password.length < 6)  { setError('Kata sandi minimal 6 karakter.'); return; }
     setLoading(true);
@@ -132,9 +185,27 @@ export default function RegisterPage() {
   );
 
   const iconCls = isLight ? 'text-slate-400' : 'text-white/30';
+  const normalizedUsername = username
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_\-\s.]/g, ' ')
+    .replace(/[.\-\s]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  const isUsernameLengthInvalid = normalizedUsername.length > 0 && (normalizedUsername.length < 3 || normalizedUsername.length > 24);
+  const isFormReady = Boolean(
+    name.trim() &&
+    email.trim() &&
+    password.length >= 6 &&
+    confirm.length >= 6 &&
+    password === confirm &&
+    captchaToken &&
+    usernameStatus === 'available' &&
+    !isUsernameLengthInvalid
+  );
 
   return (
-    <main className="min-h-screen flex">
+    <main className="h-full min-h-0 flex overflow-y-auto no-scrollbar">
 
       {/* ══ DESKTOP LEFT PANEL ══ */}
       <div className="hidden lg:flex flex-col w-[55%] bg-navy-900 relative overflow-hidden p-12">
@@ -265,11 +336,27 @@ export default function RegisterPage() {
                   value={username}
                   onChange={e => setUsername(e.target.value)}
                   placeholder="Nama Pengguna (min. 3 karakter)"
-                  className={inputBase}
+                  className={cn(inputBase, 'pr-10')}
                   minLength={3}
+                  maxLength={24}
                   required
                 />
+                {usernameStatus === 'available' && (
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-emerald-500">
+                    <Check className="w-4 h-4" />
+                  </span>
+                )}
+                {usernameStatus === 'unavailable' && (
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-red-500">
+                    <X className="w-4 h-4" />
+                  </span>
+                )}
               </div>
+              {isUsernameLengthInvalid && (
+                <p className={cn('text-xs -mt-1', isLight ? 'text-amber-700' : 'text-amber-300')}>
+                  Nama pengguna harus 3-24 karakter.
+                </p>
+              )}
 
               <div className="relative">
                 <Mail className={cn('absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4', iconCls)} />
@@ -301,7 +388,7 @@ export default function RegisterPage() {
                 </button>
               </div>
 
-              <button type="submit" disabled={loading}
+              <button type="submit" disabled={loading || !isFormReady}
                 className="w-full py-3.5 bg-navy-700 text-white rounded-xl font-semibold text-sm
                            hover:bg-navy-600 active:scale-[0.98] transition-all disabled:opacity-60 mt-1">
                 {loading ? 'Mendaftar...' : 'Daftar'}

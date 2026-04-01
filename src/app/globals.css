@@ -38,6 +38,11 @@
 @layer base {
   * { box-sizing: border-box; }
 
+  html,
+  body {
+    height: 100%;
+  }
+
   body {
     background-color: var(--bg);
     color: var(--text);
@@ -53,6 +58,17 @@
   .scrollbar-gold::-webkit-scrollbar-track { background: transparent; }
   .scrollbar-gold::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 999px; }
   .scrollbar-gold::-webkit-scrollbar-thumb:hover { background: rgba(201,168,76,0.6); }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+  }
 }
 
 /* ══════════════════════════════════════════
@@ -123,4 +139,11 @@
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(201, 168, 76, 0.2);
+}
+
+@media (min-width: 1024px) {
+  body.panel-scroll-lock {
+    overflow: hidden !important;
+    height: 100dvh;
+  }
 }

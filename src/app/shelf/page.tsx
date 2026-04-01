@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence, useSpring, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useSpring, useTransform, hover } from 'framer-motion';
 import {
   BookOpen, Heart, Clock, CheckCircle, BookMarked,
   ChevronRight, Trash2, RotateCcw, Play, Calendar,
@@ -143,6 +143,7 @@ interface SpineProps {
 
 function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false, isSelected, isNew, index, posture, stackCount, lyingThickness = 'normal', onCompanionClick, onClick }: SpineProps) {
   const { rotateX, rotateY, onMouseMove, onMouseLeave } = useBookTilt();
+  const [companionHovered, setCompanionHovered] = useState(false);
   const src = coverUrl(book.coverId, book.coverUrl);
   const bg = spineColor(book.key);
   const spineW = 28 + (book.title.length % 10);
@@ -188,14 +189,20 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
           : (layerIndex + 1) * 2;
 
         return (
-          <div
+          <motion.div
             key={`${book.key}-stack-${layerIndex}`}
             className={cn(
-              'absolute rounded-r-sm rounded-l-[3px] shadow-md overflow-hidden',
+              'absolute rounded-r-sm rounded-l-[3px] shadow-md overflow-hidden pointer-events-none',
               isCompanionLayer ? 'z-30' : 'z-[1]',
               isCompanionLayer ? 'opacity-100' : 'opacity-70',
               isLying ? 'left-1.5' : 'h-[120px]'
             )}
+            animate={
+              isCompanionLayer && (companionHovered || companionSelected)
+                ? { y: hoverLiftY, scale: hoverScale }
+                : { y: 0, scale: 1 }
+            }
+            transition={{ type: 'spring', stiffness: 320, damping: 26 }}
             style={{
               height: isLying ? lyingHeight : 120,
               width: isLying ? lyingWidth : spineW,
@@ -208,7 +215,7 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
             }}
           >
             {layerSrc && (
-              <div className="absolute inset-0 flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                 <span
                   className="text-white/90 font-semibold text-[10px] leading-tight px-1 z-10"
                   style={{
@@ -244,7 +251,7 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
                 />
               </div>
             )}
-          </div>
+          </motion.div>
         );
       })}
 
@@ -253,13 +260,26 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
           type="button"
           aria-label={`Lihat detail ${stackedCompanion?.title || 'buku'}`}
           className={cn(
-            'absolute left-[6px] w-[124px] h-[14px] rounded-t-sm z-20',
+            'absolute rounded-r-sm rounded-l-[3px] z-40',
             'bg-transparent cursor-pointer',
             companionSelected && 'ring-2 ring-gold/70'
           )}
-          style={{ bottom: lyingHeight + 14 }}
-          whileHover={{ y: -5, scale: 1.02 }}
+          style={{
+            left: 6,
+            bottom: 38,
+            width: lyingWidth,
+            height: lyingHeight,
+          }}
+          animate={
+            companionHovered || companionSelected
+              ? { y: hoverLiftY, scale: hoverScale }
+              : { y: 0, scale: 1 }
+          }
+          transition={{ type: 'spring', stiffness: 320, damping: 26 }}
+          whileHover={{ y: hoverLiftY, scale: hoverScale }}
           whileTap={{ scale: 0.995 }}
+          onHoverStart={() => setCompanionHovered(true)}
+          onHoverEnd={() => setCompanionHovered(false)}
           onClick={(event) => {
             event.stopPropagation();
             onCompanionClick?.();
@@ -274,9 +294,15 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
           'relative z-10 rounded-r-sm rounded-l-[3px] overflow-hidden',
           isLying ? 'ml-1.5' : 'h-[120px]',
           'shadow-lg transition-shadow duration-300',
-          isSelected && 'ring-2 ring-gold ring-offset-2'
+          isSelected && 'ring-2 ring-gold ring-offset-2',
         )}
-        animate={isSelected ? { y: -10, rotate: baseSkew } : { y: verticalNudge, rotate: baseSkew }}
+        animate={
+          hasCompanionStack
+            ? { y: verticalNudge, rotate: baseSkew }
+            : isSelected
+              ? { y: -10, rotate: baseSkew }
+              : { y: verticalNudge, rotate: baseSkew }
+        }
         style={{
           rotateX,
           rotateY,
@@ -884,7 +910,7 @@ export default function RakBukuPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.05 + i * 0.04 }}
-              whileHover={{ y: -2 }}
+              whileHover={{ y: -0 }}
             >
               <div className="sm:hidden w-full flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5 min-w-0">

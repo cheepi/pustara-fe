@@ -111,9 +111,9 @@ function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark:
         )}
         <div className="flex-1 min-w-0">
           {actorProfileHref ? (
-            <Link href={actorProfileHref} className={cn('text-sm font-semibold hover:text-gold transition-colors', tk.text)}>{item.user}</Link>
+            <Link href={actorProfileHref} className={cn('text-sm font-semibold hover:text-gold transition-colors block truncate', tk.text)}>{item.user}</Link>
           ) : (
-            <p className={cn('text-sm font-semibold', tk.text)}>{item.user}</p>
+            <p className={cn('text-sm font-semibold truncate', tk.text)}>{item.user}</p>
           )}
           <p className={cn('text-xs', tk.muted)}>{item.loc} · {item.time}</p>
         </div>
@@ -171,36 +171,54 @@ function AIRecoCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: any
   const reason = item.aiReco?.reason_primary ?? item.aiReason ?? '';
   const rating = item.aiReco?.avg_rating?.toFixed(1) ?? getRating(item.coverId);
   const href   = item.aiReco ? `/book/${item.aiReco.book_id}` : `/book/${item.bookKey}`;
+  const titleWords = (title || '').trim().split(/\s+/).filter(Boolean).length;
+  const compactTitle = (title || '').length > 20 || titleWords >= 4;
 
   return (
-    <div className={cn('rounded-3xl border p-5 transition-all relative overflow-hidden', tk.card)}>
-      <div className="absolute top-4 right-4 flex items-center gap-1 px-2 py-1 rounded-full bg-gold/15 border border-gold/25">
-        <Sparkles className="w-3 h-3 text-gold" />
-        <span className="text-[10px] font-semibold text-gold">PustarAI</span>
+    <div className={cn('rounded-3xl border p-4 sm:p-5 transition-all', tk.card)}>
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <p className={cn('text-[10px] sm:text-[11px] font-semibold uppercase tracking-wider', tk.muted)}>Rekomendasi Untukmu</p>
+        <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-gold/15 border border-gold/25 flex-shrink-0">
+          <Sparkles className="w-3 h-3 text-gold" />
+          <span className="text-[10px] font-semibold text-gold">PustarAI</span>
+        </div>
       </div>
-      <div className="flex gap-4">
-        <Link href={href}><CoverThumb src={coverSrc} size="lg" /></Link>
-        <div className="flex-1 min-w-0 pr-16">
-          <p className={cn('text-[10px] font-semibold uppercase tracking-wider mb-1.5', tk.muted)}>Rekomendasi Untukmu</p>
+
+      <div className="flex gap-3 sm:gap-4 items-start">
+        <Link href={href}>
+          <div className="w-16 h-24 sm:w-20 sm:h-28 rounded-xl overflow-hidden shadow-lg flex-shrink-0 bg-navy-700/40">
+            {coverSrc ? (
+              <img src={coverSrc} className="w-full h-full object-cover" loading="lazy" alt="" />
+            ) : null}
+          </div>
+        </Link>
+        <div className="flex-1 min-w-0">
           <Link href={href}>
-            <p className={cn('font-serif text-xl font-black leading-tight mb-0.5 hover:text-gold transition-colors', tk.text)}>{title}</p>
+            <p className={cn(
+              'font-serif font-black leading-tight hover:text-gold transition-colors line-clamp-2',
+              compactTitle ? 'text-[1.1rem] sm:text-xl' : 'text-[1.25rem] sm:text-2xl',
+              tk.text,
+            )}>{title}</p>
           </Link>
-          <p className={cn('text-sm mb-2', tk.muted)}>{author}</p>
-          <div className="flex items-center gap-1 mb-3">
+          <p className={cn('text-sm mb-1.5 sm:mb-2 line-clamp-1', tk.muted)}>{author}</p>
+
+          <div className="flex items-center gap-1 mb-2.5 sm:mb-3">
             {[1,2,3,4,5].map(s => (
               <Star key={s} className={cn('w-3 h-3', s <= Math.round(Number(rating)) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
             ))}
             <span className="text-gold text-xs font-bold ml-1">{rating}</span>
           </div>
-          <p className={cn('text-xs leading-relaxed italic mb-3', tk.muted)}>{reason}</p>
+
+          <p className={cn('text-[12px] sm:text-xs leading-[1.45] italic line-clamp-2 mb-2.5 sm:mb-3', tk.muted)}>{reason}</p>
+
           <Link href={href}
-            className={cn('inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl transition-all',
+            className={cn('inline-flex w-auto justify-center items-center gap-1.5 text-sm sm:text-xs font-semibold px-3 py-2 sm:py-1.5 rounded-xl transition-all',
               dark ? 'bg-gold/15 text-gold hover:bg-gold/25' : 'bg-navy-800 text-white hover:bg-navy-700')}>
             <BookOpen className="w-3.5 h-3.5" /> Lihat Detail <ArrowRight className="w-3 h-3" />
           </Link>
         </div>
       </div>
-      <p className={cn('text-[11px] mt-3', tk.muted)}>{item.time}</p>
+      <p className={cn('text-[11px] mt-2.5 sm:mt-3', tk.muted)}>{item.time}</p>
     </div>
   );
 }
@@ -235,41 +253,42 @@ function TrendingCard({ item, dark, tk }: { item: FeedItem; dark: boolean; tk: a
   const author = item.trendingBook?.authors ?? item.bookAuthor ?? '';
   const rating = item.trendingBook?.avg_rating?.toFixed(1) ?? getRating(item.coverId);
   const href = item.trendingBook ? `/book/${item.trendingBook.book_id}` : `/book/${item.bookKey}`;
-  const rawTrendingScore = Number(item.trendingBook?.trending_score ?? 0);
-  const hasTrendingScore = Number.isFinite(rawTrendingScore) && rawTrendingScore > 0;
-  const trendingScoreLabel = rawTrendingScore >= 100
-    ? Math.round(rawTrendingScore).toLocaleString('id-ID')
-    : rawTrendingScore.toFixed(1);
 
   return (
-    <div className={cn('rounded-3xl border p-5 transition-all flex gap-4 items-center', tk.card)}>
-      <div className="relative flex-shrink-0">
-        <Link href={href}>
-          <CoverThumb src={liveCoverSrc} coverId={item.coverId} size="md" />
-        </Link>
-        <div className={cn('absolute -top-1.5 -left-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg', badgeCls)}>
-          #{item.rank}
-        </div>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5 mb-1">
-          <TrendingUp className="w-3 h-3 text-gold" />
-          <span className="text-[10px] font-semibold text-gold uppercase tracking-wider">Trending</span>
-        </div>
-        <p className={cn('font-serif text-base font-black leading-tight', tk.text)}>{title}</p>
-        <p className={cn('text-xs mt-0.5', tk.muted)}>{author}</p>
-        <div className="flex items-center gap-3 mt-1.5">
-          <div className="flex items-center gap-1">
-            <Star className="w-3 h-3 text-gold fill-gold" />
-            <span className="text-gold text-xs font-bold">{rating}</span>
+    <div className={cn('rounded-3xl border p-5 transition-all', tk.card)}>
+      <div className="flex gap-4 items-start">
+        <div className="relative flex-shrink-0">
+          <Link href={href}>
+            <CoverThumb src={liveCoverSrc} coverId={item.coverId} size="md" />
+          </Link>
+          <div className={cn('absolute -top-1.5 -left-1.5 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-lg', badgeCls)}>
+            #{item.rank}
           </div>
-          {item.reads && <span className={cn('text-xs', tk.muted)}>{item.reads.toLocaleString()}x dibaca</span>}
-          {hasTrendingScore && (
-            <span className={cn('text-xs', tk.muted)}>🔥 skor {trendingScoreLabel}</span>
-          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-3 mb-1">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 mb-1">
+                <TrendingUp className="w-3 h-3 text-gold" />
+                <span className="text-[10px] font-semibold text-gold uppercase tracking-wider">Trending</span>
+              </div>
+              <p className={cn('font-serif text-base font-black leading-tight', tk.text)}>{title}</p>
+              <p className={cn('text-xs mt-0.5', tk.muted)}>{author}</p>
+            </div>
+
+            <p className={cn('text-[11px] flex-shrink-0 whitespace-nowrap', tk.muted)}>{item.time}</p>
+          </div>
+
+          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-1">
+              <Star className="w-3 h-3 text-gold fill-gold" />
+              <span className="text-gold text-xs font-bold">{rating}</span>
+            </div>
+            {item.reads && <span className={cn('text-xs', tk.muted)}>{item.reads.toLocaleString()}x dibaca</span>}
+          </div>
         </div>
       </div>
-      <p className={cn('text-[11px] flex-shrink-0', tk.muted)}>{item.time}</p>
     </div>
   );
 }
@@ -434,6 +453,8 @@ export default function FeedPage() {
   const [recommendedUsers, setRecommendedUsers] = useState<RecommendedUser[]>([]);
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
   const [feedLoading, setFeedLoading] = useState(true);
+  const [sidebarLoading, setSidebarLoading] = useState(true);
+  const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [recentReadsCollapsed, setRecentReadsCollapsed] = useState(() => {
     if (typeof window === 'undefined') return true;
     try {
@@ -443,6 +464,13 @@ export default function FeedPage() {
     }
   });
   const loaderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    document.body.classList.add('panel-scroll-lock');
+    return () => {
+      document.body.classList.remove('panel-scroll-lock');
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -455,19 +483,39 @@ export default function FeedPage() {
   async function loadFeedData() {
     if (!ready || !user) return;
     setFeedLoading(true);
+    setSidebarLoading(true);
+    setSuggestionsLoading(true);
 
     const authDisplayName = (user.displayName || user.email?.split('@')[0] || '').trim();
     const authName = normalizeComparable(authDisplayName);
     const authEmailPrefix = normalizeComparable(user.email?.split('@')[0]);
     const authUid = String(user.uid || '').trim();
 
+    const sidebarPromise = fetchFeedSidebarPayload();
+    const usersPromise = getRecommendedUsers(8);
+
     try {
-      const [trending, activities, payload, users] = await Promise.all([
+      const [trending, activities] = await Promise.all([
         fetchTrendingFeedItems(5),
         fetchFeedActivities(8),
-        fetchFeedSidebarPayload(),
-        getRecommendedUsers(8),
       ]);
+
+      const filteredActivities = activities.filter((activity) => {
+        const actorName = normalizeComparable(activity.user);
+        return !actorName || (actorName !== authName && actorName !== authEmailPrefix);
+      });
+
+      setTrendingItems(trending);
+      setActivityItems(filteredActivities);
+    } catch {
+      setTrendingItems([]);
+      setActivityItems([]);
+    } finally {
+      setFeedLoading(false);
+    }
+
+    try {
+      const [payload, users] = await Promise.all([sidebarPromise, usersPromise]);
 
       const profileName = normalizeComparable(payload.profile.name);
       const shouldPatchName = profileName === 'pembaca pustara' || !profileName;
@@ -491,18 +539,9 @@ export default function FeedPage() {
         return !(byName || byEmailPrefix || byId);
       }).slice(0, 5);
 
-      const filteredActivities = activities.filter((activity) => {
-        const actorName = normalizeComparable(activity.user);
-        return !actorName || (actorName !== authName && actorName !== authEmailPrefix);
-      });
-
-      setTrendingItems(trending);
-      setActivityItems(filteredActivities);
       setSidebar(patchedPayload);
       setRecommendedUsers(filteredUsers);
     } catch {
-      setTrendingItems([]);
-      setActivityItems([]);
       setSidebar({
         ...EMPTY_SIDEBAR_PAYLOAD,
         profile: {
@@ -513,7 +552,8 @@ export default function FeedPage() {
       });
       setRecommendedUsers([]);
     } finally {
-      setFeedLoading(false);
+      setSidebarLoading(false);
+      setSuggestionsLoading(false);
     }
   }
 
@@ -620,16 +660,16 @@ export default function FeedPage() {
   };
 
   return (
-    <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen lg:h-screen flex flex-col transition-colors duration-300 lg:overflow-hidden" style={{ background: 'var(--bg)' }}>
       <Navbar />
-      <div className="max-w-6xl mx-auto px-4 pt-6 pb-20">
-        <div className="lg:grid lg:grid-cols-[1fr_520px_1fr] lg:gap-8">
+      <div className="max-w-7xl w-full mx-auto px-4 pt-6 pb-6 flex-1 min-h-0 lg:h-full">
+        <div className="h-full lg:grid lg:grid-cols-[minmax(220px,0.95fr)_minmax(560px,1.85fr)_minmax(260px,1.1fr)] lg:gap-8">
 
           {/* ── LEFT SIDEBAR ── */}
-          <aside className="hidden lg:block pt-1">
-            <div className="sticky top-24 space-y-6">
+          <aside className="hidden lg:block pt-1 h-full overflow-y-auto no-scrollbar">
+            <div className="space-y-6 pb-6">
               <div className={cn('rounded-3xl border p-5', tk.card)}>
-                {feedLoading ? (
+                {sidebarLoading ? (
                   <div className="animate-pulse">
                     <div className="flex items-center gap-3 mb-4">
                       <div className={cn('w-12 h-12 rounded-2xl', tk.skel)} />
@@ -684,7 +724,7 @@ export default function FeedPage() {
                   </button>
                 </div>
                 <div className="space-y-3">
-                  {feedLoading && (
+                  {sidebarLoading && (
                     <div className="space-y-3 animate-pulse">
                       {[0, 1, 2].map((i) => (
                         <div key={i} className="flex gap-3">
@@ -721,10 +761,10 @@ export default function FeedPage() {
                       </div>
                     </Link>
                   ))}
-                  {!feedLoading && sidebar.recentReads.length === 0 && (
+                  {!sidebarLoading && sidebar.recentReads.length === 0 && (
                     <p className={cn('text-xs', tk.muted)}>Belum ada aktivitas baca terbaru.</p>
                   )}
-                  {!feedLoading && sidebar.recentReads.length > 3 && (
+                  {!sidebarLoading && sidebar.recentReads.length > 3 && (
                     <button
                       type="button"
                       onClick={() => setRecentReadsCollapsed((prev) => !prev)}
@@ -746,7 +786,7 @@ export default function FeedPage() {
           </aside>
 
           {/* ── MAIN FEED ── */}
-          <main>
+          <main className="h-full overflow-y-auto no-scrollbar">
             <div className="flex items-center justify-between mb-5">
               <h1 className={cn('font-serif text-2xl font-black', tk.text)}>Feed</h1>
               <button
@@ -829,8 +869,8 @@ export default function FeedPage() {
           </main>
 
           {/* ── RIGHT SIDEBAR ── */}
-          <aside className="hidden lg:block pt-1">
-            <div className="sticky top-24 space-y-6">
+          <aside className="hidden lg:block pt-1 h-full overflow-y-auto no-scrollbar">
+            <div className="space-y-6 pb-6">
               {/* AI widget — sekarang live */}
               <AISidebarWidget dark={dark} tk={tk} />
 
@@ -838,7 +878,7 @@ export default function FeedPage() {
               <div className={cn('rounded-3xl border p-5', tk.card)}>
                 <p className={cn('text-xs font-semibold uppercase tracking-wider mb-4', tk.muted)}>Saran Mengikuti</p>
                 <div className="space-y-4">
-                  {feedLoading && (
+                  {suggestionsLoading && (
                     <div className="space-y-4 animate-pulse">
                       {[0, 1, 2].map((i) => (
                         <div key={i} className="flex items-center gap-3">
@@ -867,8 +907,8 @@ export default function FeedPage() {
                         {initial}
                       </Link>
                       <div className="flex-1 min-w-0">
-                        <p className={cn('text-sm font-semibold', tk.text)}>{displayName}</p>
-                        <p className={cn('text-xs', tk.muted)}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>
+                        <p className={cn('text-sm font-semibold truncate', tk.text)} title={displayName}>{displayName}</p>
+                        <p className={cn('text-xs truncate', tk.muted)} title={`@${u.username || 'pustara_user'} · ${u.followers_count} pengikut`}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>
                       </div>
                       <div className="flex items-center gap-1.5">
                         <button
@@ -894,7 +934,7 @@ export default function FeedPage() {
                       </div>
                     </div>
                   )})}
-                  {!feedLoading && recommendedUsers.length === 0 && (
+                  {!suggestionsLoading && recommendedUsers.length === 0 && (
                     <p className={cn('text-xs', tk.muted)}>Belum ada saran mengikuti saat ini.</p>
                   )}
                 </div>

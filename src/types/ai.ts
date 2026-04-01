@@ -24,6 +24,10 @@ export interface AiRecommendation {
 export interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
+  attachedBook?: {
+    title: string;
+    description?: string;
+  };
   recommendations?: AiRecommendation[];
   query?: string;
   phase?: string;
