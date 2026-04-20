@@ -16,7 +16,8 @@ import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import ReviewModal from '@/components/shared/ReviewModal';
 import { useSimilarBooks } from '@/hooks/useSimilarBooks';
 import { fetchBookById } from '@/lib/books';
-import { BookDetail } from '@/types/book';
+import { fetchBookReviewData } from '@/lib/bookReviews';
+import { BookDetail, Review } from '@/types/book';
 import type { ModalState } from '@/types/bookPage';
 import { useBookCover, useBookCovers } from '@/hooks/useBookCover';
 
@@ -50,6 +51,23 @@ export default function BookDetailPage() {
     if (bookKey) fetchBookDetail();
   }, [bookKey, router]);
 
+  useEffect(() => {
+    async function fetchReviews() {
+      if (!bookKey) return;
+      setLoadingReviews(true);
+      try {
+        const { reviews: fetchedReviews } = await fetchBookReviewData(bookKey);
+        setReviews(fetchedReviews);
+      } catch (err) {
+        console.error("Gagal narik reviews:", err);
+      } finally {
+        setLoadingReviews(false);
+      }
+    }
+
+    if (bookKey) fetchReviews();
+  }, [bookKey]);
+
   // Unified book cover: prioritizes database cover_url, falls back to OpenLibrary
   const { url: coverUrl } = useBookCover(book);
   const { books: aiSimilar, loading: similarLoading } = useSimilarBooks(book?.title ?? '');
@@ -65,6 +83,8 @@ export default function BookDetailPage() {
   const [modal,    setModal]    = useState<ModalState>('none');
   const [shared,   setShared]   = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
   const WISHLIST_KEY = 'pustara_wishlist';
   const BORROWED_KEY = 'pustara_borrowed';
@@ -336,34 +356,60 @@ export default function BookDetailPage() {
                     <PenLine className="w-3.5 h-3.5" />
                     Tulis Ulasan
                   </button>
-                  <Link href={`/book/${book.id}/reviews`}
-                    className="text-gold text-xs font-semibold hover:underline">
-                    Lihat Semua
-                  </Link>
+                  {reviews.length > 0 && (
+                    <Link href={`/book/${book.id}/reviews`}
+                      className="text-gold text-xs font-semibold hover:underline">
+                      Lihat Semua
+                    </Link>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-3">
-                {book.reviews?.slice(0, 2).map((r, i) => (
-                  <motion.div key={i}
-                    className={cn('rounded-2xl border p-4', tk.surface, tk.border)}
-                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 + i * 0.05 }}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                        {r.avatar}
-                      </div>
-                      <div>
-                        <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
-                        <div className="flex gap-0.5 mt-0.5">
-                          {[1,2,3,4,5].map(s => (
-                            <Star key={s} className={cn('w-3 h-3', s <= r.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
-                          ))}
+                {loadingReviews
+                  ? Array(3).fill(0).map((_, i) => (
+                      <div key={i} className={cn('rounded-2xl border p-4 animate-pulse', tk.surface, tk.border)}>
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className={cn('w-9 h-9 rounded-full flex-shrink-0', isLight ? 'bg-parchment' : 'bg-navy-700')} />
+                          <div className="flex-1 space-y-2">
+                            <div className={cn('h-4 w-24 rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
+                            <div className="flex gap-0.5">
+                              {[1,2,3].map(s => (
+                                <div key={s} className={cn('w-3 h-3 rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
+                              ))}
+                            </div>
+                          </div>
                         </div>
+                        <div className={cn('h-4 w-full rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
                       </div>
-                    </div>
-                    <p className={cn('text-sm leading-relaxed', tk.muted)}>{r.text}</p>
-                  </motion.div>
-                ))}
+                    ))
+                  : reviews.length > 0
+                    ? reviews.slice(0, 5).map((r, i) => (
+                        <motion.div key={i}
+                          className={cn('rounded-2xl border p-4', tk.surface, tk.border)}
+                          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.2 + i * 0.05 }}>
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
+                              {r.avatar}
+                            </div>
+                            <div>
+                              <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
+                              <div className="flex gap-0.5 mt-0.5">
+                                {[1,2,3,4,5].map(s => (
+                                  <Star key={s} className={cn('w-3 h-3', s <= r.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <p className={cn('text-sm leading-relaxed', tk.muted)}>{r.text}</p>
+                        </motion.div>
+                      ))
+                    : (
+                      <div className={cn('rounded-2xl border p-6 text-center', tk.surface, tk.border)}>
+                        <p className={cn('text-sm', tk.muted)}>Belum ada ulasan. Jadilah yang pertama!</p>
+                      </div>
+                    )
+                }
               </div>
             </section>
 

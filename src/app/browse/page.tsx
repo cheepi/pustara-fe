@@ -866,16 +866,23 @@ function BrowseContent() {
           <motion.section key="cats"
             className="max-w-7xl mx-auto px-4 mt-8 pb-12"
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-            <h2 className={cn('font-serif text-lg font-bold mb-3', tk.text)}>Telusuri Kategori</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className={cn('font-serif text-lg font-bold', tk.text)}>Telusuri Berdasarkan Kategori</h2>
+              <Link href="/browse-genre" className="text-gold text-xs font-semibold hover:underline">
+                Lihat semua →
+              </Link>
+            </div>
             <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
               {CATEGORIES.map((c, i) => (
-                <motion.button key={c.id} onClick={() => loadCategory(c.id)}
-                  className={cn('flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all', tk.chip)}
-                  initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.04 }} whileTap={{ scale: 0.95 }} whileHover={{ y: -3 }}>
-                  <span className="text-2xl"><c.icon className="w-6 h-6 text-gold/70" /></span>
-                  <span className="text-xs font-medium text-center leading-tight">{c.label}</span>
-                </motion.button>
+                <Link key={c.id} href={`/browse-genre?genre=${encodeURIComponent(c.label)}`}>
+                  <motion.div
+                    className={cn('flex flex-col items-center gap-2 p-3 rounded-2xl border transition-all cursor-pointer', tk.chip)}
+                    initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.04 }} whileTap={{ scale: 0.95 }} whileHover={{ y: -3 }}>
+                    <span className="text-2xl"><c.icon className="w-6 h-6 text-gold/70" /></span>
+                    <span className="text-xs font-medium text-center leading-tight">{c.label}</span>
+                  </motion.div>
+                </Link>
               ))}
             </div>
 

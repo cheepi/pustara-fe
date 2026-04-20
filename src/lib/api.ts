@@ -71,6 +71,60 @@ export async function apiPostAllowAnonymous<T>(path: string, body: unknown): Pro
   return unwrapData<T>(json);
 }
 
+// ── User API ──────────────────────────────────────────────────────────────────
+export interface User {
+  id: string;
+  firebase_uid: string;
+  username: string;
+  email: string;
+  display_name?: string;
+}
+
+/**
+ * Get current user record from backend (requires Firebase token)
+ * If user doesn't exist, backend will create it
+ */
+export async function getCurrentUser(): Promise<User | null> {
+  try {
+    const user = auth.currentUser;
+    if (!user) {
+      console.log('🔴 getCurrentUser: No Firebase user found');
+      return null;
+    }
+
+    console.log('🔵 getCurrentUser: Getting token for UID:', user.uid);
+    const token = await user.getIdToken();
+    
+    console.log('🟡 getCurrentUser: Calling /auth/me endpoint...');
+    const res = await fetch(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    console.log('🟢 getCurrentUser: Response status:', res.status);
+    if (!res.ok) {
+      console.error('🔴 getCurrentUser: API error:', res.status, res.statusText);
+      const errorText = await res.text();
+      console.error('🔴 getCurrentUser: Error response:', errorText);
+      return null;
+    }
+    
+    const json = await res.json();
+    console.log('🔵 getCurrentUser: FULL Response JSON:', JSON.stringify(json, null, 2));
+    console.log('🔵 getCurrentUser: json.user =', json.user);
+    console.log('🔵 getCurrentUser: json.data =', json.data);
+    
+    if (!json.user && !json.data) {
+      console.error('🔴 getCurrentUser: No user or data in response:', json);
+      return null;
+    }
+    
+    return json.user || json.data || null;
+  } catch (err) {
+    console.error('🔴 getCurrentUser: Exception:', err);
+    return null;
+  }
+}
+
 // ── AI Recommendation API ─────────────────────────────────────────────────────
 
 export interface ChatRecoResponse {
@@ -250,8 +304,9 @@ export async function fetchColdStartRecommendations(
 }
 
 /**
- * Fetch trending books dari FastAPI (Redis sorted set).
- * Dipakai oleh feed/page.tsx untuk replace hardcoded trending items.
+ * Fetch trending books dari database backend
+ * Primary: GET /books/trending (fast, database-based, Neon PostgreSQL)
+ * Fallback: GET /recommendations/trending (slower, FastAPI/Redis-based)
  * 
  * CACHED: 60 seconds to prevent redundant API calls
  */
@@ -265,6 +320,19 @@ export async function fetchTrending(topN = 10): Promise<TrendingBook[]> {
   }
 
   try {
+    // Try new database endpoint first (faster)
+    try {
+      const res = await apiGet<{ data: TrendingBook[] }>(`/books/trending?limit=${topN}`);
+      const result = Array.isArray(res.data) ? res.data.map(normalizeTrendingBook) : [];
+      if (result.length > 0) {
+        apiCaches.trending.set(cacheKey, result);
+        return result;
+      }
+    } catch (dbError) {
+      console.warn('[Trending] Database endpoint failed, trying recommendations endpoint:', dbError);
+    }
+
+    // Fallback to recommendations endpoint
     const res = await apiGet<TrendingResponse & { recommendations?: TrendingBook[] }>(`/recommendations/trending?top_n=${topN}`);
     const source = Array.isArray(res.trending)
       ? res.trending
@@ -277,7 +345,8 @@ export async function fetchTrending(topN = 10): Promise<TrendingBook[]> {
     apiCaches.trending.set(cacheKey, result);
 
     return result;
-  } catch {
+  } catch (error) {
+    console.error('[Trending] All endpoints failed:', error);
     return [];
   }
 }

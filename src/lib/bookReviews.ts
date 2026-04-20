@@ -17,24 +17,19 @@ function normalizeReview(raw: Record<string, unknown>): Review {
 }
 
 async function fetchReviewsFromApi(bookId: string): Promise<Review[] | null> {
-  const endpoints = [`/books/${bookId}/reviews`, `/reviews/book/${bookId}`];
+  try {
+    const res = await fetch(`${API_URL}/books/${bookId}/reviews?limit=100`, { cache: 'no-store' });
+    if (!res.ok) return null;
 
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(`${API_URL}${endpoint}`, { cache: 'no-store' });
-      if (!res.ok) continue;
-
-      const json = await res.json();
-      const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-      if (raw.length > 0) {
-        return raw.map((item: Record<string, unknown>) => normalizeReview(item));
-      }
-    } catch {
-      // try next endpoint
+    const json = await res.json();
+    const raw = Array.isArray(json?.data) ? json.data : [];
+    if (raw.length > 0) {
+      return raw.map((item: Record<string, unknown>) => normalizeReview(item));
     }
+    return null;
+  } catch {
+    return null;
   }
-
-  return null;
 }
 
 export async function fetchBookReviewData(bookId: string): Promise<{ meta: BookDetail | null; reviews: Review[] }> {

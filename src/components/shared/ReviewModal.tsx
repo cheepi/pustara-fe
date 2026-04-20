@@ -1,9 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Star } from 'lucide-react';
+import { X, Star, Lock } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { useAuth } from '@/hooks/useAuth';
+import { useRouter } from 'next/navigation';
+import { getCurrentUser, type User } from '@/lib/api';
 
 interface Props {
   bookTitle: string;
@@ -17,33 +20,79 @@ const RATING_LABELS = ['', 'Kurang', 'Biasa', 'Bagus', 'Sangat Bagus', 'Luar Bia
 
 export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmit }: Props) {
   const { theme } = useTheme();
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
   const isLight = theme === 'light';
 
-  const [rating,    setRating]    = useState(0);
-  const [hovered,   setHovered]   = useState(0);
-  const [text,      setText]      = useState('');
-  const [submitted, setSubmitted] = useState(false);
-  const [loading,   setLoading]   = useState(false);
+  const [rating,      setRating]      = useState(0);
+  const [hovered,     setHovered]     = useState(0);
+  const [text,        setText]        = useState('');
+  const [submitted,   setSubmitted]   = useState(false);
+  const [loading,     setLoading]     = useState(false);
+  const [dbUser,      setDbUser]      = useState<User | null>(null);
+  const [userLoading, setUserLoading] = useState(false);
 
-  const REVIEW_KEY = `pustara_review_${bookKey}`;
+  // Get user record when modal opens and user is logged in
+  useEffect(() => {
+    if (open && user && !authLoading) {
+      console.log('📝 ReviewModal: Fetching user for UID:', user.uid);
+      setUserLoading(true);
+      getCurrentUser()
+        .then(userData => {
+          console.log('✅ ReviewModal: Got user:', userData);
+          setDbUser(userData);
+          setUserLoading(false);
+        })
+        .catch(err => {
+          console.error('❌ ReviewModal: Error fetching user:', err);
+          setUserLoading(false);
+        });
+    }
+  }, [open, user, authLoading]);
 
   function handleSubmit() {
     if (!rating || !text.trim()) return;
+    if (!user || !dbUser) return;
+
     setLoading(true);
 
-    // Simpan ke localStorage
-    const review = { rating, text, date: new Date().toISOString() };
-    localStorage.setItem(REVIEW_KEY, JSON.stringify(review));
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+    
+    fetch(`${API_URL}/reviews`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: dbUser.id,
+        book_id: bookKey,
+        rating: rating,
+        review_text: text
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          setLoading(false);
+          setSubmitted(true);
+          onSubmit?.(rating, text);
+        } else {
+          throw new Error(data.message || 'Failed to submit review');
+        }
+      })
+      .catch(err => {
+        console.error('Review submission error:', err);
+        alert('Gagal mengirim ulasan: ' + err.message);
+        setLoading(false);
+      });
+  }
 
-    setTimeout(() => {
-      setLoading(false);
-      setSubmitted(true);
-      onSubmit?.(rating, text);
-    }, 800);
+  function handleLoginClick() {
+    onClose();
+    router.push('/auth/signin');
   }
 
   function handleClose() {
-    // Reset state kalau belum submit
     if (!submitted) {
       setRating(0);
       setHovered(0);
@@ -92,7 +141,6 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
 
             <AnimatePresence mode="wait">
 
-              {/* ── SUCCESS STATE ── */}
               {submitted ? (
                 <motion.div key="success"
                   className="p-8 text-center"
@@ -114,6 +162,58 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
                     className="w-full py-3 rounded-2xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors">
                     Tutup
                   </button>
+                </motion.div>
+
+              ) : userLoading && user ? (
+                /* ── LOADING STATE (Fetching user) ── */
+                <motion.div key="loading"
+                  className="p-8 text-center"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+
+                  {/* Header */}
+                  <div className={cn('px-6 pt-6 pb-4 border-b', tk.border)}>
+                    <p className={cn('text-xs font-semibold uppercase tracking-wider mb-0.5', tk.muted)}>Tulis Ulasan</p>
+                    <h3 className="font-serif text-lg font-black leading-tight line-clamp-1">{bookTitle}</h3>
+                  </div>
+
+                  <div className="px-6 py-12 flex flex-col items-center justify-center gap-4">
+                    <motion.div
+                      className="w-12 h-12 border-4 border-gold/20 border-t-gold rounded-full"
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
+                    />
+                    <p className={cn('text-sm', tk.muted)}>Memuat profil kamu...</p>
+                  </div>
+                </motion.div>
+
+              ) : !user || authLoading ? (
+                /* ── LOGIN REQUIRED STATE ── */
+                <motion.div key="login-required"
+                  className="p-8 text-center"
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+
+                  <motion.div
+                    className="w-16 h-16 rounded-full bg-gold/20 flex items-center justify-center mx-auto mb-4"
+                    initial={{ scale: 0 }} animate={{ scale: 1 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
+                    <Lock className="w-8 h-8 text-gold" />
+                  </motion.div>
+
+                  <h3 className="font-serif text-xl font-black mb-2">Login Diperlukan</h3>
+                  <p className={cn('text-sm mb-6', tk.muted)}>
+                    Silakan login untuk menulis ulasan tentang buku ini.
+                  </p>
+
+                  <div className="flex flex-col gap-3">
+                    <button onClick={handleLoginClick}
+                      className="w-full py-3 rounded-2xl bg-gold text-navy-900 font-bold text-sm hover:bg-gold/90 transition-colors">
+                      Login Sekarang
+                    </button>
+                    <button onClick={handleClose}
+                      className={cn('w-full py-3 rounded-2xl text-sm font-medium transition-colors', tk.cancel)}>
+                      Batal
+                    </button>
+                  </div>
                 </motion.div>
 
               ) : (
@@ -181,14 +281,14 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
                       </button>
                       <motion.button
                         onClick={handleSubmit}
-                        disabled={!rating || !text.trim() || loading}
+                        disabled={!rating || !text.trim() || loading || !dbUser}
                         className={cn(
                           'flex-1 py-3 rounded-2xl text-sm font-bold transition-all',
-                          rating && text.trim() && !loading
+                          rating && text.trim() && !loading && dbUser
                             ? 'bg-navy-800 text-white hover:bg-navy-700'
                             : isLight ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white/8 text-white/30 cursor-not-allowed'
                         )}
-                        whileTap={rating && text.trim() ? { scale: 0.97 } : {}}>
+                        whileTap={rating && text.trim() && dbUser ? { scale: 0.97 } : {}}>
                         {loading ? (
                           <span className="flex items-center justify-center gap-2">
                             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
