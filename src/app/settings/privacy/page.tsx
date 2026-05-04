@@ -379,7 +379,7 @@ export default function PrivacySecurityPage() {
               label="Keluar dari Semua Perangkat"
               sub="Mengakhiri semua sesi aktif"
               onClick={async () => {
-                await signOut(auth);
+                if (auth) await signOut(auth);
                 router.replace('/catalog');
               }}
               danger
@@ -607,7 +607,7 @@ export default function PrivacySecurityPage() {
             disabled={deleteInput !== 'HAPUS'}
             onClick={async () => {
               // In real app: call user.delete() after re-auth
-              await signOut(auth);
+              if (auth) await signOut(auth);
               router.replace('/catalog');
             }}
             className="w-full py-3 rounded-xl bg-red-500 text-white text-sm font-semibold

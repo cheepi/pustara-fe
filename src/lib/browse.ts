@@ -208,7 +208,7 @@ export async function fetchGenres(): Promise<string[]> {
     
     if (genres.length > 0) {
       // Cache as dummy BrowseBooks to reuse existing cache
-      const cached = genres.map(g => ({ ...({} as BrowseBook), title: g }));
+      const cached = genres.map((g: string) => ({ ...({} as BrowseBook), title: g }));
       CACHE[cacheKey] = cached;
       return genres;
     }
@@ -239,7 +239,7 @@ export async function fetchBooksByGenre(genre: string, limit = 24): Promise<Brow
     const json = await res.json();
     const books = Array.isArray(json?.data) ? json.data : [];
     
-    const mapped = books.map(b => mapToBrowseBook(b));
+    const mapped = books.map((b: Record<string, unknown>) => mapToBrowseBook(b));
     CACHE[cacheKey] = mapped;
     return mapped;
   } catch (err) {

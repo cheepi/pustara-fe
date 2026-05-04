@@ -2,25 +2,22 @@ import { auth } from './firebase';
 import type { AiRecommendation } from '@/types/ai';
 import { apiCaches } from './cache';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env?.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
 async function getAuthHeader(): Promise<Record<string, string>> {
-  return new Promise((resolve) => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      unsubscribe();
-      if (user) {
-        const token = await user.getIdToken();
-        resolve({ Authorization: `Bearer ${token}` });
-      } else {
-        resolve({});
-      }
-    });
-  });
+  const user = auth?.currentUser;
+  if (!user) return {};
+  try {
+    const token = await user.getIdToken();
+    return { Authorization: `Bearer ${token}` };
+  } catch {
+    return {};
+  }
 }
 
 async function getOptionalAuthHeader(): Promise<Record<string, string>> {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) return {};
   try {
     const token = await user.getIdToken();
@@ -42,7 +39,11 @@ function unwrapData<T>(json: unknown): T {
 export async function apiGet<T>(path: string): Promise<T> {
   const headers = await getAuthHeader();
   const res = await fetch(`${API_URL}${path}`, { headers });
-  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  if (!res.ok) {
+  const text = await res.text();
+  console.error("API ERROR DETAIL:", text);
+  throw new Error(`API error: ${res.status}`);
+}
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -86,41 +87,23 @@ export interface User {
  */
 export async function getCurrentUser(): Promise<User | null> {
   try {
-    const user = auth.currentUser;
-    if (!user) {
-      console.log('🔴 getCurrentUser: No Firebase user found');
-      return null;
-    }
+    const user = auth?.currentUser;
+    if (!user) return null;
 
-    console.log('🔵 getCurrentUser: Getting token for UID:', user.uid);
     const token = await user.getIdToken();
+    if (!token) return null;
     
-    console.log('🟡 getCurrentUser: Calling /auth/me endpoint...');
     const res = await fetch(`${API_URL}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    console.log('🟢 getCurrentUser: Response status:', res.status);
-    if (!res.ok) {
-      console.error('🔴 getCurrentUser: API error:', res.status, res.statusText);
-      const errorText = await res.text();
-      console.error('🔴 getCurrentUser: Error response:', errorText);
-      return null;
-    }
+    // fix: Return null gracefully on any error - don't break flow
+    if (!res.ok) return null;
     
     const json = await res.json();
-    console.log('🔵 getCurrentUser: FULL Response JSON:', JSON.stringify(json, null, 2));
-    console.log('🔵 getCurrentUser: json.user =', json.user);
-    console.log('🔵 getCurrentUser: json.data =', json.data);
-    
-    if (!json.user && !json.data) {
-      console.error('🔴 getCurrentUser: No user or data in response:', json);
-      return null;
-    }
-    
     return json.user || json.data || null;
   } catch (err) {
-    console.error('🔴 getCurrentUser: Exception:', err);
+    // fix: Silent fail - endpoint error should not block other features
     return null;
   }
 }
@@ -143,12 +126,14 @@ export interface TrendingBook {
   book_id: string;
   title: string;
   authors: string;
+  isbn?: string; // For OpenLibrary cover fetching
   genres?: string[];
   description?: string;
   year?: string;
   pages?: number;
   avg_rating: number;
   cover_url?: string;
+  cover_id?: number;
   trending_score?: number;
   reason_primary?: string;
 }
@@ -223,10 +208,12 @@ function normalizeAiRecommendation(raw: unknown): AiRecommendation {
 
 function normalizeTrendingBook(raw: unknown): TrendingBook {
   const book = (raw ?? {}) as Record<string, unknown>;
+  const coverId = Number(book.cover_id ?? 0);
   return {
     book_id: String(book.book_id ?? book.id ?? ''),
     title: String(book.title ?? 'Untitled'),
     authors: String(book.authors ?? book.author ?? 'Unknown Author'),
+    isbn: book.isbn ? String(book.isbn) : undefined,
     genres: Array.isArray(book.genres)
       ? (book.genres as unknown[]).map((g) => String(g))
       : typeof book.genres === 'string'
@@ -237,6 +224,7 @@ function normalizeTrendingBook(raw: unknown): TrendingBook {
     pages: toFiniteNumber(book.pages, 0),
     avg_rating: toFiniteNumber(book.avg_rating, 0),
     cover_url: book.cover_url ? String(book.cover_url) : undefined,
+    cover_id: Number.isFinite(coverId) && coverId > 0 ? coverId : undefined,
     trending_score: toFiniteNumber(book.trending_score ?? book.score, 0),
     reason_primary: book.reason_primary ? String(book.reason_primary) : undefined,
   };
@@ -304,49 +292,56 @@ export async function fetchColdStartRecommendations(
 }
 
 /**
- * Fetch trending books dari database backend
- * Primary: GET /books/trending (fast, database-based, Neon PostgreSQL)
- * Fallback: GET /recommendations/trending (slower, FastAPI/Redis-based)
+ * Fetch trending books dari database backend (Neon PostgreSQL)
  * 
- * CACHED: 60 seconds to prevent redundant API calls
+ * Strategy:
+ * - Single endpoint: GET /books/trending?limit=N
+ * - No external API fallback (database-only)
+ * - If HTTP 200/304: return data as-is (even if empty array)
+ * - If HTTP error: graceful fallback (return empty array)
+ * 
+ * Caching: 60 seconds to prevent redundant API calls
+ * Sorting: review_count DESC, avg_rating DESC, created_at DESC
  */
 export async function fetchTrending(topN = 10): Promise<TrendingBook[]> {
   const cacheKey = `trending_${topN}`;
+  const endpoint = `/books/trending?limit=${topN}`;
 
-  // Check cache first
+  // 1️⃣ Check cache first (60 second TTL)
   const cached = apiCaches.trending.get(cacheKey) as TrendingBook[] | null;
   if (cached !== null) {
+    console.log(`[Trending] ✅ Cache hit for limit=${topN}`);
     return cached;
   }
 
   try {
-    // Try new database endpoint first (faster)
-    try {
-      const res = await apiGet<{ data: TrendingBook[] }>(`/books/trending?limit=${topN}`);
-      const result = Array.isArray(res.data) ? res.data.map(normalizeTrendingBook) : [];
-      if (result.length > 0) {
-        apiCaches.trending.set(cacheKey, result);
-        return result;
-      }
-    } catch (dbError) {
-      console.warn('[Trending] Database endpoint failed, trying recommendations endpoint:', dbError);
-    }
+    // 2️⃣ Fetch from database endpoint
+    console.log(`[Trending] 🔄 Fetching from database endpoint: GET ${endpoint}`);
+    const res = await apiGet<TrendingBook[]>(endpoint);
+    
+    // 3️⃣ Normalize response (handle various formats)
+    console.log(`[Trending] 📊 Raw API response:`, res);
+    const rawData = Array.isArray(res) ? res : [];
+    console.log(`[Trending] 📊 Raw response data count: ${rawData.length} books`);
+    
+    const result = rawData.map(normalizeTrendingBook);
+    console.log(`[Trending] ✅ Successfully fetched and normalized ${result.length} trending books`, result);
 
-    // Fallback to recommendations endpoint
-    const res = await apiGet<TrendingResponse & { recommendations?: TrendingBook[] }>(`/recommendations/trending?top_n=${topN}`);
-    const source = Array.isArray(res.trending)
-      ? res.trending
-      : Array.isArray(res.recommendations)
-        ? res.recommendations
-        : [];
-    const result = source.map(normalizeTrendingBook);
-
-    // Store in cache for 60 seconds
+    // 4️⃣ Store in cache regardless of result count
+    // (empty results are still valid - means no trending books exist yet)
     apiCaches.trending.set(cacheKey, result);
-
+    
     return result;
+
   } catch (error) {
-    console.error('[Trending] All endpoints failed:', error);
+    // 5️⃣ Graceful fallback: return empty array on any error
+    console.error(`[Trending] ❌ Failed to fetch trending books:`, {
+      error: error instanceof Error ? error.message : String(error),
+      endpoint,
+      topN,
+    });
+    
+    // Return empty array (UI handles this gracefully)
     return [];
   }
 }

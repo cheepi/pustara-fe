@@ -19,15 +19,22 @@ function normalizeReview(raw: Record<string, unknown>): Review {
 async function fetchReviewsFromApi(bookId: string): Promise<Review[] | null> {
   try {
     const res = await fetch(`${API_URL}/books/${bookId}/reviews?limit=100`, { cache: 'no-store' });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn(`[Reviews] ⚠️ API returned ${res.status}`);
+      return null;
+    }
 
     const json = await res.json();
-    const raw = Array.isArray(json?.data) ? json.data : [];
+    
+    // fix: Safe response mapping - handle multiple response formats
+    const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+    
     if (raw.length > 0) {
       return raw.map((item: Record<string, unknown>) => normalizeReview(item));
     }
     return null;
-  } catch {
+  } catch (err) {
+    console.error(`[Reviews] ❌ Error fetching reviews:`, err);
     return null;
   }
 }
@@ -35,19 +42,22 @@ async function fetchReviewsFromApi(bookId: string): Promise<Review[] | null> {
 export async function fetchBookReviewData(bookId: string): Promise<{ meta: BookDetail | null; reviews: Review[] }> {
   const meta = await fetchBookById(bookId);
   const apiReviews = await fetchReviewsFromApi(bookId);
-  if (meta && apiReviews) {
+  
+  // fix: JANGAN menggunakan data dummy - only return API reviews or empty array
+  if (apiReviews && apiReviews.length > 0) {
+    console.log(`[Reviews] ✅ Using API reviews (${apiReviews.length} found)`);
     return { meta, reviews: apiReviews };
   }
 
   if (meta?.reviews && meta.reviews.length > 0) {
+    console.log(`[Reviews] ✅ Using book meta reviews (${meta.reviews.length} found)`);
     return { meta, reviews: meta.reviews };
   }
 
-  const fallbackMeta = meta ?? DUMMY_BOOKS[bookId] ?? DUMMY_BOOKS.d1;
-  const fallbackReviews = DUMMY_REVIEWS_BY_BOOK[bookId] ?? fallbackMeta.reviews ?? [];
-
+  // fix: Don't use dummy data - return empty array if no real reviews
+  console.log(`[Reviews] ℹ️ No reviews found, returning empty array (no dummy data)`);
   return {
-    meta: fallbackMeta,
-    reviews: fallbackReviews,
+    meta,
+    reviews: [], // Empty array, not dummy data
   };
 }

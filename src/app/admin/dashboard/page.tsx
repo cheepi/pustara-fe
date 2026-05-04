@@ -29,7 +29,7 @@ export default function AdminDashboard() {
   async function fetchUsers() {
     try {
       setLoading(true);
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth!.currentUser?.getIdToken();
       const response = await fetch('/api/users', {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -52,7 +52,9 @@ export default function AdminDashboard() {
 
   async function handleLogout() {
     try {
-      await signOut(auth);
+      if (auth) {
+        await signOut(auth);
+      }
       router.replace('/');
     } catch (err) {
       console.error('Logout error:', err);
@@ -61,7 +63,7 @@ export default function AdminDashboard() {
 
   async function updateUserRole(uid: string, newRole: 'admin' | 'reader') {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      const token = await auth!.currentUser?.getIdToken();
       const response = await fetch(`/api/users/${uid}/role`, {
         method: 'PUT',
         headers: {

@@ -28,11 +28,7 @@ import { Suspense } from 'react';
 // const coverUrl = (id?: number, s = 'M') =>
 //   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
 
-const pseudo = (n: number, mn: number, mx: number) =>
-  mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
-
-const getRating = (coverId?: number, idx = 0) =>
-  (pseudo((coverId ?? idx) + 7, 36, 50) / 10).toFixed(1);
+// fix: Removed dummy rating functions - use real data from API
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const CATEGORIES = [
@@ -297,6 +293,9 @@ function BrowseContent() {
             title: item.title,
             author: item.authors || 'Unknown',
             coverUrl: item.cover_url || undefined,
+            // fix: Add ISBN and cover_id for fallback cover generation
+            isbn: item.isbn || undefined,
+            coverId: item.cover_id || undefined,
             genres: item.genres || [],
             rating: Number(item.avg_rating || 0),
             year: item.year ? Number(item.year) : undefined,
@@ -682,18 +681,36 @@ function BrowseContent() {
 
                           <div className={cn('rounded-2xl overflow-hidden relative transition-all duration-300', isHov ? rs.shadow : rs.idle)}
                             style={{ width: baseW, height: baseH }}>
-                            {b.coverUrl ? (
-                              <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-                            ) : (
-                              <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
-                            )}
+                            {/* fix: TOP3 COVER - add ISBN fallback & onError handler */}
+                            {(() => {
+                              console.log('TOP3:', { title: b.title, coverUrl: b.coverUrl, isbn: b.isbn });
+                              return b.coverUrl ? (
+                                <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  if (b.isbn && !target.src.includes('covers.openlibrary.org')) {
+                                    target.src = `https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-L.jpg`;
+                                  } else if (!target.src.includes('fallback-book.png')) {
+                                    target.src = '/fallback-book.png';
+                                  }
+                                }} />
+                              ) : b.isbn ? (
+                                <img src={`https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-L.jpg`} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={(e) => {
+                                  const target = e.target as HTMLImageElement;
+                                  if (!target.src.includes('fallback-book.png')) {
+                                    target.src = '/fallback-book.png';
+                                  }
+                                }} />
+                              ) : (
+                                <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
+                              );
+                            })()}
                             {isSide && !isHov && <div className="absolute inset-0 bg-black/30 rounded-2xl" />}
                             <div className={cn('absolute top-2.5 left-2.5 min-w-[28px] h-7 px-2 rounded-full flex items-center justify-center text-[11px] font-black shadow-lg', rs.badge)}>
                               #{i + 1}
                             </div>
                             <div className="absolute bottom-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur-sm">
                               <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                              <span className="text-white text-[10px] font-bold">{b.rating?.toFixed(1) || "4.5"}</span>
+                              <span className="text-white text-[10px] font-bold">{b.rating?.toFixed(1) || "0"}</span>
                             </div>
                           </div>
                         </motion.div>
@@ -728,9 +745,10 @@ function BrowseContent() {
                             <p className={cn('text-xs mb-2.5', tk.muted)}>{b.author}</p>
                             <div className="flex items-center gap-1 mb-2.5">
                               {[1,2,3,4,5].map(s => (
-                                <Star key={s} className={cn('w-3 h-3', s <= Math.round(b.rating || 4) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
+                                <Star key={s} className={cn('w-3 h-3', /* fix: No dummy defaults */
+                                  s <= (b.rating && b.rating > 0 ? Math.round(b.rating) : 0) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
                               ))}
-                              <span className="text-gold text-xs font-bold ml-1">{b.rating?.toFixed(1) || "4.5"}</span>
+                              <span className="text-gold text-xs font-bold ml-1">{b.rating?.toFixed(1) || "0"}</span>
                             </div>
                             <div className="flex flex-wrap gap-1 mb-2.5">
                               {b.genres?.map(g => (
@@ -769,18 +787,37 @@ function BrowseContent() {
                             animate={{ y: isActive ? -8 : 0, scale: isActive ? 1.04 : 1 }}
                             transition={{ type: 'spring', stiffness: 400, damping: 28 }}>
                             <div className={cn('w-full rounded-2xl overflow-hidden relative transition-all duration-300', isActive ? rs.shadow : rs.idle)} style={{ aspectRatio: '2/3' }}>
-                              {b.coverUrl ? (
-                                <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
-                              ) : (
-                                <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
-                              )}
+                              {/* fix: MOBILE TOP3 COVER - add ISBN fallback & onError */}
+                              {(() => {
+                                console.log('TOP3_MOBILE:', { title: b.title, coverUrl: b.coverUrl, isbn: b.isbn });
+                                return b.coverUrl ? (
+                                  <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    if (b.isbn && !target.src.includes('covers.openlibrary.org')) {
+                                      target.src = `https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-L.jpg`;
+                                    } else if (!target.src.includes('fallback-book.png')) {
+                                      target.src = '/fallback-book.png';
+                                    }
+                                  }} />
+                                ) : b.isbn ? (
+                                  <img src={`https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-L.jpg`} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={(e) => {
+                                    const target = e.target as HTMLImageElement;
+                                    if (!target.src.includes('fallback-book.png')) {
+                                      target.src = '/fallback-book.png';
+                                    }
+                                  }} />
+                                ) : (
+                                  <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
+                                );
+                              })()}
                               {isSide && !isActive && <div className="absolute inset-0 bg-black/20 rounded-2xl" />}
                               <div className={cn('absolute top-2 left-2 min-w-[26px] h-[26px] px-1.5 rounded-full flex items-center justify-center text-[11px] font-black shadow-lg', rs.badge)}>
                                 #{i + 1}
                               </div>
                               <div className="absolute bottom-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur-sm">
                                 <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                                <span className="text-white text-[10px] font-bold">{b.rating?.toFixed(1) || "4.5"}</span>
+                                {/* fix: Use real rating or 0, not dummy 4.5 */}
+                                <span className="text-white text-[10px] font-bold">{b.rating?.toFixed(1) || "0"}</span>
                               </div>
                             </div>
                             <motion.div className="w-1.5 h-1.5 rounded-full mx-auto mt-2" animate={{ backgroundColor: isActive ? '#c9a84c' : 'transparent' }} />
@@ -805,8 +842,23 @@ function BrowseContent() {
                             <div className="flex gap-4 p-4">
                               <div className="flex-shrink-0 relative">
                                 <div className={cn('rounded-xl overflow-hidden', rs.shadow)} style={{ width: 80, height: 116 }}>
+                                  {/* fix: HOVER PANEL COVER - add ISBN fallback */}
                                   {b.coverUrl ? (
-                                    <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />
+                                    <img src={b.coverUrl} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      if (b.isbn && !target.src.includes('covers.openlibrary.org')) {
+                                        target.src = `https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-M.jpg`;
+                                      } else if (!target.src.includes('fallback-book.png')) {
+                                        target.src = '/fallback-book.png';
+                                      }
+                                    }} />
+                                  ) : b.isbn ? (
+                                    <img src={`https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-M.jpg`} alt={b.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      if (!target.src.includes('fallback-book.png')) {
+                                        target.src = '/fallback-book.png';
+                                      }
+                                    }} />
                                   ) : (
                                     <div className={cn('w-full h-full', dark ? 'bg-navy-700' : 'bg-parchment-dark')} />
                                   )}                                
@@ -820,10 +872,11 @@ function BrowseContent() {
                                 <p className={cn('font-serif font-black text-base leading-tight mb-0.5 line-clamp-2', tk.text)}>{b.title}</p>
                                 <p className={cn('text-xs mb-2', tk.muted)}>{b.author}</p>
                                 <div className="flex items-center gap-1 mb-2">
+                                  {/* fix: No dummy defaults for rating */}
                                   {[1,2,3,4,5].map(s => (
-                                    <Star key={s} className={cn('w-3 h-3', s <= Math.round(b.rating || 4) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
+                                    <Star key={s} className={cn('w-3 h-3', s <= (b.rating && b.rating > 0 ? Math.round(b.rating) : 0) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
                                   ))}
-                                  <span className="text-gold text-xs font-bold ml-1">{b.rating?.toFixed(1) || "4.5"}</span>
+                                  <span className="text-gold text-xs font-bold ml-1">{b.rating?.toFixed(1) || "0"}</span>
                                 </div>
                                 <div className="flex flex-wrap gap-1 mb-2">
                                   {b.genres?.map(g => (
@@ -986,9 +1039,22 @@ function BrowseContent() {
 
 // ── GridBookCard ─────────────────────────────────────────────────────────────
 function GridBookCard({ book, index, rank, dark, tk }: { book: BrowseBook; index: number; rank: number; dark: boolean; tk: any; }) {
-  const src       = book.coverUrl;
-  const rating    = book.rating?.toFixed(1) || "4.5";
+  // fix: Use cover_url, fallback to ISBN-based OpenLibrary URL, then fallback image
+  const [coverSrc, setCoverSrc] = useState<string | null>(
+    book.coverUrl ? book.coverUrl : null
+  );
+  
+  const rating    = (book.rating && Number.isFinite(book.rating) && book.rating > 0) ? book.rating.toFixed(1) : "0";
   const ratingNum = Number(rating);
+  
+  const handleCoverError = () => {
+    // fix: Try ISBN fallback when cover fails
+    if (book.isbn && !coverSrc?.includes('covers.openlibrary.org')) {
+      setCoverSrc(`https://covers.openlibrary.org/b/isbn/${String(book.isbn).trim()}-M.jpg`);
+    } else {
+      setCoverSrc('/fallback-book.png');
+    }
+  };
 
   return (
     <motion.div className="cursor-pointer group"
@@ -996,7 +1062,7 @@ function GridBookCard({ book, index, rank, dark, tk }: { book: BrowseBook; index
       transition={{ delay: Math.min(index * 0.02, 0.3) }} whileHover={{ y: -6 }}
       onClick={() => window.location.href = `/book/${book.key}`}>
       <div className={cn('w-full aspect-[2/3] rounded-xl overflow-hidden shadow-md relative', dark ? 'bg-navy-700' : 'bg-parchment-dark')}>
-        {src && <img src={src} alt={book.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" />}
+        {coverSrc ? <img src={coverSrc} alt={book.title} className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" loading="lazy" onError={handleCoverError} /> : <div className="w-full h-full flex items-center justify-center text-slate-500 opacity-50"><BookOpen className="w-6 h-6" /></div>}
         <div className="absolute top-1.5 left-1.5 w-5 h-5 bg-black/55 backdrop-blur-sm rounded-full flex items-center justify-center">
           <span className="text-white/80 text-[9px] font-bold">{rank}</span>
         </div>
@@ -1006,7 +1072,8 @@ function GridBookCard({ book, index, rank, dark, tk }: { book: BrowseBook; index
         </div>
         <div className={cn('absolute bottom-0 left-0 right-0 px-2 py-2 flex items-center justify-between', 'bg-gradient-to-t from-black/80 via-black/50 to-transparent rounded-b-xl', 'translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100', 'transition-all duration-200')}>
           <div className="flex items-center gap-0.5">
-            {[1, 2, 3, 4, 5].map(s => <Star key={s} className={cn('w-2 h-2', s <= Math.round(ratingNum) ? 'text-gold fill-gold' : 'text-white/30')} />)}
+            {/* fix: Only show filled stars if rating > 0 */}
+            {[1, 2, 3, 4, 5].map(s => <Star key={s} className={cn('w-2 h-2', s <= (ratingNum > 0 ? Math.round(ratingNum) : 0) ? 'text-gold fill-gold' : 'text-white/30')} />)}
           </div>
           <span className="text-white text-[10px] font-bold">{rating}</span>
         </div>
@@ -1017,17 +1084,17 @@ function GridBookCard({ book, index, rank, dark, tk }: { book: BrowseBook; index
   );
 }
 
-const pseudo2 = (n: number, mn: number, mx: number) => mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
 function PopularSection({ dark, tk, books }: { dark: boolean; tk: any; books: BrowseBook[] }) {
   const items = books.length > 0 ? books : BROWSE_POPULAR_BOOKS;
   
   return (
     <div className="flex gap-4 px-4 -mx-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
       {items.map((b, i) => {
+        // fix: Use only real rating from API, not dummy values
         const rating = Number.isFinite(b.rating) && Number(b.rating) > 0
           ? Number(b.rating).toFixed(1)
-          : (pseudo2(i + 8, 38, 50) / 10).toFixed(1);
-        const reads  = Math.floor(pseudo2(i + 2, 1200, 28000));
+          : "0";
+        const reads  = Math.floor(Math.random() * 26800 + 1200); // fix: Remove pseudo-random, use actual random
         
         const RANK_BADGE = [
           'bg-yellow-400 text-yellow-900', 
@@ -1058,12 +1125,34 @@ function PopularSection({ dark, tk, books }: { dark: boolean; tk: any; books: Br
                   'w-full aspect-[2/3] rounded-xl overflow-hidden shadow-md group-hover:shadow-xl transition-shadow duration-300', 
                   dark ? 'bg-navy-700' : 'bg-parchment-dark'
                 )}>
+                  {/* fix: Add ISBN fallback and onError handler for cover images */}
                   {b.coverUrl ? (
                     <img 
                       src={b.coverUrl} 
                       alt={b.title} 
                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
-                      loading="lazy" 
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        if (b.isbn && !target.src.includes('covers.openlibrary.org')) {
+                          target.src = `https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-L.jpg`;
+                        } else if (!target.src.includes('fallback-book.png')) {
+                          target.src = '/fallback-book.png';
+                        }
+                      }}
+                    />
+                  ) : b.isbn ? (
+                    <img
+                      src={`https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-L.jpg`}
+                      alt={b.title}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      loading="lazy"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        if (!target.src.includes('fallback-book.png')) {
+                          target.src = '/fallback-book.png';
+                        }
+                      }}
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-slate-500 opacity-50">

@@ -29,50 +29,64 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
   const [text,        setText]        = useState('');
   const [submitted,   setSubmitted]   = useState(false);
   const [loading,     setLoading]     = useState(false);
-  const [dbUser,      setDbUser]      = useState<User | null>(null);
-  const [userLoading, setUserLoading] = useState(false);
 
-  // Get user record when modal opens and user is logged in
+  // Auto-close after 1.5s when submitted
   useEffect(() => {
-    if (open && user && !authLoading) {
-      console.log('📝 ReviewModal: Fetching user for UID:', user.uid);
-      setUserLoading(true);
-      getCurrentUser()
-        .then(userData => {
-          console.log('✅ ReviewModal: Got user:', userData);
-          setDbUser(userData);
-          setUserLoading(false);
-        })
-        .catch(err => {
-          console.error('❌ ReviewModal: Error fetching user:', err);
-          setUserLoading(false);
-        });
+    if (submitted) {
+      const timer = setTimeout(() => {
+        handleClose();
+      }, 1500);
+      return () => clearTimeout(timer);
     }
-  }, [open, user, authLoading]);
+  }, [submitted]);
 
   function handleSubmit() {
     if (!rating || !text.trim()) return;
-    if (!user || !dbUser) return;
+    // fix: Only require Firebase user, not dbUser from getCurrentUser
+    if (!user) return;
 
     setLoading(true);
-
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
     
-    fetch(`${API_URL}/reviews`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        user_id: dbUser.id,
-        book_id: bookKey,
-        rating: rating,
-        review_text: text
+    // fix: Use Firebase token directly - don't depend on getCurrentUser
+    user.getIdToken()
+      .then((token) => {
+        // fix: Gunakan API_URL untuk POST /reviews, bukan relative path
+        const API_URL = 'http://localhost:3000';
+        const url = `${API_URL}/reviews`;
+        console.log('POST URL:', url);
+        
+        const body = {
+          book_id: bookKey,
+          rating: rating,
+          review_text: text
+          // fix: Don't send user_id from frontend - backend gets it from token
+        };
+        
+        console.log('TOKEN:', token ? `✓ present (${token.slice(0, 20)}...)` : '❌ undefined/null');
+        
+        return fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(body)
+        });
       })
-    })
-      .then(res => res.json())
+      .then(res => {
+        // fix: Cek response status sebelum parse JSON
+        console.log('Response status:', res.status, res.statusText);
+        if (!res.ok) {
+          return res.text().then(text => {
+            console.error('Error response body:', text.substring(0, 200));
+            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+          });
+        }
+        return res.json();
+      })
       .then(data => {
         if (data.success) {
+          console.log('✅ [ReviewModal] Review submitted successfully');
           setLoading(false);
           setSubmitted(true);
           onSubmit?.(rating, text);
@@ -81,8 +95,8 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
         }
       })
       .catch(err => {
-        console.error('Review submission error:', err);
-        alert('Gagal mengirim ulasan: ' + err.message);
+        console.error('Review submission error:', err?.message);
+        alert('Gagal mengirim ulasan: ' + err?.message);
         setLoading(false);
       });
   }
@@ -162,28 +176,6 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
                     className="w-full py-3 rounded-2xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors">
                     Tutup
                   </button>
-                </motion.div>
-
-              ) : userLoading && user ? (
-                /* ── LOADING STATE (Fetching user) ── */
-                <motion.div key="loading"
-                  className="p-8 text-center"
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-
-                  {/* Header */}
-                  <div className={cn('px-6 pt-6 pb-4 border-b', tk.border)}>
-                    <p className={cn('text-xs font-semibold uppercase tracking-wider mb-0.5', tk.muted)}>Tulis Ulasan</p>
-                    <h3 className="font-serif text-lg font-black leading-tight line-clamp-1">{bookTitle}</h3>
-                  </div>
-
-                  <div className="px-6 py-12 flex flex-col items-center justify-center gap-4">
-                    <motion.div
-                      className="w-12 h-12 border-4 border-gold/20 border-t-gold rounded-full"
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                    />
-                    <p className={cn('text-sm', tk.muted)}>Memuat profil kamu...</p>
-                  </div>
                 </motion.div>
 
               ) : !user || authLoading ? (
@@ -281,14 +273,14 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
                       </button>
                       <motion.button
                         onClick={handleSubmit}
-                        disabled={!rating || !text.trim() || loading || !dbUser}
+                        disabled={!rating || !text.trim() || loading || !user}
                         className={cn(
                           'flex-1 py-3 rounded-2xl text-sm font-bold transition-all',
-                          rating && text.trim() && !loading && dbUser
+                          rating && text.trim() && !loading && user
                             ? 'bg-navy-800 text-white hover:bg-navy-700'
                             : isLight ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white/8 text-white/30 cursor-not-allowed'
                         )}
-                        whileTap={rating && text.trim() && dbUser ? { scale: 0.97 } : {}}>
+                        whileTap={rating && text.trim() && user ? { scale: 0.97 } : {}}>
                         {loading ? (
                           <span className="flex items-center justify-center gap-2">
                             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />

@@ -34,14 +34,17 @@ export default function BookDetailPage() {
   useEffect(() => {
     async function fetchBookDetail() {
       try {
+        console.log(`[BookDetail] 🔄 Fetching book detail for: ${bookKey}`);
         const found = await fetchBookById(bookKey);
+        console.log(`[BookDetail] 📊 Got book detail:`, found);
         if (found) {
           setBook(found);
         } else {
+          console.warn(`[BookDetail] ⚠️ Book not found for: ${bookKey}`);
           router.replace('/not-found');
         }
       } catch (err) {
-        console.error("Gagal narik data buku:", err);
+        console.error(`[BookDetail] ❌ Gagal narik data buku:`, err);
         router.replace('/not-found');
       } finally {
         setLoadingBook(false);
@@ -56,10 +59,14 @@ export default function BookDetailPage() {
       if (!bookKey) return;
       setLoadingReviews(true);
       try {
+        console.log(`[BookDetail] 🔄 Fetching reviews for bookKey: ${bookKey}`);
         const { reviews: fetchedReviews } = await fetchBookReviewData(bookKey);
-        setReviews(fetchedReviews);
+        console.log(`[BookDetail] 📊 Got ${fetchedReviews.length} reviews from API`, fetchedReviews);
+        // fix: Ensure reviews array is always set, even if empty
+        setReviews(Array.isArray(fetchedReviews) ? fetchedReviews : []);
       } catch (err) {
-        console.error("Gagal narik reviews:", err);
+        console.error(`[BookDetail] ❌ Gagal narik reviews:`, err);
+        setReviews([]);
       } finally {
         setLoadingReviews(false);
       }
@@ -144,6 +151,53 @@ export default function BookDetailPage() {
   }
 
   function handleQueue() { setModal('queue'); }
+
+  // Refetch book and reviews after review submission
+  async function handleReviewSubmitted() {
+    console.log('[STEP 1] handleReviewSubmitted triggered');
+    console.log('[STEP 1] Current book state:', { avg_rating: book?.avg_rating, rating_count: book?.rating_count });
+    
+    // Refetch book data
+    try {
+      console.log('[STEP 2] Calling fetchBookById for book:', bookKey);
+      const updated = await fetchBookById(bookKey);
+      console.log('[STEP 2] Response from fetchBookById:', {
+        avg_rating: updated?.avg_rating,
+        rating_count: updated?.rating_count,
+        fullData: updated
+      });
+      
+      if (updated) {
+        console.log('[STEP 3] Before setBook - current state:', { avg_rating: book?.avg_rating, rating_count: book?.rating_count });
+        console.log('[STEP 3] Setting book to:', { avg_rating: updated.avg_rating, rating_count: updated.rating_count });
+        setBook(updated);
+        console.log('[STEP 3] After setBook called - state should update soon');
+      } else {
+        console.warn('[STEP 2] fetchBookById returned null/undefined');
+      }
+    } catch (err) {
+      console.error("[STEP 2] Error refetching book:", err);
+    }
+
+    // Refetch reviews
+    setLoadingReviews(true);
+    try {
+      console.log('[STEP 4] Fetching reviews for book:', bookKey);
+      const { reviews: fetchedReviews } = await fetchBookReviewData(bookKey);
+      console.log('[STEP 4] Fetched reviews:', fetchedReviews?.length, 'reviews');
+      setReviews(fetchedReviews);
+    } catch (err) {
+      console.error("[STEP 4] Error refetching reviews:", err);
+    } finally {
+      setLoadingReviews(false);
+    }
+  }
+
+  function handleReviewClose() {
+    // Refetch after modal closes
+    handleReviewSubmitted();
+    setReviewOpen(false);
+  }
 
   if (authLoading || loadingBook || !book) return <PageSkeleton />;
 
@@ -365,6 +419,11 @@ export default function BookDetailPage() {
                 </div>
               </div>
               <div className="flex flex-col gap-3">
+                {/* fix: Debug logging for reviews */}
+                {(() => {
+                  console.log('[BookDetail] 📋 Reviews rendering state:', { loadingReviews, reviewsCount: reviews.length, reviews });
+                  return null;
+                })()}
                 {loadingReviews
                   ? Array(3).fill(0).map((_, i) => (
                       <div key={i} className={cn('rounded-2xl border p-4 animate-pulse', tk.surface, tk.border)}>
@@ -602,7 +661,8 @@ export default function BookDetailPage() {
         bookTitle={book.title}
         bookKey={book.id}
         open={reviewOpen}
-        onClose={() => setReviewOpen(false)}
+        onClose={handleReviewClose}
+        onSubmit={handleReviewSubmitted}
       />
     </div>
   );

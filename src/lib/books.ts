@@ -65,7 +65,10 @@ function normalizeBook(raw: Record<string, unknown>): BookDetail {
     queue:        Number(raw.queue ?? raw.queueCount ?? 0),
     description:  String(raw.description ?? raw.synopsis ?? ''),
     reviews:      Array.isArray(raw.reviews) ? (raw.reviews as BookDetail['reviews']) : [],
-  };
+    // Additional fields from API
+    isbn:         raw.isbn ? String(raw.isbn) : undefined,
+    cover_id:     raw.cover_id ? Number(raw.cover_id) : undefined,
+  } as BookDetail & { isbn?: string; cover_id?: number };
 }
 
 // ── Fetch all books (untuk /browse) ──────────────────────────────────────────
@@ -92,11 +95,8 @@ export async function fetchAllBooks(): Promise<BookDetail[]> {
 
 // ── Fetch single book by UUID ─────────────────────────────────────────────────
 export async function fetchBookById(bookId: string): Promise<BookDetail | null> {
-  if (DUMMY_BOOKS[bookId]) {
-    return DUMMY_BOOKS[bookId];
-  }
-
   try {
+    console.log(`[Book] 🔄 Fetching book detail for: ${bookId}`);
     const headers = await getOptionalAuthHeader();
     const res = await fetch(`${API_URL}/books/${bookId}`, {
       cache: 'no-store',
@@ -104,16 +104,20 @@ export async function fetchBookById(bookId: string): Promise<BookDetail | null> 
     });
     if (res.status === 404) {
       // Buku belum ada di DB → cek dummy
+      console.warn(`[Book] ⚠️ Book ${bookId} not found (404)`);
       return DUMMY_BOOKS[bookId] ?? null;
     }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     const json = await res.json();
+    console.log(`[Book] 📊 Raw API response:`, json);
     const raw: Record<string, unknown> = json?.data ?? json;
-    return normalizeBook(raw);
+    const normalized = normalizeBook(raw);
+    console.log(`[Book] ✅ Normalized book detail:`, normalized);
+    return normalized;
   } catch (err) {
-    console.warn(`[books] fetchBookById(${bookId}) gagal, cek dummy:`, err);
-    return DUMMY_BOOKS[bookId] ?? null;
+    console.error(`[Book] ❌ Error fetching book ${bookId}:`, err);
+    return null;
   }
 }
 

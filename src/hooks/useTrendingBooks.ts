@@ -2,12 +2,6 @@
 import { useState, useEffect } from 'react';
 import { fetchTrending, type TrendingBook } from '@/lib/api';
 import type { PopularBook } from '@/components/shared/PopularCarousel';
-import {
-  batchFetchCovers,
-  getCoverFromMap,
-  coverBatchCache,
-  type CoverRequest,
-} from '@/lib/coverBatch';
 
 /**
  * Fetch buku trending dari FastAPI dan convert ke format PopularBook
@@ -21,34 +15,76 @@ import {
 export function useTrendingBooks(limit = 6) {
   const [books, setBooks] = useState<PopularBook[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchTrending(limit)
-      .then(async (trending: TrendingBook[]) => {
+    // 1️⃣ Reset state when limit changes
+    setLoading(true);
+    setError(null);
+    setBooks([]);
+
+    (async () => {
+      try {
+        // 2️⃣ Fetch trending books from API
+        console.log(`[useTrendingBooks] 🔄 Fetching trending books with limit=${limit}`);
+        const trending = await fetchTrending(limit);
+        console.log(`[useTrendingBooks] 📊 Got ${trending.length} books from API`, trending);
+
+        // 3️⃣ Handle empty results gracefully (still valid state)
         if (trending.length === 0) {
+          console.log(`[useTrendingBooks] ⚠️ Empty trending books result`);
           setBooks([]);
+          setLoading(false);
           return;
         }
 
-        const coverRequests: CoverRequest[] = trending.map((b) => ({
-          title: b.title,
-          authors: b.authors,
-          coverUrl: b.cover_url, // Already have URL? Skip fetch
-        }));
-
-        const coverMap = await coverBatchCache.fetch(coverRequests);
+        // 4️⃣ Convert to PopularBook format - generate covers from ISBN via OpenLibrary
         const converted: PopularBook[] = trending.map((b, i) => {
-          const cover = getCoverFromMap(coverMap, b.title, b.authors);
-          const coverIdRaw = cover?.coverId;
-          const coverId = coverIdRaw !== null && coverIdRaw !== undefined
-            ? Number(coverIdRaw)
-            : undefined;
+          // Priority for cover URL:
+          // 1. cover_url from API (database direct URL)
+          // 2. Generate from ISBN via OpenLibrary API
+          // 3. Fallback to cover_id if exists
+          
+          let finalCoverUrl: string | undefined;
+          let coverId: number | undefined;
+          
+          // Strategy 1: Use API's cover_url if it exists
+          if (b.cover_url) {
+            finalCoverUrl = b.cover_url;
+            console.log(`[useTrendingBooks] "${b.title}": Using cover_url from API`);
+          }
+          // Strategy 2: Generate from ISBN via OpenLibrary
+          else if (b.isbn && String(b.isbn).trim()) {
+            finalCoverUrl = `https://covers.openlibrary.org/b/isbn/${String(b.isbn).trim()}-L.jpg`;
+            console.log(
+              `[useTrendingBooks] "${b.title}": Generated OpenLibrary URL from ISBN=${b.isbn}`
+            );
+          }
+          // Strategy 3: Use cover_id if available
+          else if (b.cover_id && Number.isFinite(b.cover_id)) {
+            finalCoverUrl = `https://covers.openlibrary.org/b/id/${b.cover_id}-L.jpg`;
+            coverId = b.cover_id;
+            console.log(
+              `[useTrendingBooks] "${b.title}": Generated OpenLibrary URL from cover_id=${b.cover_id}`
+            );
+          }
+          
+          console.log(
+            `[useTrendingBooks] Book "${b.title}":`,
+            { 
+              'b.isbn': b.isbn,
+              'b.cover_id': b.cover_id,
+              'b.cover_url': b.cover_url,
+              finalCoverUrl,
+            }
+          );
+
           return {
             key: b.book_id,
             title: b.title,
             author: b.authors,
-            coverId: Number.isFinite(coverId) ? coverId : undefined,
-            coverUrl: cover?.coverUrl || b.cover_url,
+            coverId,
+            coverUrl: finalCoverUrl,
             genre: b.genres ?? [],
             desc:
               b.description ||
@@ -61,13 +97,24 @@ export function useTrendingBooks(limit = 6) {
           };
         });
 
+        console.log(`[useTrendingBooks] ✅ Successfully converted ${converted.length} books to PopularBook format`);
         setBooks(converted);
-      })
-      .catch(() => {
+        setLoading(false);
+
+      } catch (err) {
+        // 6️⃣ Error handling with detailed logging
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[useTrendingBooks] ❌ Error fetching trending books:`, {
+          limit,
+          error: errorMsg,
+          fullError: err,
+        });
+        setError(errorMsg);
         setBooks([]);
-      })
-      .finally(() => setLoading(false));
+        setLoading(false);
+      }
+    })();
   }, [limit]);
 
-  return { books, loading };
+  return { books, loading, error };
 }

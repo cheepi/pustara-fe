@@ -66,6 +66,7 @@ export default function RegisterPage() {
         return;
       }
 
+      if (!auth) throw new Error('Firebase not initialized');
       const cred = await signInWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName: name });
       router.replace('/auth/personalization');
@@ -83,6 +84,7 @@ export default function RegisterPage() {
     }
     setError(''); setLoading(true);
     try {
+      if (!auth || !googleProvider) throw new Error('Firebase not initialized');
       await signInWithPopup(auth, googleProvider);
       router.replace('/auth/personalization');
     } catch (err: any) {

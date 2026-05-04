@@ -64,6 +64,7 @@ export default function LoginPage() {
         return;
       }
 
+      if (!auth) throw new Error('Firebase not initialized');
       await signInWithEmailAndPassword(auth, email, password);
       const p = localStorage.getItem('pustara_personalized');
       router.replace(p ? '/' : '/auth/personalization');
@@ -81,6 +82,7 @@ export default function LoginPage() {
     }
     setError(''); setLoading(true);
     try {
+      if (!auth || !googleProvider) throw new Error('Firebase not initialized');
       const result = await signInWithPopup(auth, googleProvider);
       const isNew = getAdditionalUserInfo(result)?.isNewUser;
       const p = localStorage.getItem('pustara_personalized');

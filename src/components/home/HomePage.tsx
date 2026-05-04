@@ -56,7 +56,7 @@ export default function HomePage() {
   const { theme }  = useTheme();
   const isLight    = theme === 'light';
   const firstName  = user?.displayName?.split(' ')[0] || 'Pembaca';
-  const { books: popularBooks, loading: popularLoading } = useTrendingBooks(6);
+  const { books: popularBooks, loading: popularLoading, error: popularError } = useTrendingBooks(6);
   const { recommendations: aiReco, loading: aiLoading } = useRecommendations();
   const [aiCovers, setAiCovers] = useState<Map<string, string | null>>(new Map());
 
@@ -152,10 +152,25 @@ export default function HomePage() {
           <h2 className="font-serif text-lg font-bold" style={{ color: 'var(--text)' }}>Bacaan Populer</h2>
           <Link href="/popular" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
         </div>
-        {popularLoading
-          ? <PopularSkeleton isLight={isLight} />
-          : <PopularCarousel books={popularBooks} isLight={isLight} />
-        }
+        {/* Show skeleton only while loading */}
+        {popularLoading ? (
+          <PopularSkeleton isLight={isLight} />
+        ) : popularError ? (
+          // Error state: show message instead of empty
+          <div className="select-none px-4 py-8 rounded-2xl mx-4 text-center" style={{ color: 'var(--muted)' }}>
+            <p className="text-sm">❌ Gagal memuat bacaan populer</p>
+            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>{popularError}</p>
+          </div>
+        ) : popularBooks.length > 0 ? (
+          // Success: show carousel
+          <PopularCarousel books={popularBooks} isLight={isLight} />
+        ) : (
+          // Empty state: no data after loading
+          <div className="select-none px-4 py-8 rounded-2xl mx-4 text-center" style={{ color: 'var(--muted)' }}>
+            <p className="text-sm"> Belum ada bacaan populer saat ini</p>
+            <p className="text-xs mt-1">Mulai baca buku untuk melihat trending</p>
+          </div>
+        )}
       </section>
 
       {/* ── REKOMENDASI PUSTARAI ── */}
