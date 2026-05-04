@@ -70,13 +70,8 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) {
-        setUsers([]);
-        setError('Sesi admin tidak ditemukan. Silakan login ulang.');
-        return;
-      }
-
+      setLoading(true);
+      const token = await auth!.currentUser?.getIdToken();
       const response = await fetch('/api/users', {
         cache: 'no-store',
         headers: {
@@ -108,7 +103,9 @@ export default function AdminDashboard() {
 
   async function handleLogout() {
     try {
-      await signOut(auth);
+      if (auth) {
+        await signOut(auth);
+      }
       router.replace('/');
     } catch {
       setError('Gagal logout. Coba lagi.');
@@ -123,9 +120,7 @@ export default function AdminDashboard() {
     setUsers((prev) => prev.map((item) => (item.uid === uid ? { ...item, role: newRole } : item)));
 
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) throw new Error('No token');
-
+      const token = await auth!.currentUser?.getIdToken();
       const response = await fetch(`/api/users/${uid}/role`, {
         method: 'PUT',
         headers: {

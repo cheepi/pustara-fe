@@ -65,18 +65,10 @@ function normalizeBook(raw: Record<string, unknown>): BookDetail {
     queue:        Number(raw.queue ?? raw.queueCount ?? 0),
     description:  raw.description != null ? String(raw.description) : null, // string | null
     reviews:      Array.isArray(raw.reviews) ? (raw.reviews as BookDetail['reviews']) : [],
-
-    // ── Required fields from Book that were missing ──
-    external_key: raw.external_key != null ? String(raw.external_key) : null,
-    cover_id:     raw.cover_id != null ? Number(raw.cover_id) : null,
-    language:     String(raw.language ?? 'id'),
-    is_active:    Boolean(raw.is_active ?? true),
-    created_at:   String(raw.created_at ?? ''),
-    updated_at:   String(raw.updated_at ?? ''),
-    file_url:     raw.file_url != null ? String(raw.file_url) : null,
-    file_type:    String(raw.file_type ?? 'pdf'),
-    total_pages:  raw.total_pages != null ? Number(raw.total_pages) : null,
-  };
+    // Additional fields from API
+    isbn:         raw.isbn ? String(raw.isbn) : undefined,
+    cover_id:     raw.cover_id ? Number(raw.cover_id) : undefined,
+  } as BookDetail & { isbn?: string; cover_id?: number };
 }
 
 export interface GetBooksParams {
@@ -161,27 +153,30 @@ export async function getBooks(params: GetBooksParams = {}): Promise<GetBooksRes
   }
 }
 
-export async function getBookById(bookId: string): Promise<BookDetail | null> {
-  if (!bookId) return null;
-
-  if (DUMMY_BOOKS[bookId]) {
-    return DUMMY_BOOKS[bookId];
-  }
-
+// ── Fetch single book by UUID ─────────────────────────────────────────────────
+export async function fetchBookById(bookId: string): Promise<BookDetail | null> {
   try {
+    console.log(`[Book] 🔄 Fetching book detail for: ${bookId}`);
     const headers = await getOptionalAuthHeader();
     const res = await fetch(`${API_URL}/books/${bookId}`, {
       cache: 'no-store',
       headers,
     });
-    if (res.status === 404) return DUMMY_BOOKS[bookId] ?? null;
+    if (res.status === 404) {
+      // Buku belum ada di DB → cek dummy
+      console.warn(`[Book] ⚠️ Book ${bookId} not found (404)`);
+      return DUMMY_BOOKS[bookId] ?? null;
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
+    console.log(`[Book] 📊 Raw API response:`, json);
     const raw: Record<string, unknown> = json?.data ?? json;
-    return normalizeBook(raw);
+    const normalized = normalizeBook(raw);
+    console.log(`[Book] ✅ Normalized book detail:`, normalized);
+    return normalized;
   } catch (err) {
-    console.warn(`[books] getBookById(${bookId}) gagal, cek dummy:`, err);
-    return DUMMY_BOOKS[bookId] ?? null;
+    console.error(`[Book] ❌ Error fetching book ${bookId}:`, err);
+    return null;
   }
 }
 

@@ -24,7 +24,9 @@ interface Book {
   author?: string | string[];
   authors?: string[];
   cover_url?: string | null;
-  coverUrl?: string | null; 
+  coverUrl?: string | null;
+  isbn?: string | null; // For OpenLibrary ISBN-based cover lookup
+  cover_id?: number | null; // OpenLibrary cover ID
 }
 
 interface CoverResult {
@@ -101,7 +103,10 @@ async function fetchOpenLibraryCover(title: string, author: string | null): Prom
 
 /**
  * Get cover for a single book
- * Priority: database cover_url > OpenLibrary fallback
+ * Priority: 
+ * 1. database cover_url
+ * 2. OpenLibrary by ISBN
+ * 3. OpenLibrary by title+author search
  */
 async function getCover(book: Book): Promise<CoverResult> {
   const cacheKey = generateCacheKey(book);
@@ -110,6 +115,7 @@ async function getCover(book: Book): Promise<CoverResult> {
     return COVER_CACHE.get(cacheKey)!;
   }
 
+  // 1️⃣ Try database cover_url first
   const dbCoverUrl = book.cover_url || book.coverUrl;
   if (dbCoverUrl && typeof dbCoverUrl === 'string' && dbCoverUrl.trim()) {
     const result: CoverResult = { url: dbCoverUrl, source: 'database' };
@@ -117,6 +123,25 @@ async function getCover(book: Book): Promise<CoverResult> {
     return result;
   }
 
+  // 2️⃣ Try OpenLibrary by ISBN (most reliable)
+  if (book.isbn && String(book.isbn).trim()) {
+    const url = `https://covers.openlibrary.org/b/isbn/${String(book.isbn).trim()}-M.jpg`;
+    console.log(`[useBookCover] Using ISBN for cover: ${book.title} (ISBN: ${book.isbn})`);
+    const result: CoverResult = { url, source: 'openlibrary', coverId: book.isbn };
+    COVER_CACHE.set(cacheKey, result);
+    return result;
+  }
+
+  // 3️⃣ Try OpenLibrary by cover_id
+  if (book.cover_id && Number.isFinite(book.cover_id)) {
+    const url = `https://covers.openlibrary.org/b/id/${book.cover_id}-M.jpg`;
+    console.log(`[useBookCover] Using cover_id for cover: ${book.title} (ID: ${book.cover_id})`);
+    const result: CoverResult = { url, source: 'openlibrary', coverId: String(book.cover_id) };
+    COVER_CACHE.set(cacheKey, result);
+    return result;
+  }
+
+  // 4️⃣ Fallback: OpenLibrary search by title+author
   const author = Array.isArray(book.authors)
     ? book.authors[0] || null
     : Array.isArray(book.author)

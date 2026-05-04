@@ -16,9 +16,9 @@ import { useAuth } from '@/hooks/useAuth';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import ReviewModal from '@/components/shared/ReviewModal';
 import { useSimilarBooks } from '@/hooks/useSimilarBooks';
-import { getBookById, getSimilarBooks } from '@/lib/books';
-import { borrowBookForMe, fetchMyBookShelfStatus, removeSavedBookForMe, saveBookForMe } from '@/lib/shelf';
-import { BookDetail } from '@/types/book';
+import { fetchBookById } from '@/lib/books';
+import { fetchBookReviewData } from '@/lib/bookReviews';
+import { BookDetail, Review } from '@/types/book';
 import type { ModalState } from '@/types/bookPage';
 import { useBookCover, useBookCovers } from '@/hooks/useBookCover';
 
@@ -45,14 +45,17 @@ export default function BookDetailPage() {
   useEffect(() => {
     async function fetchBookDetail() {
       try {
-        const found = await getBookById(bookKey);
+        console.log(`[BookDetail] 🔄 Fetching book detail for: ${bookKey}`);
+        const found = await fetchBookById(bookKey);
+        console.log(`[BookDetail] 📊 Got book detail:`, found);
         if (found) {
           setBook(found);
         } else {
+          console.warn(`[BookDetail] ⚠️ Book not found for: ${bookKey}`);
           router.replace('/not-found');
         }
       } catch (err) {
-        console.error("Gagal narik data buku:", err);
+        console.error(`[BookDetail] ❌ Gagal narik data buku:`, err);
         router.replace('/not-found');
       } finally {
         setLoadingBook(false);
@@ -63,27 +66,24 @@ export default function BookDetailPage() {
   }, [bookKey, router]);
 
   useEffect(() => {
-    let active = true;
-    if (!bookKey) return;
+    async function fetchReviews() {
+      if (!bookKey) return;
+      setLoadingReviews(true);
+      try {
+        console.log(`[BookDetail] 🔄 Fetching reviews for bookKey: ${bookKey}`);
+        const { reviews: fetchedReviews } = await fetchBookReviewData(bookKey);
+        console.log(`[BookDetail] 📊 Got ${fetchedReviews.length} reviews from API`, fetchedReviews);
+        // fix: Ensure reviews array is always set, even if empty
+        setReviews(Array.isArray(fetchedReviews) ? fetchedReviews : []);
+      } catch (err) {
+        console.error(`[BookDetail] ❌ Gagal narik reviews:`, err);
+        setReviews([]);
+      } finally {
+        setLoadingReviews(false);
+      }
+    }
 
-    setRelatedLoading(true);
-    getSimilarBooks(bookKey)
-      .then((list) => {
-        if (!active) return;
-        setRelatedBooks(list);
-      })
-      .catch(() => {
-        if (!active) return;
-        setRelatedBooks([]);
-      })
-      .finally(() => {
-        if (!active) return;
-        setRelatedLoading(false);
-      });
-
-    return () => {
-      active = false;
-    };
+    if (bookKey) fetchReviews();
   }, [bookKey]);
 
   // Unified book cover: prioritizes database cover_url, falls back to OpenLibrary
@@ -101,6 +101,8 @@ export default function BookDetailPage() {
   const [modal,    setModal]    = useState<ModalState>('none');
   const [shared,   setShared]   = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState(false);
 
   const [wishlisted, setWishlisted] = useState(false);
   const [borrowed,   setBorrowed]   = useState(false);
@@ -231,6 +233,53 @@ export default function BookDetailPage() {
   }
 
   function handleQueue() { setModal('queue'); }
+
+  // Refetch book and reviews after review submission
+  async function handleReviewSubmitted() {
+    console.log('[STEP 1] handleReviewSubmitted triggered');
+    console.log('[STEP 1] Current book state:', { avg_rating: book?.avg_rating, rating_count: book?.rating_count });
+    
+    // Refetch book data
+    try {
+      console.log('[STEP 2] Calling fetchBookById for book:', bookKey);
+      const updated = await fetchBookById(bookKey);
+      console.log('[STEP 2] Response from fetchBookById:', {
+        avg_rating: updated?.avg_rating,
+        rating_count: updated?.rating_count,
+        fullData: updated
+      });
+      
+      if (updated) {
+        console.log('[STEP 3] Before setBook - current state:', { avg_rating: book?.avg_rating, rating_count: book?.rating_count });
+        console.log('[STEP 3] Setting book to:', { avg_rating: updated.avg_rating, rating_count: updated.rating_count });
+        setBook(updated);
+        console.log('[STEP 3] After setBook called - state should update soon');
+      } else {
+        console.warn('[STEP 2] fetchBookById returned null/undefined');
+      }
+    } catch (err) {
+      console.error("[STEP 2] Error refetching book:", err);
+    }
+
+    // Refetch reviews
+    setLoadingReviews(true);
+    try {
+      console.log('[STEP 4] Fetching reviews for book:', bookKey);
+      const { reviews: fetchedReviews } = await fetchBookReviewData(bookKey);
+      console.log('[STEP 4] Fetched reviews:', fetchedReviews?.length, 'reviews');
+      setReviews(fetchedReviews);
+    } catch (err) {
+      console.error("[STEP 4] Error refetching reviews:", err);
+    } finally {
+      setLoadingReviews(false);
+    }
+  }
+
+  function handleReviewClose() {
+    // Refetch after modal closes
+    handleReviewSubmitted();
+    setReviewOpen(false);
+  }
 
   if (authLoading || loadingBook || !book) return <PageSkeleton />;
 
@@ -480,34 +529,65 @@ export default function BookDetailPage() {
                     <PenLine className="w-3.5 h-3.5" />
                     Tulis Ulasan
                   </button>
-                  <Link href={`/book/${book.id}/reviews`}
-                    className="text-gold text-xs font-semibold hover:underline">
-                    Lihat Semua
-                  </Link>
+                  {reviews.length > 0 && (
+                    <Link href={`/book/${book.id}/reviews`}
+                      className="text-gold text-xs font-semibold hover:underline">
+                      Lihat Semua
+                    </Link>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-3">
-                {book.reviews?.slice(0, 2).map((r, i) => (
-                  <motion.div key={i}
-                    className={cn('rounded-2xl border p-4', tk.surface, tk.border)}
-                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 + i * 0.05 }}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                        {r.avatar}
-                      </div>
-                      <div>
-                        <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
-                        <div className="flex gap-0.5 mt-0.5">
-                          {[1,2,3,4,5].map(s => (
-                            <Star key={s} className={cn('w-3 h-3', s <= r.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
-                          ))}
+                {/* fix: Debug logging for reviews */}
+                {(() => {
+                  console.log('[BookDetail] 📋 Reviews rendering state:', { loadingReviews, reviewsCount: reviews.length, reviews });
+                  return null;
+                })()}
+                {loadingReviews
+                  ? Array(3).fill(0).map((_, i) => (
+                      <div key={i} className={cn('rounded-2xl border p-4 animate-pulse', tk.surface, tk.border)}>
+                        <div className="flex items-center gap-3 mb-2">
+                          <div className={cn('w-9 h-9 rounded-full flex-shrink-0', isLight ? 'bg-parchment' : 'bg-navy-700')} />
+                          <div className="flex-1 space-y-2">
+                            <div className={cn('h-4 w-24 rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
+                            <div className="flex gap-0.5">
+                              {[1,2,3].map(s => (
+                                <div key={s} className={cn('w-3 h-3 rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
+                              ))}
+                            </div>
+                          </div>
                         </div>
+                        <div className={cn('h-4 w-full rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
                       </div>
-                    </div>
-                    <p className={cn('text-sm leading-relaxed', tk.muted)}>{r.text}</p>
-                  </motion.div>
-                ))}
+                    ))
+                  : reviews.length > 0
+                    ? reviews.slice(0, 5).map((r, i) => (
+                        <motion.div key={i}
+                          className={cn('rounded-2xl border p-4', tk.surface, tk.border)}
+                          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.2 + i * 0.05 }}>
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
+                              {r.avatar}
+                            </div>
+                            <div>
+                              <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
+                              <div className="flex gap-0.5 mt-0.5">
+                                {[1,2,3,4,5].map(s => (
+                                  <Star key={s} className={cn('w-3 h-3', s <= r.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <p className={cn('text-sm leading-relaxed', tk.muted)}>{r.text}</p>
+                        </motion.div>
+                      ))
+                    : (
+                      <div className={cn('rounded-2xl border p-6 text-center', tk.surface, tk.border)}>
+                        <p className={cn('text-sm', tk.muted)}>Belum ada ulasan. Jadilah yang pertama!</p>
+                      </div>
+                    )
+                }
               </div>
             </section>
 
@@ -725,7 +805,8 @@ export default function BookDetailPage() {
         bookTitle={book.title}
         bookKey={book.id}
         open={reviewOpen}
-        onClose={() => setReviewOpen(false)}
+        onClose={handleReviewClose}
+        onSubmit={handleReviewSubmitted}
       />
     </div>
   );

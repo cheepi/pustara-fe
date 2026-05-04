@@ -37,6 +37,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // setLoading(true) sudah dilakukan di initial store state
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
+
     const unsub = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       setLoading(false); // ← ini yang penting: SATU kali, setelah Firebase resolve

@@ -10,10 +10,12 @@ const firebaseConfig = {
   appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Prevent re-initialization in hot reload
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+// Skip Firebase init during build
+const app = (typeof window !== 'undefined' && firebaseConfig.apiKey) 
+  ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0])
+  : null;
 
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+export const auth = app ? getAuth(app) : null;
+export const googleProvider = app ? new GoogleAuthProvider() : null;
 
 export default app;

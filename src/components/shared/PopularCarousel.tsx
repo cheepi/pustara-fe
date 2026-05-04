@@ -20,8 +20,39 @@ export interface PopularBook {
 
 const RATINGS = [4.7, 4.9, 4.6, 4.8, 4.5, 4.7];
 
-const coverUrl = (id?: number, s = 'L') =>
-  id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
+/**
+ * Generate cover URL from OpenLibrary book ID
+ * Fallback when API doesn't have cover_url
+ */
+const coverUrl = (id?: number, s = 'L') => {
+  if (!id || !Number.isFinite(id)) return null;
+  return `https://covers.openlibrary.org/b/id/${id}-${s}.jpg`;
+};
+
+/**
+ * Get best available cover URL for a book
+ * Priority: 1. coverUrl (from API) 2. coverId (OpenLibrary) 3. null
+ */
+function getBestCoverUrl(book: PopularBook): string | null {
+  console.log(`[PopularCarousel] Getting cover for "${book.title}":`, {
+    coverUrl: book.coverUrl,
+    coverId: book.coverId,
+  });
+  
+  if (book.coverUrl) {
+    console.log(`[PopularCarousel] ✅ Using coverUrl from API`);
+    return book.coverUrl;
+  }
+  
+  if (book.coverId && Number.isFinite(book.coverId)) {
+    const url = coverUrl(book.coverId, 'L');
+    console.log(`[PopularCarousel] ✅ Using generated coverUrl from ID: ${url}`);
+    return url;
+  }
+  
+  console.log(`[PopularCarousel] ⚠️ No cover available`);
+  return null;
+}
 
 interface PopularCarouselProps {
   books: PopularBook[];
@@ -85,7 +116,9 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
   const arrowBg     = isLight ? 'bg-navy-100 hover:bg-navy-200 text-navy-600' : 'bg-white/10 hover:bg-white/20 text-white/70 hover:text-white';
   const dotInactive = isLight ? 'bg-navy-800/25' : 'bg-white/25';
   const activeBook  = books[activeIndex];
-  const activeRating = Number.isFinite(activeBook?.avgRating)
+  
+  // Fallback rating: use book's avgRating if valid, else use fallback rating
+  const activeRating = activeBook?.avgRating && Number.isFinite(activeBook.avgRating) && activeBook.avgRating > 0
     ? Number(activeBook.avgRating)
     : RATINGS[activeIndex % RATINGS.length];
 
@@ -162,7 +195,7 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
               const pos = getPos(i);
               const s = getStyle(pos);
               if (!s) return null;
-              const src = book.coverUrl || coverUrl(book.coverId, 'L');
+              const src = getBestCoverUrl(book);
               const isSide = pos !== 0;
               return (
                 <motion.div key={book.key} className="absolute cursor-pointer" style={{ zIndex: s.zIndex }}
@@ -177,13 +210,27 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
                         ? 'shadow-[0_8px_32px_rgba(0,0,0,0.28)] ring-1 ring-black/15'
                         : 'ring-1 ring-white/20 shadow-[0_0_0_1px_rgba(255,255,255,0.12),0_8px_40px_rgba(0,0,0,0.5)]'
                   )} style={{ width: cardW, height: cardH }}>
-                    {src
-                      ? <img src={src} alt={book.title} className="w-full h-full object-cover" />
-                      : <div className={cn('w-full h-full flex items-center justify-center', isLight ? 'bg-parchment-darker' : 'bg-navy-700')}>
-                          <span className="text-slate-500 text-xs text-center px-2">{book.title}</span>
-                        </div>
-                    }
-                    {/* Light mode: dark overlay biar kontras. Dark mode: bright overlay biar nongol */}
+                    {src ? (
+                      // ✅ Have cover URL: show image
+                      <img 
+                        src={src} 
+                        alt={book.title} 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          console.error(`[PopularCarousel] ❌ Image failed to load: ${src}`);
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      // ❌ No cover: show fallback
+                      <div className={cn('w-full h-full flex flex-col items-center justify-center p-4', isLight ? 'bg-parchment-darker' : 'bg-navy-700')}>
+                        <BookOpen className="w-8 h-8 mb-2" style={{ color: 'var(--muted)' }} />
+                        <span className="text-xs text-center" style={{ color: 'var(--muted)' }}>
+                          {book.title}
+                        </span>
+                      </div>
+                    )}
+                    {/* Light mode: dark overlay. Dark mode: bright overlay */}
                     {isSide && (
                       <div className={cn(
                         'absolute inset-0 rounded-2xl pointer-events-none',

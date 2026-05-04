@@ -275,7 +275,7 @@ export default function Navbar() {
                             ))}
                           </div>
                           <div>
-                            <button onClick={() => { setDropOpen(false); setLogoutConfirmOpen(true); }}
+                            <button onClick={() => { setDropOpen(false); if (auth) signOut(auth); }}
                               className={cn('w-full text-left px-4 py-2.5 text-sm font-medium transition-colors', dropLogout)}>
                               Keluar
                             </button>
@@ -412,7 +412,7 @@ export default function Navbar() {
             <div className="h-px mb-3" style={{ background: 'var(--border)' }} />
 
             {/* Logout */}
-            <button onClick={() => { setMenuOpen(false); setLogoutConfirmOpen(true); }}
+            <button onClick={() => { setMenuOpen(false); if (auth) signOut(auth); }}
               className="w-full flex items-center px-4 py-3 rounded-2xl text-sm font-semibold text-red-400 hover:bg-red-400/[0.08] transition-all">
               Keluar dari Akun
             </button>

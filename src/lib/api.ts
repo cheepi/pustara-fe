@@ -3,28 +3,18 @@ import type { User } from 'firebase/auth';
 import type { AiRecommendation } from '@/types/ai';
 import { apiCaches } from './cache';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env?.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
-let cachedAuthHeader: Record<string, string> | null = null;
-let cachedAuthUid: string | null = null;
-let cachedAuthAt = 0;
-
-function clearAuthCache() {
-  cachedAuthHeader = null;
-  cachedAuthUid = null;
-  cachedAuthAt = 0;
-}
-
-async function resolveCurrentUser(): Promise<User | null> {
-  if (auth.currentUser) return auth.currentUser;
-
-  return new Promise<User | null>((resolve) => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
-      unsubscribe();
-      resolve(user);
-    });
-  });
+// ── Auth helper ───────────────────────────────────────────────────────────────
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const user = auth?.currentUser;
+  if (!user) return {};
+  try {
+    const token = await user.getIdToken();
+    return { Authorization: `Bearer ${token}` };
+  } catch {
+    return {};
+  }
 }
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
@@ -53,7 +43,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 }
 
 async function getOptionalAuthHeader(): Promise<Record<string, string>> {
-  const user = auth.currentUser;
+  const user = auth?.currentUser;
   if (!user) return {};
 
   const now = Date.now();
@@ -85,7 +75,11 @@ function unwrapData<T>(json: unknown): T {
 export async function apiGet<T>(path: string): Promise<T> {
   const headers = await getAuthHeader();
   const res = await fetch(`${API_URL}${path}`, { headers });
-  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  if (!res.ok) {
+  const text = await res.text();
+  console.error("API ERROR DETAIL:", text);
+  throw new Error(`API error: ${res.status}`);
+}
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -125,6 +119,42 @@ export async function apiDelete<T>(path: string): Promise<T> {
   return unwrapData<T>(json);
 }
 
+// ── User API ──────────────────────────────────────────────────────────────────
+export interface User {
+  id: string;
+  firebase_uid: string;
+  username: string;
+  email: string;
+  display_name?: string;
+}
+
+/**
+ * Get current user record from backend (requires Firebase token)
+ * If user doesn't exist, backend will create it
+ */
+export async function getCurrentUser(): Promise<User | null> {
+  try {
+    const user = auth?.currentUser;
+    if (!user) return null;
+
+    const token = await user.getIdToken();
+    if (!token) return null;
+    
+    const res = await fetch(`${API_URL}/auth/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    // fix: Return null gracefully on any error - don't break flow
+    if (!res.ok) return null;
+    
+    const json = await res.json();
+    return json.user || json.data || null;
+  } catch (err) {
+    // fix: Silent fail - endpoint error should not block other features
+    return null;
+  }
+}
+
 // ── AI Recommendation API ─────────────────────────────────────────────────────
 
 export interface ChatRecoResponse {
@@ -143,12 +173,14 @@ export interface TrendingBook {
   book_id: string;
   title: string;
   authors: string;
+  isbn?: string; // For OpenLibrary cover fetching
   genres?: string[];
   description?: string;
   year?: string;
   pages?: number;
   avg_rating: number;
   cover_url?: string;
+  cover_id?: number;
   trending_score?: number;
   reason_primary?: string;
 }
@@ -259,10 +291,12 @@ function normalizeAiRecommendation(raw: unknown): AiRecommendation {
 
 function normalizeTrendingBook(raw: unknown): TrendingBook {
   const book = (raw ?? {}) as Record<string, unknown>;
+  const coverId = Number(book.cover_id ?? 0);
   return {
     book_id: String(book.book_id ?? book.id ?? ''),
     title: String(book.title ?? 'Untitled'),
     authors: String(book.authors ?? book.author ?? 'Unknown Author'),
+    isbn: book.isbn ? String(book.isbn) : undefined,
     genres: Array.isArray(book.genres)
       ? (book.genres as unknown[]).map((g) => String(g))
       : typeof book.genres === 'string'
@@ -273,7 +307,8 @@ function normalizeTrendingBook(raw: unknown): TrendingBook {
     pages: normalizeTrendingPages(book),
     avg_rating: toFiniteNumber(book.avg_rating, 0),
     cover_url: book.cover_url ? String(book.cover_url) : undefined,
-    trending_score: normalizeTrendingScore(book),
+    cover_id: Number.isFinite(coverId) && coverId > 0 ? coverId : undefined,
+    trending_score: toFiniteNumber(book.trending_score ?? book.score, 0),
     reason_primary: book.reason_primary ? String(book.reason_primary) : undefined,
   };
 }
@@ -340,34 +375,56 @@ export async function fetchColdStartRecommendations(
 }
 
 /**
- * Fetch trending books dari FastAPI (Redis sorted set).
- * Dipakai oleh feed/page.tsx untuk replace hardcoded trending items.
+ * Fetch trending books dari database backend (Neon PostgreSQL)
  * 
- * CACHED: 60 seconds to prevent redundant API calls
+ * Strategy:
+ * - Single endpoint: GET /books/trending?limit=N
+ * - No external API fallback (database-only)
+ * - If HTTP 200/304: return data as-is (even if empty array)
+ * - If HTTP error: graceful fallback (return empty array)
+ * 
+ * Caching: 60 seconds to prevent redundant API calls
+ * Sorting: review_count DESC, avg_rating DESC, created_at DESC
  */
 export async function fetchTrending(topN = 10): Promise<TrendingBook[]> {
   const cacheKey = `trending_${topN}`;
+  const endpoint = `/books/trending?limit=${topN}`;
 
-  // Check cache first
+  // 1️⃣ Check cache first (60 second TTL)
   const cached = apiCaches.trending.get(cacheKey) as TrendingBook[] | null;
   if (cached !== null) {
+    console.log(`[Trending] ✅ Cache hit for limit=${topN}`);
     return cached;
   }
 
   try {
-    const res = await apiGet<TrendingResponse & { recommendations?: TrendingBook[] }>(`/recommendations/trending?top_n=${topN}`);
-    const source = Array.isArray(res.trending)
-      ? res.trending
-      : Array.isArray(res.recommendations)
-        ? res.recommendations
-        : [];
-    const result = source.map(normalizeTrendingBook);
+    // 2️⃣ Fetch from database endpoint
+    console.log(`[Trending] 🔄 Fetching from database endpoint: GET ${endpoint}`);
+    const res = await apiGet<TrendingBook[]>(endpoint);
+    
+    // 3️⃣ Normalize response (handle various formats)
+    console.log(`[Trending] 📊 Raw API response:`, res);
+    const rawData = Array.isArray(res) ? res : [];
+    console.log(`[Trending] 📊 Raw response data count: ${rawData.length} books`);
+    
+    const result = rawData.map(normalizeTrendingBook);
+    console.log(`[Trending] ✅ Successfully fetched and normalized ${result.length} trending books`, result);
 
-    // Store in cache for 60 seconds
+    // 4️⃣ Store in cache regardless of result count
+    // (empty results are still valid - means no trending books exist yet)
     apiCaches.trending.set(cacheKey, result);
-
+    
     return result;
-  } catch {
+
+  } catch (error) {
+    // 5️⃣ Graceful fallback: return empty array on any error
+    console.error(`[Trending] ❌ Failed to fetch trending books:`, {
+      error: error instanceof Error ? error.message : String(error),
+      endpoint,
+      topN,
+    });
+    
+    // Return empty array (UI handles this gracefully)
     return [];
   }
 }

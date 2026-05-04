@@ -21,22 +21,17 @@ function normalizeReview(raw: Record<string, unknown>): CommunityReview {
 }
 
 export async function fetchCommunityReviews(): Promise<CommunityReview[]> {
-  const endpoints = ['/community/reviews', '/reviews/community', '/reviews'];
+  try {
+    const res = await fetch(`${API_URL}/books/1/reviews?limit=100`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('Failed to fetch reviews');
 
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(`${API_URL}${endpoint}`, { cache: 'no-store' });
-      if (!res.ok) continue;
-
-      const json = await res.json();
-      const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-      if (raw.length > 0) {
-        return raw.map((item: Record<string, unknown>) => normalizeReview(item));
-      }
-    } catch {
-      // try next endpoint
+    const json = await res.json();
+    const raw = Array.isArray(json?.data) ? json.data : [];
+    if (raw.length > 0) {
+      return raw.map((item: Record<string, unknown>) => normalizeReview(item));
     }
+    return DUMMY_ALL_REVIEWS as CommunityReview[];
+  } catch {
+    return DUMMY_ALL_REVIEWS as CommunityReview[];
   }
-
-  return DUMMY_ALL_REVIEWS as CommunityReview[];
 }
