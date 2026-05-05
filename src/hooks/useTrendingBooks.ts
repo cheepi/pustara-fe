@@ -1,7 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { fetchTrending, type TrendingBook } from '@/lib/api';
-import { getBookById } from '@/lib/books';
 import type { PopularBook } from '@/components/shared/PopularCarousel';
 
 /**
@@ -91,8 +90,8 @@ export function useTrendingBooks(limit = 6) {
               b.description ||
               b.reason_primary ||
               `Trending di Pustara — rating ${b.avg_rating?.toFixed(1) ?? '?'}/5`,
-            year: resolvedYear,
-            pages: resolvedPages,
+            year: b.year,
+            pages: b.pages,
             avgRating: b.avg_rating,
             rank: i + 1,
           };
@@ -105,13 +104,11 @@ export function useTrendingBooks(limit = 6) {
       } catch (err) {
         // 6️⃣ Error handling with detailed logging
         const errorMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[useTrendingBooks] ❌ Error fetching trending books:`, {
-          limit,
-          error: errorMsg,
-          fullError: err,
-        });
-        setError(errorMsg);
+        console.error(`[useTrendingBooks] ❌ Error fetching trending books:`, errorMsg, err);
+        // Don't set error state - just return empty array so UI shows gracefully
+        console.warn(`[useTrendingBooks] Falling back to empty list`);
         setBooks([]);
+        setError(null);  // Clear error so UI doesn't show error state
         setLoading(false);
       }
     })();

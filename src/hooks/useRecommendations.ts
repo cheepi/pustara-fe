@@ -98,7 +98,8 @@ export function useRecommendations(forceRefresh = false) {
         setHomeFetchedAt(Date.now());
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Gagal memuat rekomendasi';
-        console.warn('[Recommendations] Error:', errorMsg);
+        // Only warn, don't error - AI service may not be running and that's OK
+        console.warn('[Recommendations] 📚 AI service fallback:', errorMsg);
         
         // Fallback ke dummy recommendations saat error
         setHomeRecommendations(DUMMY_AI_RECOMMENDATIONS);

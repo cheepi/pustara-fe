@@ -161,7 +161,7 @@ export default function HomePage() {
 
     let active = true;
     fetchFeedSidebarPayload()
-      .then((payload) => {
+      .then((payload: any) => {
         if (!active) return;
         setGreetingStats({
           dipinjam: Number(payload.profile.dipinjam || 0),

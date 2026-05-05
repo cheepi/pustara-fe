@@ -244,11 +244,6 @@ export async function fetchAllBooks(): Promise<BookDetail[]> {
   }
 }
 
-// ── Fetch single book by UUID ─────────────────────────────────────────────────
-export async function fetchBookById(bookId: string): Promise<BookDetail | null> {
-  return getBookById(bookId);
-}
-
 // ── Search books (client-side filter dari fetchAllBooks) ──────────────────────
 export async function searchBooks(query: string): Promise<BookDetail[]> {
   const all = await fetchAllBooks();

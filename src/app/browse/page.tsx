@@ -110,6 +110,9 @@ function buildCategoryItems(labels: string[]): CategoryItem[] {
     .slice(0, 16);
 }
 
+// Build CATEGORIES constant from fallback labels
+const CATEGORIES = buildCategoryItems(FALLBACK_CATEGORY_LABELS);
+
 function mapToBrowseBook(book: Record<string, unknown>): BrowseBook {
   const authors = Array.isArray(book.authors)
     ? book.authors.map(String).join(', ')
@@ -405,36 +408,36 @@ function BrowseContent() {
     fetchTopPustakrew(3)
       .then((items) => {
         if (!active) return;
-        if (!Array.isArray(list) || list.length === 0) {
+        if (!Array.isArray(items) || items.length === 0) {
           setPopularBooks(BROWSE_POPULAR_BOOKS);
+          setTopPicksLoading(false);
           return;
         }
 
-        const mapped: BrowseBook[] = list
-          .filter((item) => item.book_id && item.title)
+        const mapped: BrowseBook[] = items
+          .filter((item) => item && item.key && item.title)
           .map((item) => ({
-            key: item.book_id,
+            key: item.key,
             title: item.title,
-            author: item.authors || 'Unknown',
-            coverUrl: item.cover_url || undefined,
+            author: item.author || 'Unknown',
+            coverUrl: item.coverUrl || undefined,
             // fix: Add ISBN and cover_id for fallback cover generation
             isbn: item.isbn || undefined,
-            coverId: item.cover_id || undefined,
+            coverId: item.coverId || undefined,
             genres: item.genres || [],
-            rating: Number(item.avg_rating || 0),
+            rating: Number(item.rating || item.avg_rating || 0),
             year: item.year ? Number(item.year) : undefined,
             pages: item.pages || undefined,
-            desc: item.description || item.reason_primary || '',
+            desc: item.desc || item.description || item.reason_primary || '',
           }));
 
-        setPopularBooks(mapped.length > 0 ? mapped : BROWSE_POPULAR_BOOKS);
+        setTopPicks(mapped.length > 0 ? mapped : BROWSE_POPULAR_BOOKS);
+        setTopPicksLoading(false);
       })
       .catch(() => {
         if (!active) return;
-        setTopPicks([]);
-      })
-      .finally(() => {
-        if (!active) return;
+        // Fallback ke dummy data saat error
+        setTopPicks(BROWSE_POPULAR_BOOKS.slice(0, 3));
         setTopPicksLoading(false);
       });
 

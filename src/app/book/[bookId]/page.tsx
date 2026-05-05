@@ -21,6 +21,12 @@ import { fetchBookReviewData } from '@/lib/bookReviews';
 import { BookDetail, Review } from '@/types/book';
 import type { ModalState } from '@/types/bookPage';
 import { useBookCover, useBookCovers } from '@/hooks/useBookCover';
+import {
+  fetchMyBookShelfStatus,
+  borrowBookForMe,
+  saveBookForMe,
+  removeSavedBookForMe,
+} from '@/lib/shelf';
 
 export default function BookDetailPage() {
   const params = useParams();
@@ -111,7 +117,7 @@ export default function BookDetailPage() {
   async function refreshBookSnapshot() {
     if (!bookKey) return;
     try {
-      const latest = await getBookById(bookKey);
+      const latest = await fetchBookById(bookKey);
       if (latest) setBook(latest);
     } catch {
       // Keep existing UI snapshot when refresh fails.
@@ -128,7 +134,7 @@ export default function BookDetailPage() {
 
     let active = true;
     fetchMyBookShelfStatus(book.id)
-      .then((status) => {
+      .then((status: any) => {
         if (!active) return;
         setWishlisted(Boolean(status.wishlisted));
         setBorrowed(Boolean(status.borrowed));

@@ -1,5 +1,4 @@
 import { auth } from './firebase';
-import type { User } from 'firebase/auth';
 import type { AiRecommendation } from '@/types/ai';
 import { apiCaches } from './cache';
 
@@ -17,48 +16,13 @@ async function getAuthHeader(): Promise<Record<string, string>> {
   }
 }
 
-// ── Auth helper ───────────────────────────────────────────────────────────────
-async function getAuthHeader(): Promise<Record<string, string>> {
-  const user = await resolveCurrentUser();
-  if (!user) {
-    clearAuthCache();
-    return {};
-  }
-
-  const now = Date.now();
-  if (cachedAuthHeader && cachedAuthUid === user.uid && (now - cachedAuthAt) < TOKEN_CACHE_TTL_MS) {
-    return cachedAuthHeader;
-  }
-
-  try {
-    const token = await user.getIdToken();
-    cachedAuthHeader = { Authorization: `Bearer ${token}` };
-    cachedAuthUid = user.uid;
-    cachedAuthAt = now;
-    return cachedAuthHeader;
-  } catch {
-    clearAuthCache();
-    return {};
-  }
-}
-
 async function getOptionalAuthHeader(): Promise<Record<string, string>> {
   const user = auth?.currentUser;
   if (!user) return {};
-
-  const now = Date.now();
-  if (cachedAuthHeader && cachedAuthUid === user.uid && (now - cachedAuthAt) < TOKEN_CACHE_TTL_MS) {
-    return cachedAuthHeader;
-  }
-
   try {
     const token = await user.getIdToken();
-    cachedAuthHeader = { Authorization: `Bearer ${token}` };
-    cachedAuthUid = user.uid;
-    cachedAuthAt = now;
-    return cachedAuthHeader;
+    return { Authorization: `Bearer ${token}` };
   } catch {
-    clearAuthCache();
     return {};
   }
 }
@@ -76,10 +40,11 @@ export async function apiGet<T>(path: string): Promise<T> {
   const headers = await getAuthHeader();
   const res = await fetch(`${API_URL}${path}`, { headers });
   if (!res.ok) {
-  const text = await res.text();
-  console.error("API ERROR DETAIL:", text);
-  throw new Error(`API error: ${res.status}`);
-}
+    const text = await res.text();
+    // Don't console.error here - let caller decide whether to log error
+    // This prevents scary error messages for expected failures (e.g., AI service down)
+    throw new Error(`API error: ${res.status} - ${text}`);
+  }
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -364,14 +329,23 @@ export async function fetchColdStartRecommendations(
   genres: string[],
   topN = 10,
 ): Promise<{ genres: string[]; recommendations: AiRecommendation[] }> {
-  const params = new URLSearchParams({ genres: genres.join(','), top_n: String(topN) });
-  const raw = await apiGet<{ genres?: string[]; recommendations?: AiRecommendation[] }>(`/recommendations/cold-start?${params}`);
-  return {
-    genres: raw.genres ?? genres,
-    recommendations: Array.isArray(raw.recommendations)
-      ? raw.recommendations.map(normalizeAiRecommendation)
-      : [],
-  };
+  try {
+    const params = new URLSearchParams({ genres: genres.join(','), top_n: String(topN) });
+    const raw = await apiGet<{ genres?: string[]; recommendations?: AiRecommendation[] }>(`/recommendations/cold-start?${params}`);
+    return {
+      genres: raw.genres ?? genres,
+      recommendations: Array.isArray(raw.recommendations)
+        ? raw.recommendations.map(normalizeAiRecommendation)
+        : [],
+    };
+  } catch (err) {
+    // AI service may be down or not running - return empty gracefully
+    console.warn('[fetchColdStartRecommendations] AI service unreachable, returning empty:', err instanceof Error ? err.message : err);
+    return {
+      genres,
+      recommendations: [],
+    };
+  }
 }
 
 /**

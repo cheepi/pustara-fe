@@ -159,6 +159,16 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
     }
 
     if (!response) {
+      // Handle reading_sessions table not existing
+      const lastErrorMsg = lastError instanceof Error ? lastError.message : String(lastError);
+      if (lastErrorMsg.includes('reading_sessions')) {
+        console.warn('[shelf] 📚 reading_sessions table belum exist, return data kosong');
+        return {
+          dibaca: [],
+          pinjaman: [],
+          riwayat: [],
+        };
+      }
       throw lastError || new Error('Shelf endpoint not found');
     }
 
