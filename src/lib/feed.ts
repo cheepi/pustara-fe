@@ -258,7 +258,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
     };
 
     // Prefer profile aggregates so counts are not limited by activity sample size.
-    const shelfBorrowedCount = Number(shelfData?.stats ? shelfData.stats.total_borrowed : 0) || 0;
+    const shelfBorrowedCount = Number(shelfData?.stats?.total_borrowed ?? 0);
     const profileReadingCount = Array.isArray(profile?.currently_reading) ? profile.currently_reading.length : 0;
     const activityReadingCount = feedResponse.activities.filter(a => isReadingStatus(a.status)).length;
     const readingCount = Math.max(0, shelfBorrowedCount || profileReadingCount || activityReadingCount);

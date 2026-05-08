@@ -1,5 +1,6 @@
 import { fetchBookById } from '@/lib/books';
 import { READER_FALLBACK_BOOKS } from '@/data/readerFallback';
+import { getBookById } from '@/lib/supabase-admin';
 import type { ReaderBook } from '@/types/reader';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -31,6 +32,7 @@ function toReaderBook(id: string, title: string, author: string, pdfUrl?: string
     dueDate,
     daysLeft,
     pdfUrl: pdfUrl || SAMPLE_PDF,
+    currentPage: 1,
     total_pages: 0,
   };
 }
@@ -52,11 +54,35 @@ export async function fetchReaderBook(bookId: string): Promise<ReaderBook> {
         dueDate: String(data.dueDate ?? formatDueDate(7).dueDate),
         daysLeft: Number(data.daysLeft ?? 7),
         pdfUrl: String(data.pdfUrl ?? data.fileUrl ?? data.file_url ?? SAMPLE_PDF),
+        currentPage: Number(data.currentPage ?? data.current_page ?? 1),
         total_pages: Number(data.total_pages ?? 0),
       };
     }
   } catch {
     // fallback below
+  }
+
+  // Try Supabase first for newly uploaded books
+  try {
+    const supabaseBook = await getBookById(bookId);
+    if (supabaseBook && supabaseBook.file_url) {
+      return {
+        id: supabaseBook.id,
+        title: supabaseBook.title,
+        author: supabaseBook.authors[0] || 'Unknown',
+        authors: supabaseBook.authors,
+        cover_url: supabaseBook.cover_url ?? null,
+        file_url: supabaseBook.file_url,
+        file_type: 'pdf',
+        dueDate: formatDueDate(7).dueDate,
+        daysLeft: 7,
+        pdfUrl: supabaseBook.file_url,
+        currentPage: 1,
+        total_pages: supabaseBook.pages || 0,
+      };
+    }
+  } catch {
+    // fallback to fetchBookById
   }
 
   const fromBooks = await fetchBookById(bookId);

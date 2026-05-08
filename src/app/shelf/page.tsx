@@ -153,12 +153,12 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
 
   const baseSkew =
     posture === 'lean-left' ? -7 :
-    posture === 'lean-right' ? 7 :
-    posture === 'lying' ? 0 : 0;
+      posture === 'lean-right' ? 7 :
+        posture === 'lying' ? 0 : 0;
 
   const verticalNudge =
     posture === 'lean-left' || posture === 'lean-right' ? -2 :
-    posture === 'lying' ? 1 : 0;
+      posture === 'lying' ? 1 : 0;
 
   const stackLayers = Array.from({ length: stackCount - 1 });
   const hasCompanionStack = Boolean(isLying && stackCount > 1 && stackedCompanion);
@@ -185,7 +185,7 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
         const layerBottom = isLying
           ? isCompanionLayer
             ? 38
-            :  (layerIndex + 1) * 2
+            : (layerIndex + 1) * 2
           : (layerIndex + 1) * 2;
 
         return (
@@ -239,13 +239,13 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
                   style={
                     isLying
                       ? {
-                          width: '100%',
-                          height: '350%',
-                          left: '5%',
-                          top: 'auto',
-                          transform: 'rotate(90deg)',
-                          transformOrigin: 'center',
-                        }
+                        width: '100%',
+                        height: '350%',
+                        left: '5%',
+                        top: 'auto',
+                        transform: 'rotate(90deg)',
+                        transformOrigin: 'center',
+                      }
                       : { left: 0, top: 0 }
                   }
                 />
@@ -321,13 +321,13 @@ function BookSpine({ book, stackedCompanion, companionSelected, isMobile = false
             style={
               isLying
                 ? {
-                    width: '170%',
-                    height: '350%',
-                    left: 'auto',
-                    top: isMobile ? '-70%' : 'auto',
-                    transform: 'rotate(90deg)',
-                    transformOrigin: 'center',
-                  }
+                  width: '170%',
+                  height: '350%',
+                  left: 'auto',
+                  top: isMobile ? '-70%' : 'auto',
+                  transform: 'rotate(90deg)',
+                  transformOrigin: 'center',
+                }
                 : { left: 0, top: 0 }
             }
           />
@@ -649,9 +649,9 @@ function BookDetailDrawer({
                 <div className={cn(
                   'flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold border',
                   isOverdue ? 'bg-red-500/15 text-red-400 border-red-500/30'
-                  : isUrgent ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                  : isLight ? 'bg-navy-50 text-navy-600 border-navy-200'
-                  : 'bg-navy-800 text-white/80 border-white/15'
+                    : isUrgent ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                      : isLight ? 'bg-navy-50 text-navy-600 border-navy-200'
+                        : 'bg-navy-800 text-white/80 border-white/15'
                 )}>
                   <Calendar className="w-3 h-3" />
                   {isOverdue ? 'Jatuh tempo hari ini!' : `${daysLeft}h lagi`}
@@ -691,7 +691,7 @@ function BookDetailDrawer({
                 <motion.button
                   whileTap={{ scale: 0.96 }}
                   className="flex items-center justify-center gap-1.5 p-2.5 sm:px-4 sm:py-2 rounded-xl text-xs font-bold bg-gold text-navy-900 hover:bg-gold-light transition-colors">
-                  <Play className="w-3.5 h-3.5 sm:w-3 sm:h-3" /> 
+                  <Play className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                   <span className="hidden sm:inline">Lanjut</span>
                 </motion.button>
               </Link>
@@ -708,8 +708,8 @@ function BookDetailDrawer({
                       : 'border-red-500/30 text-red-300 hover:bg-red-500/10'
                   )}
                 >
-                  <RotateCcw className="w-3.5 h-3.5 sm:w-3 sm:h-3" /> 
-                  
+                  <RotateCcw className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+
                   <span className="hidden sm:inline">
                     {returning ? 'Memproses...' : 'Kembalikan'}
                   </span>
@@ -817,9 +817,10 @@ export default function RakBukuPage() {
         if (rawCache) {
           const parsed = JSON.parse(rawCache) as { savedAt?: number; data?: ShelfData };
           if (
-            parsed?.savedAt &&
-            parsed?.data &&
-            Date.now() - parsed.savedAt < SHELF_DATA_STORAGE_TTL_MS
+            // parsed?.savedAt &&
+            // parsed?.data &&
+            // Date.now() - parsed.savedAt < SHELF_DATA_STORAGE_TTL_MS
+            parsed?.data
           ) {
             setShelfData(parsed.data);
           }
@@ -827,9 +828,10 @@ export default function RakBukuPage() {
       } catch {
         // Ignore malformed cache and continue with network fetch.
       }
+      refreshShelf(true);
     }
 
-    refreshShelf();
+    refreshShelf(true);
   }, []);
 
   async function handleReturnBook(bookKey: string) {
@@ -1204,72 +1206,72 @@ function TabWishlist({ books, tk, isLight }: { books: WishlistBook[]; tk: any; i
   return (
     <motion.div layout className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
       <AnimatePresence>
-      {list.map((book, i) => {
-        const src = coverUrl(book.coverId, book.coverUrl);
-        const bg = spineColor(book.key);
-        return (
-          <motion.div key={book.key} className="group relative"
-            layout
-            initial={{ opacity: 0, scale: 0.93, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.88, y: -12 }}
-            transition={{ delay: i * 0.04 }} whileHover={{ y: -4 }}>
-            <Link href={`/book/${book.key}`}>
-              <div className={cn(
-                'w-full aspect-[2/3] rounded-2xl overflow-hidden shadow-lg mb-2.5 relative',
-                isLight ? 'bg-parchment-darker' : 'bg-navy-700'
-              )} style={{ background: bg }}>
-                {src && (
-                  <img src={src} alt={book.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                )}
+        {list.map((book, i) => {
+          const src = coverUrl(book.coverId, book.coverUrl);
+          const bg = spineColor(book.key);
+          return (
+            <motion.div key={book.key} className="group relative"
+              layout
+              initial={{ opacity: 0, scale: 0.93, y: 14 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.88, y: -12 }}
+              transition={{ delay: i * 0.04 }} whileHover={{ y: -4 }}>
+              <Link href={`/book/${book.key}`}>
                 <div className={cn(
-                  'absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold',
-                  book.available ? 'bg-emerald-500 text-white' : 'bg-slate-600/80 text-slate-200'
-                )}>
-                  {book.available ? 'Tersedia' : 'Antrean'}
-                </div>
-              </div>
-            </Link>
-            <h3 className={cn('text-xs font-semibold leading-tight line-clamp-2 mb-0.5', tk.text)}>{book.title}</h3>
-            <p className={cn('text-[10px] truncate mb-1.5', tk.muted)}>{book.author}</p>
-            <div className="flex items-center justify-between">
-              {book.rating && (
-                <div className="flex items-center gap-1">
-                  <Star className="w-3 h-3 text-gold fill-gold" />
-                  <span className="text-gold text-[11px] font-bold">{book.rating}</span>
-                </div>
-              )}
-              <div className="flex gap-1 ml-auto">
-                {book.available && (
-                  <Link href={`/book/${book.key}`}
-                    className="p-1.5 rounded-lg bg-gold text-navy-900 hover:bg-gold-light transition-colors">
-                    <BookOpen className="w-3 h-3" />
-                  </Link>
-                )}
-                <button
-                  onClick={async () => {
-                    setRemovingKey(book.key);
-                    try {
-                      await removeSavedBookForMe(book.key);
-                      setList((prev) => prev.filter((item) => item.key !== book.key));
-                    } catch {
-                      // Keep UI stable when API fails.
-                    } finally {
-                      setRemovingKey(null);
-                    }
-                  }}
-                  disabled={removingKey === book.key}
-                  className={cn(
-                    'p-1.5 rounded-lg transition-colors',
-                    isLight ? 'hover:bg-red-50 text-slate-400 hover:text-red-400' : 'hover:bg-red-500/10 text-white/30 hover:text-red-400'
+                  'w-full aspect-[2/3] rounded-2xl overflow-hidden shadow-lg mb-2.5 relative',
+                  isLight ? 'bg-parchment-darker' : 'bg-navy-700'
+                )} style={{ background: bg }}>
+                  {src && (
+                    <img src={src} alt={book.title}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                  )}
+                  <div className={cn(
+                    'absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold',
+                    book.available ? 'bg-emerald-500 text-white' : 'bg-slate-600/80 text-slate-200'
                   )}>
-                  <Trash2 className="w-3 h-3" />
-                </button>
+                    {book.available ? 'Tersedia' : 'Antrean'}
+                  </div>
+                </div>
+              </Link>
+              <h3 className={cn('text-xs font-semibold leading-tight line-clamp-2 mb-0.5', tk.text)}>{book.title}</h3>
+              <p className={cn('text-[10px] truncate mb-1.5', tk.muted)}>{book.author}</p>
+              <div className="flex items-center justify-between">
+                {book.rating && (
+                  <div className="flex items-center gap-1">
+                    <Star className="w-3 h-3 text-gold fill-gold" />
+                    <span className="text-gold text-[11px] font-bold">{book.rating}</span>
+                  </div>
+                )}
+                <div className="flex gap-1 ml-auto">
+                  {book.available && (
+                    <Link href={`/book/${book.key}`}
+                      className="p-1.5 rounded-lg bg-gold text-navy-900 hover:bg-gold-light transition-colors">
+                      <BookOpen className="w-3 h-3" />
+                    </Link>
+                  )}
+                  <button
+                    onClick={async () => {
+                      setRemovingKey(book.key);
+                      try {
+                        await removeSavedBookForMe(book.key);
+                        setList((prev) => prev.filter((item) => item.key !== book.key));
+                      } catch {
+                        // Keep UI stable when API fails.
+                      } finally {
+                        setRemovingKey(null);
+                      }
+                    }}
+                    disabled={removingKey === book.key}
+                    className={cn(
+                      'p-1.5 rounded-lg transition-colors',
+                      isLight ? 'hover:bg-red-50 text-slate-400 hover:text-red-400' : 'hover:bg-red-500/10 text-white/30 hover:text-red-400'
+                    )}>
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
               </div>
-            </div>
-          </motion.div>
-        );
-      })}
+            </motion.div>
+          );
+        })}
       </AnimatePresence>
     </motion.div>
   );

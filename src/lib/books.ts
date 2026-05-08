@@ -65,15 +65,25 @@ function normalizeBook(raw: Record<string, unknown>): BookDetail {
     queue:        Number(raw.queue ?? raw.queueCount ?? 0),
     description:  raw.description != null ? String(raw.description) : null, // string | null
     reviews:      Array.isArray(raw.reviews) ? (raw.reviews as BookDetail['reviews']) : [],
-    // Additional fields from API
-    isbn:         raw.isbn ? String(raw.isbn) : undefined,
-    cover_id:     raw.cover_id ? Number(raw.cover_id) : undefined,
-  } as BookDetail & { isbn?: string; cover_id?: number };
+
+    // ── Required fields from Book that were missing ──
+    external_key: raw.external_key != null ? String(raw.external_key) : null,
+    cover_id:     raw.cover_id != null ? Number(raw.cover_id) : null,
+    language:     String(raw.language ?? 'id'),
+    is_active:    Boolean(raw.is_active ?? true),
+    created_at:   String(raw.created_at ?? ''),
+    updated_at:   String(raw.updated_at ?? ''),
+    file_url:     raw.file_url != null ? String(raw.file_url) : null,
+    file_type:    String(raw.file_type ?? 'pdf'),
+    total_pages:  raw.total_pages != null ? Number(raw.total_pages) : null,
+  };
 }
 
 export interface GetBooksParams {
   search?: string;
   genre?: string;
+  available?: boolean;
+  language?: string;
   page?: number;
   limit?: number;
   sort?: 'created_at' | 'avg_rating' | 'title' | 'year';
@@ -128,6 +138,8 @@ export async function getBooks(params: GetBooksParams = {}): Promise<GetBooksRes
   query.set('limit', String(limit));
   if (params.search?.trim()) query.set('search', params.search.trim());
   if (params.genre?.trim()) query.set('genre', params.genre.trim());
+  if (typeof params.available === 'boolean') query.set('available', String(params.available));
+  if (params.language?.trim()) query.set('language', params.language.trim());
   if (params.sort) query.set('sort', params.sort);
   if (params.order) query.set('order', params.order);
 
@@ -153,30 +165,27 @@ export async function getBooks(params: GetBooksParams = {}): Promise<GetBooksRes
   }
 }
 
-// ── Fetch single book by UUID ─────────────────────────────────────────────────
-export async function fetchBookById(bookId: string): Promise<BookDetail | null> {
+export async function getBookById(bookId: string): Promise<BookDetail | null> {
+  if (!bookId) return null;
+
+  if (DUMMY_BOOKS[bookId]) {
+    return DUMMY_BOOKS[bookId];
+  }
+
   try {
-    console.log(`[Book] 🔄 Fetching book detail for: ${bookId}`);
     const headers = await getOptionalAuthHeader();
     const res = await fetch(`${API_URL}/books/${bookId}`, {
       cache: 'no-store',
       headers,
     });
-    if (res.status === 404) {
-      // Buku belum ada di DB → cek dummy
-      console.warn(`[Book] ⚠️ Book ${bookId} not found (404)`);
-      return DUMMY_BOOKS[bookId] ?? null;
-    }
+    if (res.status === 404) return DUMMY_BOOKS[bookId] ?? null;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
-    console.log(`[Book] 📊 Raw API response:`, json);
     const raw: Record<string, unknown> = json?.data ?? json;
-    const normalized = normalizeBook(raw);
-    console.log(`[Book] ✅ Normalized book detail:`, normalized);
-    return normalized;
+    return normalizeBook(raw);
   } catch (err) {
-    console.error(`[Book] ❌ Error fetching book ${bookId}:`, err);
-    return null;
+    console.warn(`[books] getBookById(${bookId}) gagal, cek dummy:`, err);
+    return DUMMY_BOOKS[bookId] ?? null;
   }
 }
 
@@ -242,6 +251,11 @@ export async function fetchAllBooks(): Promise<BookDetail[]> {
     console.warn('[books] fetchAllBooks gagal, pakai dummy:', err);
     return Object.values(DUMMY_BOOKS);
   }
+}
+
+// ── Fetch single book by UUID ─────────────────────────────────────────────────
+export async function fetchBookById(bookId: string): Promise<BookDetail | null> {
+  return getBookById(bookId);
 }
 
 // ── Search books (client-side filter dari fetchAllBooks) ──────────────────────

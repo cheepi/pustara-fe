@@ -3,7 +3,7 @@ import { useEffect } from 'react';
 import { useAiStore } from '@/store/aiStore';
 import { fetchColdStartRecommendations, fetchTrending } from '@/lib/api';
 import { useAuthStore } from '@/store/authStore';
-import { DUMMY_AI_RECOMMENDATIONS } from '@/data/dummyRecommendations';
+import type { AiRecommendation } from '@/types/ai';
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
@@ -97,13 +97,7 @@ export function useRecommendations(forceRefresh = false) {
         setHomeRecommendations(recommendations);
         setHomeFetchedAt(Date.now());
       } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : 'Gagal memuat rekomendasi';
-        // Only warn, don't error - AI service may not be running and that's OK
-        console.warn('[Recommendations] 📚 AI service fallback:', errorMsg);
-        
-        // Fallback ke dummy recommendations saat error
-        setHomeRecommendations(DUMMY_AI_RECOMMENDATIONS);
-        setHomeError(null); // Don't show error to user — use fallback silently
+        setHomeError(err instanceof Error ? err.message : 'Gagal memuat rekomendasi');
       } finally {
         setHomeLoading(false);
       }

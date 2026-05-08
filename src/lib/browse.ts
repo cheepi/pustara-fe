@@ -4,6 +4,7 @@ import type { BrowseBook } from '@/types/browse';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 const CACHE: Record<string, BrowseBook[]> = {};
+const GENRE_CACHE: { value: string[] | null } = { value: null };
 
 const CATEGORY_ALIASES: Record<string, string[]> = {
   fiksi: ['fiksi', 'fiction', 'novel'],
@@ -29,6 +30,14 @@ function getCategoryTokens(subject: string): string[] {
 function includesAnyToken(text: string, tokens: string[]): boolean {
   const normalized = normalizeToken(text);
   return tokens.some((token) => normalized.includes(token));
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function mapToBrowseBook(raw: Record<string, unknown>): BrowseBook {
@@ -109,6 +118,44 @@ export async function fetchBrowseBooks(query: string, limit = 24): Promise<Brows
   }
 }
 
+export async function fetchGenres(forceRefresh = false): Promise<string[]> {
+  if (!forceRefresh && GENRE_CACHE.value) {
+    return GENRE_CACHE.value;
+  }
+
+  try {
+    const allBooks = await fetchAllBooks();
+    const genreSet = new Set<string>(['Semua']);
+
+    for (const book of allBooks) {
+      for (const genre of book.genres ?? []) {
+        const normalized = genre.trim();
+        if (!normalized) continue;
+        genreSet.add(toTitleCase(normalized));
+      }
+    }
+
+    for (const genre of Object.keys(CATEGORY_ALIASES)) {
+      genreSet.add(toTitleCase(genre));
+    }
+
+    const genres = Array.from(genreSet).sort((left, right) => {
+      if (left === 'Semua') return -1;
+      if (right === 'Semua') return 1;
+      return left.localeCompare(right, 'id');
+    });
+
+    GENRE_CACHE.value = genres;
+    return genres;
+  } catch {
+    return ['Semua'];
+  }
+}
+
+export async function fetchBooksByGenre(genre: string, limit = 48, forceRefresh = false): Promise<BrowseBook[]> {
+  return fetchPopularBooks(genre, limit, forceRefresh);
+}
+
 export async function fetchPopularBooks(genre: string, limit = 40, forceRefresh = false): Promise<BrowseBook[]> {
   const cacheKey = `popular_${genre}_${limit}`;
   if (!forceRefresh && CACHE[cacheKey]) return CACHE[cacheKey];
@@ -174,7 +221,7 @@ export async function fetchTopPustakrew(limit = 3): Promise<BrowseBook[]> {
   const cacheKey = `top_pustakrew_${limit}`;
   if (CACHE[cacheKey]) return CACHE[cacheKey];
 
-  const endpoints = ['/books/trending', '/recommendations/trending'];
+  const endpoints = ['/books/top-picks', '/books/pustakrew-top', '/catalog/top-picks'];
   for (const endpoint of endpoints) {
     try {
       const res = await fetch(`${API_URL}${endpoint}?limit=${limit}`, { cache: 'no-store' });
@@ -205,91 +252,4 @@ export async function fetchTopPustakrew(limit = 3): Promise<BrowseBook[]> {
 
   CACHE[cacheKey] = fallback;
   return fallback;
-}
-
-// ── GENRE API FUNCTIONS ────────────────────────────────────────────────────────
-/**
- * Fetch available genres from backend API
- */
-export async function fetchGenres(): Promise<string[]> {
-  const cacheKey = 'genres_list';
-  if (CACHE[cacheKey]) {
-    const cachedData = CACHE[cacheKey];
-    if (Array.isArray(cachedData) && cachedData.length > 0) {
-      return cachedData.map(b => b.title); // Reuse cache structure
-    }
-  }
-
-  try {
-    const res = await fetch(`${API_URL}/genres`, { cache: 'no-store' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    
-    const json = await res.json();
-    const genres = Array.isArray(json?.data) ? json.data : [];
-    
-    if (genres.length > 0) {
-      // Cache as dummy BrowseBooks to reuse existing cache
-      const cached = genres.map((g: string) => ({ ...({} as BrowseBook), title: g }));
-      CACHE[cacheKey] = cached;
-      return genres;
-    }
-  } catch (err) {
-    console.warn('[browse] fetchGenres failed:', err);
-  }
-  
-  // Fallback to predefined genres
-  return [
-    'Fiksi', 'Sastra', 'Sejarah', 'Sains', 'Biografi', 'Romansa', 
-    'Misteri', 'Teknologi', 'Pendidikan', 'Filsafat', 'Psikologi', 'Seni'
-  ];
-}
-
-/**
- * Fetch books filtered by genre from backend API
- */
-export async function fetchBooksByGenre(genre: string, limit = 24): Promise<BrowseBook[]> {
-  const cacheKey = `genre_${genre}_${limit}`;
-  if (CACHE[cacheKey]) return CACHE[cacheKey];
-
-  try {
-    const params = new URLSearchParams({ genre, limit: String(limit) });
-    const res = await fetch(`${API_URL}/books?${params}`, { cache: 'no-store' });
-    
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    
-    const json = await res.json();
-    const books = Array.isArray(json?.data) ? json.data : [];
-    
-    const mapped = books.map((b: Record<string, unknown>) => mapToBrowseBook(b));
-    CACHE[cacheKey] = mapped;
-    return mapped;
-  } catch (err) {
-    console.warn(`[browse] fetchBooksByGenre('${genre}') failed:`, err);
-    
-    // Fallback to local filtering
-    try {
-      const allBooks = await fetchAllBooks();
-      const filtered = allBooks.filter(b => 
-        b.genres.some(g => g.toLowerCase().includes(genre.toLowerCase()))
-      );
-      
-      const mapped = filtered.slice(0, limit).map(b => ({
-        key: b.id,
-        title: b.title,
-        author: b.authors?.join(', ') || 'Unknown',
-        coverUrl: b.cover_url || undefined,
-        genres: b.genres || [],
-        rating: b.avg_rating || 0,
-        year: b.year,
-        pages: b.pages,
-        desc: b.description,
-      }));
-      
-      CACHE[cacheKey] = mapped;
-      return mapped;
-    } catch {
-      CACHE[cacheKey] = [];
-      return [];
-    }
-  }
 }

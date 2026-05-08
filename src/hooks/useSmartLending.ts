@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useAuth } from '@/components/auth/AuthProvider';
+import { useAuth } from '@/hooks/useAuth';
 
 /**
  * useSmartLending - Smart borrowing, returning, extensions, progress tracking
@@ -16,18 +16,20 @@ import { useAuth } from '@/components/auth/AuthProvider';
  */
 
 export function useSmartLending() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
-  const request = useCallback(async (endpoint: string, method = 'POST', body = null) => {
+  const request = useCallback(async (endpoint: string, method = 'POST', body: Record<string, unknown> | null = null) => {
     if (!user?.uid) {
       setError('Harus login untuk melakukan aksi ini');
       return null;
     }
+
+    const token = await user.getIdToken();
 
     setLoading(true);
     setError(null);
@@ -57,7 +59,7 @@ export function useSmartLending() {
     } finally {
       setLoading(false);
     }
-  }, [user, token, apiUrl]);
+  }, [user, apiUrl]);
 
   // ── BORROWING ──
   const borrow = useCallback(async (bookId: string) => {

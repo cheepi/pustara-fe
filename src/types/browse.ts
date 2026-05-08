@@ -12,7 +12,6 @@ export interface BrowseBook {
   pages?: number;
   desc?: string;
   coverId?: number;
-  isbn?: string | number;
 }
 
 export interface FriendActivityItem {

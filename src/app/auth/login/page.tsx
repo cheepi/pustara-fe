@@ -68,10 +68,10 @@ export default function LoginPage() {
         return;
       }
 
-      if (!auth) throw new Error('Firebase not initialized');
-      await signInWithEmailAndPassword(auth, email, password);
-      const p = localStorage.getItem('pustara_personalized');
-      router.replace(p ? '/' : '/auth/personalization');
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const token = await cred.user.getIdToken();
+      const needPersonalization = await shouldGoToPersonalization(token);
+      router.replace(needPersonalization ? '/auth/personalization' : '/');
     } catch (err: any) {
       setError(resolveFriendlyAuthError(err?.code || err?.message || 'Terjadi kesalahan saat masuk.'));
       resetCaptcha();
@@ -86,7 +86,6 @@ export default function LoginPage() {
     }
     setError(''); setLoading(true);
     try {
-      if (!auth || !googleProvider) throw new Error('Firebase not initialized');
       const result = await signInWithPopup(auth, googleProvider);
       const isNew = getAdditionalUserInfo(result)?.isNewUser;
       const token = await result.user.getIdToken();

@@ -1,39 +1,39 @@
 import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
 import type { NotificationItem } from '@/types/notifications';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+import { apiGet } from '@/lib/api';
 
 function normalizeNotification(raw: Record<string, unknown>, idx: number): NotificationItem {
+  const createdAt = String(raw.created_at ?? raw.time ?? '');
   return {
     id: String(raw.id ?? `notif_${idx}`),
     user_id: String(raw.user_id ?? ''),
-    book_id: raw.book_id !== undefined && raw.book_id !== null ? String(raw.book_id) : null,
+    book_id:
+      raw.book_id !== undefined && raw.book_id !== null
+        ? String(raw.book_id)
+        : raw.related_book_id !== undefined && raw.related_book_id !== null
+          ? String(raw.related_book_id)
+          : null,
     actor_id: raw.actor_id !== undefined && raw.actor_id !== null ? String(raw.actor_id) : null,
     type: (raw.type as NotificationItem['type']) || 'system',
     title: String(raw.title ?? '-'),
-    body: String(raw.body ?? raw.message ?? '-'),
-    time: String(raw.time ?? '-'),
-    created_at: String(raw.created_at ?? raw.time ?? '-'),
-    read: Boolean(raw.read ?? false),
+    body: String(raw.body ?? raw.description ?? raw.message ?? '-'),
+    time: createdAt || '-',
+    created_at: createdAt || '-',
+    read: Boolean(raw.read ?? raw.is_read ?? false),
     avatar: raw.avatar ? String(raw.avatar) : undefined,
     bookCover: String(raw.bookCover ?? raw.coverId ?? '') || undefined,
   };
 }
 
 export async function fetchNotifications(): Promise<NotificationItem[]> {
-  const endpoints = ['/notifications', '/users/me/notifications'];
-  for (const endpoint of endpoints) {
-    try {
-      const res = await fetch(`${API_URL}${endpoint}`, { cache: 'no-store' });
-      if (!res.ok) continue;
-      const json = await res.json();
-      const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-      if (raw.length > 0) {
-        return raw.map((item: Record<string, unknown>, idx: number) => normalizeNotification(item, idx));
-      }
-    } catch {
-      // try next endpoint
+  try {
+    const payload = await apiGet<{ notifications?: Record<string, unknown>[] }>('/feed/me/notifications?limit=100');
+    const raw = Array.isArray(payload?.notifications) ? payload.notifications : [];
+    if (raw.length > 0) {
+      return raw.map((item, idx) => normalizeNotification(item, idx));
     }
+  } catch {
+    // fallback below
   }
 
   return INITIAL_NOTIFICATIONS;

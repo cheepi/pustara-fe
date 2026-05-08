@@ -1,6 +1,7 @@
 import type { ShelfData } from '@/types/shelf';
 import { formatDateID, formatRelativeTime } from '@/lib/reading';
 import { apiDelete, apiGet, apiPost } from '@/lib/api';
+import { auth } from './firebase';
 
 const EMPTY_SHELF_DATA: ShelfData = {
   pinjaman: [],
@@ -11,6 +12,11 @@ const EMPTY_SHELF_DATA: ShelfData = {
 
 const SHELF_MEMORY_CACHE_TTL_MS = 30_000;
 let shelfMemoryCache: { data: ShelfData; fetchedAt: number } | null = null;
+
+export function invalidateShelfCache(): void {
+  shelfMemoryCache = null;
+}
+
 let shelfInFlight: Promise<ShelfData> | null = null;
 
 function normalizeGenre(input: unknown): string {
@@ -36,6 +42,7 @@ interface BackendPinjaman extends BackendBook {
   due_date: string | null;
   returned_at: string | null;
   days_left: number | null;
+  progress_percentage?: number;
 }
 
 interface BackendDibaca extends BackendBook {
@@ -141,108 +148,105 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
 
   shelfInFlight = (async () => {
     try {
-    let response: BackendShelfResponse | null = null;
-    let lastError: unknown = null;
+      let response: BackendShelfResponse | null = null;
+      let lastError: unknown = null;
 
-    for (const path of candidatePaths) {
-      try {
-        response = await apiGet<BackendShelfResponse>(path);
-        break;
-      } catch (error) {
-        lastError = error;
-        const message = error instanceof Error ? error.message : String(error);
-        const isNotFound = message.includes('API error: 404');
-        if (!isNotFound) {
-          throw error;
+      for (const path of candidatePaths) {
+        try {
+          response = await apiGet<BackendShelfResponse>(path);
+          break;
+        } catch (error) {
+          lastError = error;
+          const message = error instanceof Error ? error.message : String(error);
+          const isNotFound = message.includes('API error: 404');
+          if (!isNotFound) {
+            throw error;
+          }
         }
       }
-    }
 
-    if (!response) {
-      // Handle reading_sessions table not existing
-      const lastErrorMsg = lastError instanceof Error ? lastError.message : String(lastError);
-      if (lastErrorMsg.includes('reading_sessions')) {
-        console.warn('[shelf] 📚 reading_sessions table belum exist, return data kosong');
-        return {
-          dibaca: [],
-          pinjaman: [],
-          riwayat: [],
-        };
+      if (!response) {
+        throw lastError || new Error('Shelf endpoint not found');
       }
-      throw lastError || new Error('Shelf endpoint not found');
+
+      // Some backends wrap payload in { success, data } — normalize that
+      // @ts-ignore
+      if (response && typeof response === 'object' && 'data' in response && response.data) {
+        // @ts-ignore
+        response = response.data as BackendShelfResponse;
+      }
+
+      const dibaca = response.dibaca
+        .map((session) => {
+          const progress = Math.max(0, Math.min(100, Math.round(Number(session.progress_percentage ?? 0))));
+          return {
+            key: session.id,
+            title: session.title,
+            author: Array.isArray(session.authors) ? session.authors.join(', ') : String(session.authors),
+            coverUrl: session.cover_url,
+            genre: 'Sedang dibaca',
+            progress,
+            lastRead: formatRelativeTime(session.last_read_at || session.started_at || undefined),
+            totalPages: Number(session.total_pages ?? 0),
+            currentPage: Number(session.current_page ?? 0),
+          };
+        })
+        .filter((session) => session.currentPage > 1 || session.progress > 0);
+
+      const pinjaman = response.pinjaman.map((loan) => ({
+        key: loan.id,
+        title: loan.title,
+        author: Array.isArray(loan.authors) ? loan.authors.join(', ') : String(loan.authors),
+        coverUrl: loan.cover_url,
+        genre: 'Pinjaman aktif',
+        borrowedAt: formatDateID(loan.borrowed_at || undefined),
+        dueDate: formatDateID(loan.due_date || undefined),
+        daysLeft: loan.days_left ?? 0,
+        progress: Math.round(Number(loan.progress_percentage ?? 0)),  // ← pakai dari backend
+      }));
+
+      const riwayat = response.riwayat.map((session) => ({
+        key: session.id,
+        title: session.title,
+        author: Array.isArray(session.authors) ? session.authors.join(', ') : String(session.authors),
+        coverUrl: session.cover_url,
+        genre: 'Selesai',
+        returnedAt: formatDateID(session.finished_at || undefined),
+        readDays: session.days_read ?? 1,
+        userRating: undefined,
+      }));
+
+      const wishlist = response.wishlist.map((book) => ({
+        key: book.id,
+        title: book.title,
+        author: Array.isArray(book.authors) ? book.authors.join(', ') : String(book.authors),
+        coverUrl: book.cover_url || undefined,
+        genre: normalizeGenre(book.genres),
+        addedAt: formatDateID(book.added_at ?? undefined),
+        available: true,
+        rating: Number(book.avg_rating ?? 0),
+      }));
+
+      const nextData: ShelfData = {
+        pinjaman,
+        dibaca,
+        wishlist,
+        riwayat,
+        stats: {
+          total_borrowed: pinjaman.length,
+          total_reading: dibaca.length,
+          total_wishlist: wishlist.length,
+          total_read: riwayat.length,
+        },
+      };
+      shelfMemoryCache = { data: nextData, fetchedAt: Date.now() };
+      return nextData;
+    } catch (error) {
+      console.warn('Error fetching shelf data:', error);
+      return EMPTY_SHELF_DATA;
+    } finally {
+      shelfInFlight = null;
     }
-
-    const dibaca = response.dibaca
-      .map((session) => {
-        const progress = Math.max(0, Math.min(100, Math.round(Number(session.progress_percentage ?? 0))));
-        return {
-          key: session.id,
-          title: session.title,
-          author: Array.isArray(session.authors) ? session.authors.join(', ') : String(session.authors),
-          coverUrl: session.cover_url,
-          genre: 'Sedang dibaca',
-          progress,
-          lastRead: formatRelativeTime(session.last_read_at || session.started_at || undefined),
-          totalPages: Number(session.total_pages ?? 0),
-          currentPage: Number(session.current_page ?? 0),
-        };
-      })
-      .filter((session) => session.progress > 0);
-
-    const pinjaman = response.pinjaman.map((loan) => ({
-      key: loan.id,
-      title: loan.title,
-      author: Array.isArray(loan.authors) ? loan.authors.join(', ') : String(loan.authors),
-      coverUrl: loan.cover_url,
-      genre: 'Pinjaman aktif',
-      borrowedAt: formatDateID(loan.borrowed_at || undefined),
-      dueDate: formatDateID(loan.due_date || undefined),
-      daysLeft: loan.days_left ?? 0,
-      progress: 0,
-    }));
-
-    const riwayat = response.riwayat.map((session) => ({
-      key: session.id,
-      title: session.title,
-      author: Array.isArray(session.authors) ? session.authors.join(', ') : String(session.authors),
-      coverUrl: session.cover_url,
-      genre: 'Selesai',
-      returnedAt: formatDateID(session.finished_at || undefined),
-      readDays: session.days_read ?? 1,
-      userRating: undefined,
-    }));
-
-    const wishlist = response.wishlist.map((book) => ({
-      key: book.id,
-      title: book.title,
-      author: Array.isArray(book.authors) ? book.authors.join(', ') : String(book.authors),
-      coverUrl: book.cover_url || undefined,
-      genre: normalizeGenre(book.genres),
-      addedAt: formatDateID(book.added_at ?? undefined),
-      available: true,
-      rating: Number(book.avg_rating ?? 0),
-    }));
-
-    const nextData: ShelfData = {
-      pinjaman,
-      dibaca,
-      wishlist,
-      riwayat,
-      stats: {
-        total_borrowed: pinjaman.length,
-        total_reading: dibaca.length,
-        total_wishlist: wishlist.length,
-        total_read: riwayat.length,
-      },
-    };
-    shelfMemoryCache = { data: nextData, fetchedAt: Date.now() };
-    return nextData;
-  } catch (error) {
-    console.warn('Error fetching shelf data:', error);
-    return EMPTY_SHELF_DATA;
-  } finally {
-    shelfInFlight = null;
-  }
   })();
 
   return shelfInFlight;
@@ -269,13 +273,43 @@ export async function fetchMyBookShelfStatus(bookId: string): Promise<ShelfBookS
   }
 }
 
+/**
+ * Borrow one book for current user.
+ * Throws on auth/backend errors so caller can show the correct UI state.
+ */
 export async function borrowBookForMe(bookId: string): Promise<ShelfActionResponse> {
-  const paths = [
-    `/shelf/me/borrow/${bookId}`,
-    `/api/shelf/me/borrow/${bookId}`,
-  ];
-  const data = await tryApiPostWithFallback<ShelfActionResponse>(paths);
-  return { borrowed: Boolean(data?.borrowed ?? true) };
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) {
+    throw new Error('HTTP 401: Missing auth token');
+  }
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+  // Ensure user row exists/synced in backend before hitting shelf endpoints.
+  await fetch(`${apiUrl}/auth/verify-token`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  }).catch(() => {
+    // Best effort sync only. Borrow endpoint still returns authoritative status.
+  });
+
+  const response = await fetch(`${apiUrl}/shelf/me/borrow/${bookId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = String(payload?.message || payload?.error || 'Borrow request failed');
+    throw new Error(`HTTP ${response.status}: ${message}`);
+  }
+
+  const borrowed = Boolean(payload?.data?.borrowed ?? payload?.borrowed ?? true);
+  return { borrowed };
 }
 
 export async function returnBorrowedBookForMe(bookId: string): Promise<ShelfActionResponse> {

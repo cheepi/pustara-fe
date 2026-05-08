@@ -1,10 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
+export const runtime = 'nodejs';
+import admin from 'firebase-admin';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+// Initialize Firebase Admin once
+if (!admin.apps.length) {
+  admin.initializeApp({
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'pustara-kw',
+  });
+}
 
+/**
+ * POST /api/verify-role
+ *
+ * Verifies Firebase token and queries Neon DB directly for user role.
+ * This completely bypasses the Express backend for role checking.
+ *
+ * Body: { token: string }
+ * Response: { success: true, role: 'admin' | 'reader' }
+ */
 export async function POST(request: NextRequest) {
   try {
-    const { token, expectedRole } = await request.json();
+    const { token } = await request.json();
 
     if (!token) {
       return NextResponse.json(
@@ -13,37 +29,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify token with backend and get user data
-    const response = await fetch(`${BACKEND_URL}/auth/verify-token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ token }),
-    });
-
-    if (!response.ok) {
+    // 1. Verify Firebase token
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(token);
+    } catch {
       return NextResponse.json(
         { success: false, error: 'Invalid token' },
         { status: 401 }
       );
     }
 
-    const userData = await response.json();
+    const uid = decodedToken.uid;
 
-    // Check if user has the expected role
-    // For now, we assume all users coming from Firebase are readers by default
-    // Admin role should be set manually in database
-    if (expectedRole && userData.data?.role !== expectedRole) {
-      return NextResponse.json(
-        { success: false, error: 'Insufficient permissions' },
-        { status: 403 }
+    // 2. Query Neon DB directly for role
+    const { Pool } = await import('pg');
+    const pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+    });
+
+    try {
+      const result = await pool.query(
+        'SELECT role FROM users WHERE firebase_uid = $1',
+        [uid]
       );
-    }
 
-    return NextResponse.json({ success: true, data: userData.data });
+      const role = result.rows[0]?.role || 'reader';
+      console.log(`[verify-role API] uid=${uid} role=${role}`);
+
+      return NextResponse.json({ success: true, role });
+    } finally {
+      await pool.end();
+    }
   } catch (error) {
-    console.error('Error verifying role:', error);
+    console.error('[verify-role API] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to verify role' },
       { status: 500 }
