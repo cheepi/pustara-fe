@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { auth } from '@/lib/firebase';
 
 interface Props {
   bookTitle: string;
@@ -27,7 +28,7 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
 
   const REVIEW_KEY = `pustara_review_${bookKey}`;
 
-  function handleSubmit() {
+  /* function handleSubmit() {
     if (!rating || !text.trim()) return;
     setLoading(true);
 
@@ -40,7 +41,54 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
       setSubmitted(true);
       onSubmit?.(rating, text);
     }, 800);
-  }
+  } */
+      async function handleSubmit() {
+      if (!rating || !text.trim()) return;
+
+      try {
+        setLoading(true);
+        const token = await auth.currentUser?.getIdToken();
+
+        const response = await fetch('http://localhost:3000/reviews', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            book_id: bookKey,
+            rating,
+            body: text,
+          }),
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result?.message || 'Failed to submit review');
+        }
+
+        // fallback/local cache
+        const review = {
+          rating,
+          text,
+          date: new Date().toISOString(),
+        };
+
+        localStorage.setItem(REVIEW_KEY, JSON.stringify(review));
+
+        setSubmitted(true);
+
+        onSubmit?.(rating, text);
+
+      } catch (error) {
+        console.error('Submit review error:', error);
+
+        alert('Gagal mengirim ulasan');
+      } finally {
+        setLoading(false);
+      }
+    }
 
   function handleClose() {
     // Reset state kalau belum submit
