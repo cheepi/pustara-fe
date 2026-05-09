@@ -34,6 +34,7 @@ export default function BookDetailPage() {
   const [loadingBook, setLoadingBook] = useState(true);
   const [relatedBooks, setRelatedBooks] = useState<BookDetail[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
+  const [reviews, setReviews] = useState<any[]>([]);
 
   useEffect(() => {
     document.body.classList.add('panel-scroll-lock');
@@ -61,6 +62,8 @@ export default function BookDetailPage() {
 
     if (bookKey) fetchBookDetail();
   }, [bookKey, router]);
+
+  
 
   useEffect(() => {
     let active = true;
@@ -115,6 +118,28 @@ export default function BookDetailPage() {
       // Keep existing UI snapshot when refresh fails.
     }
   }
+
+  useEffect(() => {
+  async function fetchReviews() {
+    try {
+      const response = await fetch(
+        `http://localhost:3000/books/${book?.id}/reviews?limit=5`
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        setReviews(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch reviews:', error);
+    }
+  }
+
+  if (book?.id) {
+    fetchReviews();
+  }
+}, [book?.id]);
 
   useEffect(() => {
     if (!book) return;
@@ -469,45 +494,92 @@ export default function BookDetailPage() {
 
             <section className="mb-8">
               <div className="flex items-center justify-between mb-3">
-                <h2 className={cn('font-serif text-xl font-bold', tk.text)}>Ulasan Pembaca</h2>
+                <h2 className={cn('font-serif text-xl font-bold', tk.text)}>
+                  Ulasan Pembaca
+                </h2>
+
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setReviewOpen(true)}
                     className={cn(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
-                      isLight ? 'border-navy-200 text-navy-700 hover:bg-navy-50 hover:border-gold/40' : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-gold/40'
-                    )}>
+                      isLight
+                        ? 'border-navy-200 text-navy-700 hover:bg-navy-50 hover:border-gold/40'
+                        : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-gold/40'
+                    )}
+                  >
                     <PenLine className="w-3.5 h-3.5" />
                     Tulis Ulasan
                   </button>
-                  <Link href={`/book/${book.id}/reviews`}
-                    className="text-gold text-xs font-semibold hover:underline">
+
+                  <Link
+                    href={`/book/${book.id}/reviews`}
+                    className="text-gold text-xs font-semibold hover:underline"
+                  >
                     Lihat Semua
                   </Link>
                 </div>
               </div>
+
               <div className="flex flex-col gap-3">
-                {book.reviews?.slice(0, 2).map((r, i) => (
-                  <motion.div key={i}
-                    className={cn('rounded-2xl border p-4', tk.surface, tk.border)}
-                    initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 + i * 0.05 }}>
-                    <div className="flex items-center gap-3 mb-2">
-                      <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                        {r.avatar}
-                      </div>
-                      <div>
-                        <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
-                        <div className="flex gap-0.5 mt-0.5">
-                          {[1,2,3,4,5].map(s => (
-                            <Star key={s} className={cn('w-3 h-3', s <= r.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
-                          ))}
+                {reviews.length > 0 ? (
+                  reviews.slice(0, 5).map((r, i) => (
+                    <motion.div
+                      key={r.id || i}
+                      className={cn(
+                        'rounded-2xl border p-4',
+                        tk.surface,
+                        tk.border
+                      )}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 + i * 0.05 }}
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
+                          {r.avatar?.charAt(0)?.toUpperCase() || 'U'}
+                        </div>
+
+                        <div>
+                          <p className={cn('text-sm font-semibold', tk.text)}>
+                            {r.name}
+                          </p>
+
+                          <div className="flex gap-0.5 mt-0.5">
+                            {[1, 2, 3, 4, 5].map((s) => (
+                              <Star
+                                key={s}
+                                className={cn(
+                                  'w-3 h-3',
+                                  s <= r.rating
+                                    ? 'text-gold fill-gold'
+                                    : isLight
+                                    ? 'text-slate-300'
+                                    : 'text-slate-700'
+                                )}
+                              />
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <p className={cn('text-sm leading-relaxed', tk.muted)}>{r.text}</p>
-                  </motion.div>
-                ))}
+
+                      <p className={cn('text-sm leading-relaxed', tk.muted)}>
+                        {r.text}
+                      </p>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div
+                    className={cn(
+                      'rounded-2xl border p-6 text-center text-sm',
+                      tk.surface,
+                      tk.border,
+                      tk.muted
+                    )}
+                  >
+                    Belum ada ulasan untuk buku ini.
+                  </div>
+                )}
               </div>
             </section>
 
