@@ -93,7 +93,7 @@ function CoverThumb({ coverId, src, size = 'sm' }: { coverId?: number; src?: str
 
 // ── Card components ───────────────────────────────────────────────────────────
 function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark: boolean; tk: any; liked: boolean; onLike: () => void }) {
-  const actorProfileHref = item.actorId ? `/profile/${item.actorId}` : null;
+  const actorProfileHref = item.actorId ? `/profile/@${item.actorUsername || item.actorId}` : null;
 
   return (
     <div className={cn('rounded-3xl border p-5 transition-all', tk.card)}>
@@ -900,7 +900,7 @@ export default function FeedPage() {
                     return (
                     <div key={u.id} className="flex items-center gap-3">
                       <Link
-                        href={`/profile/${u.id}`}
+                        href={`/profile/@${u.username || u.id}`}
                         className="w-9 h-9 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0 hover:bg-gold/30 transition-colors"
                         aria-label={`Buka profil ${displayName}`}
                       >
@@ -925,7 +925,7 @@ export default function FeedPage() {
                           {isPending ? '...' : (u.is_following ? 'Mengikuti' : 'Ikuti')}
                         </button>
                         <Link
-                          href={`/profile/${u.id}`}
+                          href={`/profile/@${u.username || u.id}`}
                           className={cn('text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all',
                             dark ? 'border-white/20 text-white/70 hover:bg-white/10' : 'border-slate-300 text-slate-600 hover:bg-slate-100')}
                         >

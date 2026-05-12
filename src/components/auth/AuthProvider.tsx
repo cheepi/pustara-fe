@@ -18,9 +18,8 @@ const AUTH_ONLY    = ['/auth/login', '/auth/register'];
  * verify-token now returns { data: { role: 'admin' | 'reader' } }
  */
 async function syncAndGetRole(token: string): Promise<'reader' | 'admin'> {
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
   try {
-    const res = await fetch(`${apiUrl}/auth/verify-token`, {
+    const res = await fetch('/api/auth/verify-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token }),

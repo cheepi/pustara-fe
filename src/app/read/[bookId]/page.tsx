@@ -125,6 +125,8 @@ export default function ReadPage() {
 
   const [numPages,    setNumPages]    = useState<number>(0);
   const [pageNumber,  setPageNumber]  = useState<number>(1);
+  const [isDesktop, setIsDesktop] = useState<boolean>(false);
+  const [pageWidth, setPageWidth] = useState<number>(340);
   const [scale,       setScale]       = useState<number>(1.2);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showUI,      setShowUI]      = useState(true);
@@ -138,6 +140,7 @@ export default function ReadPage() {
   const [showCompletionModal, setShowCompletionModal] = useState(false);
 
   const containerRef   = useRef<HTMLDivElement>(null);
+  const readerViewportRef = useRef<HTMLDivElement>(null);
   const hideUITimer    = useRef<ReturnType<typeof setTimeout>>();
   const pageInputRef   = useRef<HTMLInputElement>(null);
   const progressSaveTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -461,8 +464,55 @@ export default function ReadPage() {
       if (!document.fullscreenElement) setIsFullscreen(false);
     };
     document.addEventListener('fullscreenchange', handler);
-    return () => document.removeEventListener('fullscreenchange', handler);
+
+    // media query for desktop two-page layout
+    const mq = window.matchMedia('(min-width: 769px)');
+    const mqHandler = (e: MediaQueryListEvent | MediaQueryList) => {
+      setIsDesktop(e.matches);
+      // ensure left page is odd when switching to desktop
+      if (e.matches && pageNumber % 2 === 0) {
+        setPageNumber(p => Math.max(1, p - 1));
+      }
+    };
+    setIsDesktop(mq.matches);
+    mq.addEventListener?.('change', mqHandler);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handler);
+      mq.removeEventListener?.('change', mqHandler);
+    };
   }, []);
+
+  useEffect(() => {
+    const el = readerViewportRef.current;
+    if (!el) return;
+
+    const computeWidth = () => {
+      const rect = el.getBoundingClientRect();
+      const horizontalPadding = 32; // corresponds to px-4 on reader viewport
+      const verticalPadding = 48; // corresponds to py-6 on reader viewport
+      const gap = isDesktop ? 24 : 0; // corresponds to gap-6
+      const availableWidth = Math.max(240, rect.width - horizontalPadding - gap);
+      const availableHeight = Math.max(280, rect.height - verticalPadding);
+
+      const perPageByWidth = isDesktop ? Math.floor(availableWidth / 2) : Math.floor(availableWidth);
+      // 3/4 aspect ratio => width = height * 3 / 4
+      const perPageByHeight = Math.floor((availableHeight * 3) / 4);
+      const fitWidth = Math.min(perPageByWidth, perPageByHeight);
+
+      setPageWidth(Math.max(220, fitWidth));
+    };
+
+    computeWidth();
+    const ro = new ResizeObserver(computeWidth);
+    ro.observe(el);
+    window.addEventListener('resize', computeWidth);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', computeWidth);
+    };
+  }, [isDesktop, showSidebar]);
 
   useEffect(() => { setInputPage(String(pageNumber)); }, [pageNumber]);
 
@@ -508,8 +558,9 @@ export default function ReadPage() {
     setIsFullscreen(false);
   }
 
-  function nextPage() { setPageNumber(p => Math.min(p + 1, numPages)); }
-  function prevPage() { setPageNumber(p => Math.max(p - 1, 1)); }
+  const step = isDesktop ? 2 : 1;
+  function nextPage() { setPageNumber(p => Math.min(p + step, numPages)); }
+  function prevPage() { setPageNumber(p => Math.max(p - step, 1)); }
   function zoomIn()   { setScale(s => Math.min(s + 0.2, 3.0)); }
   function zoomOut()  { setScale(s => Math.max(s - 0.2, 0.5)); }
   function resetZoom(){ setScale(1.2); }
@@ -588,7 +639,7 @@ export default function ReadPage() {
       </AnimatePresence>
 
       <div className="flex flex-1 overflow-hidden relative">
-        <div className="flex-1 overflow-auto flex flex-col items-center py-6 px-4 relative"
+          <div ref={readerViewportRef} className="flex-1 overflow-auto flex items-center justify-center py-6 px-4 relative"
           style={{ background: 'radial-gradient(ellipse at center, #2a2a2a 0%, #1a1a1a 100%)' }}>
 
           {loading && (
@@ -606,23 +657,45 @@ export default function ReadPage() {
             }}
             loading=""
             className="flex flex-col items-center">
-            <div className="relative shadow-[0_20px_60px_rgba(0,0,0,0.5)] rounded-sm overflow-hidden pointer-events-none">
-              <Page
-                pageNumber={pageNumber}
-                scale={scale}
-                renderMode="canvas"
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-                className="block"
-              />
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center"
-                style={{ transform: 'rotate(-30deg)' }}>
-                <p className="text-white/[0.04] font-bold text-2xl tracking-widest whitespace-nowrap select-none">
-                  {userName.toUpperCase()} · PUSTARA
-                </p>
+            <div className="relative shadow-[0_20px_60px_rgba(0,0,0,0.5)] rounded-sm pointer-events-none">
+              <div className={cn('grid gap-6', isDesktop ? 'grid-cols-2 justify-center' : 'grid-cols-1')}> 
+                {[...Array(isDesktop ? 2 : 1)].map((_, idx) => {
+                  const p = pageNumber + idx;
+                  if (p > numPages) return null;
+                  return (
+                    <div
+                      key={p}
+                      className="relative bg-white overflow-hidden"
+                      style={{
+                        width: Math.floor(pageWidth * scale),
+                        height: Math.floor((pageWidth * 4 * scale) / 3),
+                      }}
+                    >
+                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+                        <Page
+                          pageNumber={p}
+                          width={Math.max(220, Math.floor(pageWidth * scale))}
+                          renderMode="canvas"
+                          renderTextLayer={false}
+                          renderAnnotationLayer={false}
+                          className="block"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <div className="absolute inset-0 pointer-events-none flex items-center justify-center"
+                  style={{ transform: 'rotate(-30deg)' }}>
+                  <p className="text-white/[0.04] font-bold text-2xl tracking-widest whitespace-nowrap select-none">
+                    {userName.toUpperCase()} · PUSTARA
+                  </p>
+                </div>
               </div>
             </div>
           </Document>
+
+          {/* canvas sizing handled via wrapper classes to avoid styled-jsx */}
 
           <button onClick={prevPage} disabled={pageNumber <= 1}
             className="fixed left-0 top-1/2 -translate-y-1/2 h-1/2 w-16 opacity-0 hover:opacity-100 transition-opacity

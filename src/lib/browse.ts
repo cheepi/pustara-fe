@@ -253,3 +253,9 @@ export async function fetchTopPustakrew(limit = 3): Promise<BrowseBook[]> {
   CACHE[cacheKey] = fallback;
   return fallback;
 }
+
+export function clearTopPicksCache() {
+  Object.keys(CACHE)
+    .filter(k => k.startsWith('top_pustakrew_'))
+    .forEach(k => delete CACHE[k]);
+}

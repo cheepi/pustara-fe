@@ -36,7 +36,12 @@
    BASE
 ══════════════════════════════════════════ */
 @layer base {
-  * { box-sizing: border-box; }
+  * { 
+    box-sizing: border-box; 
+    /* Sembunyiin scrollbar di Firefox, IE & Edge */
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 
   html,
   body {
@@ -50,15 +55,13 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-navy-500 rounded-full; }
+  /* Sembunyiin scrollbar global di Chrome/Safari/Edge berbasis WebKit */
+  ::-webkit-scrollbar { 
+    display: none;
+    width: 0;
+  }
 
-  .scrollbar-gold::-webkit-scrollbar { height: 4px; }
-  .scrollbar-gold::-webkit-scrollbar-track { background: transparent; }
-  .scrollbar-gold::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 999px; }
-  .scrollbar-gold::-webkit-scrollbar-thumb:hover { background: rgba(201,168,76,0.6); }
-
+  /* Biarin aja class ini kalau butuh nembak elemen spesifik */
   .no-scrollbar {
     -ms-overflow-style: none;
     scrollbar-width: none;
@@ -146,4 +149,19 @@
     overflow: hidden !important;
     height: 100dvh;
   }
+}
+
+/* Force react-pdf canvas to fit its wrapper used in reader */
+.reader-page canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  position: absolute !important;
+  inset: 0 !important;
+}
+.reader-page > div {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
 }

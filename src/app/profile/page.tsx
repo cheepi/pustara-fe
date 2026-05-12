@@ -22,6 +22,8 @@ import {
 } from '@/lib/users';
 import { formatRelativeTime, getMyReadingSessions } from '@/lib/reading';
 import type { RecommendedUser } from '@/types/user';
+import { getMySurvey, saveSurvey } from '@/lib/survey';
+import { GENRE_OPTIONS } from '@/lib/genreOptions';
 
 const coverSrc = (coverId?: number, coverUrl?: string) =>
   coverUrl || (coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : null);
@@ -69,6 +71,14 @@ export default function ProfilePage() {
     { label: 'Wishlist', value: 0, icon: Heart, color: 'text-rose-400' },
   ]);
   const [genreStats, setGenreStats] = useState<Array<{ genre: string; count: number; pct: number }>>([]);
+  const [surveyEditing, setSurveyEditing] = useState(false);
+  const [surveySaving, setSurveySaving] = useState(false);
+  const [surveyGender, setSurveyGender] = useState('');
+  const [surveyAge, setSurveyAge] = useState('');
+  const [surveyGenres, setSurveyGenres] = useState<string[]>([]);
+
+  const genderOptions = ['Laki-Laki', 'Perempuan', 'Tidak ingin diketahui'];
+  const ageOptions = ['< 20 Tahun', '21 - 30 Tahun', '31 - 40 Tahun', '> 40 Tahun'];
 
   // Modal state — which tab to open
   const [modalOpen, setModalOpen]       = useState(false);
@@ -90,13 +100,14 @@ export default function ProfilePage() {
 
     Promise.all([
       getMyProfile(),
+      getMySurvey(),
       getMyReadingSessions('reading', 20),
       getMyReadingSessions('finished', 20),
       getRecommendedUsers(3),
       getMyFollowingUsers(30),
       getMyFollowersUsers(30),
     ])
-      .then(([profile, readingNow, finished, suggestions, following, followers]) => {
+      .then(([profile, survey, readingNow, finished, suggestions, following, followers]) => {
         if (!active || !profile) return;
 
         setName(profile.name || 'Pembaca Pustara');
@@ -144,6 +155,17 @@ export default function ProfilePage() {
           }));
 
         setGenreStats(topGenres);
+
+        if (survey) {
+          setSurveyGender(survey.gender || '');
+          setSurveyAge(survey.age || '');
+          setSurveyGenres(
+            (survey.favoriteGenre || '')
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean)
+          );
+        }
 
         const liveRecent: ActivityItem[] = [
           ...readingNow.slice(0, 2).map((session) => ({
@@ -289,6 +311,34 @@ export default function ProfilePage() {
     }
   }
 
+  async function saveSurveyPreferences() {
+    if (surveySaving) return;
+    setSurveySaving(true);
+    try {
+      const payload = {
+        gender: surveyGender || null,
+        age: surveyAge || null,
+        favoriteGenre: surveyGenres.length > 0 ? surveyGenres.join(',') : null,
+      };
+
+      const result = await saveSurvey(payload);
+      if (!result.success) return;
+
+      await updateMyProfile({ preferred_genres: surveyGenres });
+      setSurveyEditing(false);
+    } finally {
+      setSurveySaving(false);
+    }
+  }
+
+  function toggleSurveyGenre(genre: string) {
+    setSurveyGenres((current) => (
+      current.includes(genre)
+        ? current.filter((item) => item !== genre)
+        : [...current, genre]
+    ));
+  }
+
   const tk = {
     surface:  isLight ? 'bg-white border-parchment-darker'     : 'bg-navy-800/50 border-white/8',
     text:     isLight ? 'text-navy-900'                         : 'text-white',
@@ -297,6 +347,8 @@ export default function ProfilePage() {
       ? 'bg-slate-50 border-slate-200 text-navy-900 focus:border-navy-400'
       : 'bg-navy-700/60 border-white/10 text-white focus:border-gold/50',
     chip:     isLight ? 'bg-navy-50 border-navy-200 text-navy-700' : 'bg-white/5 border-white/10 text-white/60',
+    chipActive: isLight ? 'bg-navy-700 border-navy-700 text-white shadow-md shadow-navy-700/15' : 'bg-gold/15 border-gold/50 text-gold',
+    chipInactive: isLight ? 'bg-white border-slate-200 text-slate-700 hover:border-navy-300 hover:bg-slate-50' : 'bg-white/5 border-white/10 text-white/70 hover:border-white/20 hover:bg-white/8',
     hover:    isLight ? 'hover:bg-parchment' : 'hover:bg-white/5',
   };
 
@@ -421,6 +473,117 @@ export default function ProfilePage() {
                   ))}
                 </div>
               </div>
+            </motion.div>
+
+            {/* Survey preferences editor */}
+            <motion.div className={cn('rounded-3xl border p-5', tk.surface)}
+              initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }}>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className={cn('font-serif text-lg font-bold', tk.text)}>Preferensi Rekomendasi</h2>
+                {!surveyEditing ? (
+                  <button
+                    onClick={() => setSurveyEditing(true)}
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all', tk.chip, 'hover:border-gold/40 hover:text-gold')}>
+                    <Edit3 className="w-3 h-3" /> Edit Minat
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setSurveyEditing(false)}
+                    className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all', tk.chip)}>
+                    <X className="w-3 h-3" /> Tutup
+                  </button>
+                )}
+              </div>
+
+              {surveyEditing ? (
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <p className={cn('text-xs mb-1.5', tk.muted)}>Jenis Kelamin</p>
+                    <select
+                      value={surveyGender}
+                      onChange={(e) => setSurveyGender(e.target.value)}
+                      className={cn('w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all', tk.input)}
+                    >
+                      <option value="">Pilih</option>
+                      {genderOptions.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <p className={cn('text-xs mb-1.5', tk.muted)}>Rentang Umur</p>
+                    <select
+                      value={surveyAge}
+                      onChange={(e) => setSurveyAge(e.target.value)}
+                      className={cn('w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all', tk.input)}
+                    >
+                      <option value="">Pilih</option>
+                      {ageOptions.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <p className={cn('text-xs mb-1.5', tk.muted)}>Genre Favorit</p>
+                    <p className={cn('text-[11px] mb-2', tk.muted)}>
+                      Pilih genre yang kamu suka. Klik lagi untuk membatalkan pilihan.
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {GENRE_OPTIONS.map((genre) => {
+                        const selected = surveyGenres.includes(genre.label);
+                        return (
+                          <motion.button
+                            key={genre.label}
+                            type="button"
+                            onClick={() => toggleSurveyGenre(genre.label)}
+                            whileTap={{ scale: 0.98 }}
+                            className={cn(
+                              'flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all text-left',
+                              selected ? tk.chipActive : tk.chipInactive
+                            )}
+                          >
+                            <span className="text-base leading-none">{genre.emoji}</span>
+                            <span className="truncate">{genre.label}</span>
+                          </motion.button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      onClick={saveSurveyPreferences}
+                      disabled={surveySaving}
+                      className="px-4 py-2 rounded-xl bg-gold text-navy-900 text-xs font-bold hover:bg-gold-light disabled:opacity-60 transition-colors"
+                    >
+                      {surveySaving ? 'Menyimpan...' : 'Simpan Preferensi'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {surveyGender && (
+                    <span className={cn('px-2.5 py-1 rounded-xl border text-xs', tk.chip)}>
+                      Gender: {surveyGender}
+                    </span>
+                  )}
+                  {surveyAge && (
+                    <span className={cn('px-2.5 py-1 rounded-xl border text-xs', tk.chip)}>
+                      Umur: {surveyAge}
+                    </span>
+                  )}
+                  {surveyGenres.slice(0, 8).map((genre) => (
+                    <span key={genre} className={cn('px-2.5 py-1 rounded-xl border text-xs', tk.chip)}>
+                      {genre}
+                    </span>
+                  ))}
+                  {!surveyGender && !surveyAge && surveyGenres.length === 0 && (
+                    <p className={cn('text-xs', tk.muted)}>Belum ada preferensi tersimpan.</p>
+                  )}
+                </div>
+              )}
             </motion.div>
 
             {/* Recent activity */}

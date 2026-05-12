@@ -286,7 +286,7 @@ export async function borrowBookForMe(bookId: string): Promise<ShelfActionRespon
   const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
   // Ensure user row exists/synced in backend before hitting shelf endpoints.
-  await fetch(`${apiUrl}/auth/verify-token`, {
+  await fetch('/api/auth/verify-token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),

@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
+import AdminTopNav from '@/components/admin/AdminTopNav';
 
 /**
  * Admin Layout — route group (admin)
@@ -37,7 +36,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     notFound();
   }
 
-  return <>{children}</>;
+  return (
+    <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
+      <AdminTopNav />
+      <main className="pt-20 md:pt-24">{children}</main>
+    </div>
+  );
 }
 
 // 'use client';

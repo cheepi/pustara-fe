@@ -127,7 +127,7 @@ export default function RegisterPage() {
       await updateProfile(cred.user, { displayName: name });
 
       const token = await cred.user.getIdToken();
-      await fetch(`${apiUrl}/auth/verify-token`, {
+      await fetch('/api/auth/verify-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token }),
@@ -205,7 +205,7 @@ export default function RegisterPage() {
   );
 
   return (
-    <main className="h-full min-h-0 flex overflow-y-auto no-scrollbar">
+    <main className="min-h-screen flex overflow-y-auto no-scrollbar">
 
       {/* ══ DESKTOP LEFT PANEL ══ */}
       <div className="hidden lg:flex flex-col w-[55%] bg-navy-900 relative overflow-hidden p-12">

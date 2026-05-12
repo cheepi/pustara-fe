@@ -10,21 +10,7 @@ import ComboLogo from '@/components/icons/ComboLogo';
 import { useUserStore } from '@/store/userStore';
 import type { AgeRange, Gender } from '@/types/personalization';
 import { saveSurvey, skipSurvey } from '@/lib/survey';
-
-const GENRES = [
-  { label: 'Fiksi', emoji: '📖' },
-  { label: 'Fiksi Ilmiah', emoji: '🚀' },
-  { label: 'Misteri', emoji: '🔍' },
-  { label: 'Self-Help', emoji: '💡' },
-  { label: 'Sejarah', emoji: '🏛️' },
-  { label: 'Nonfiksi', emoji: '📰' },
-  { label: 'Romansa', emoji: '💝' },
-  { label: 'Teenlit', emoji: '✨' },
-  { label: 'Biografi', emoji: '👤' },
-  { label: 'Sains', emoji: '🔬' },
-  { label: 'Filsafat', emoji: '🧠' },
-  { label: 'Anak', emoji: '🌈' },
-];
+import { GENRE_OPTIONS } from '@/lib/genreOptions';
 
 const GENDER_OPTIONS: { value: Gender; emoji: string; label: string }[] = [
   { value: 'Laki-Laki', emoji: '👨', label: 'Laki-Laki' },
@@ -407,7 +393,7 @@ export default function PersonalizationPage() {
               </div>
               {/* 2 cols mobile, 3 cols tablet, 4 cols desktop */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                {GENRES.map(g => {
+                {GENRE_OPTIONS.map(g => {
                   const sel = genres.includes(g.label);
                   return (
                     <motion.button

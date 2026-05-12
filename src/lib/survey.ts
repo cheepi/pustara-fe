@@ -8,6 +8,15 @@ export interface SurveyStatusResponse {
   has_survey: boolean;
   survey_status: SurveyStatus;
   skipped?: boolean;
+  should_prompt_personalization?: boolean;
+}
+
+export interface SurveyDataResponse {
+  favoriteGenre: string | null;
+  age: string | null;
+  gender: string | null;
+  survey_status: SurveyStatus;
+  has_survey: boolean;
 }
 
 async function getAuthHeaderFromToken(token?: string): Promise<Record<string, string>> {
@@ -47,7 +56,28 @@ export async function getSurveyStatus(token?: string): Promise<SurveyStatusRespo
 export async function shouldGoToPersonalization(token?: string): Promise<boolean> {
   const status = await getSurveyStatus(token);
   if (!status) return true;
+  if (typeof status.should_prompt_personalization === 'boolean') {
+    return status.should_prompt_personalization;
+  }
   return status.survey_status === 'not_started';
+}
+
+export async function getMySurvey(token?: string): Promise<SurveyDataResponse | null> {
+  try {
+    const headers = await getAuthHeaderFromToken(token);
+    if (!headers.Authorization) return null;
+
+    const response = await fetch(`${API_URL}/survey/my-survey`, {
+      cache: 'no-store',
+      headers,
+    });
+
+    if (!response.ok) return null;
+    const data = await response.json().catch(() => ({}));
+    return (data?.data ?? null) as SurveyDataResponse | null;
+  } catch {
+    return null;
+  }
 }
 
 export async function saveSurvey(

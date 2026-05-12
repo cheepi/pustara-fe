@@ -131,12 +131,19 @@ function normalizeRecommendedUser(raw: Record<string, unknown>): RecommendedUser
   };
 }
 
-export async function getUserProfile(id: string): Promise<UserProfile | null> {
-  if (!id) return null;
+export async function getUserProfile(usernameOrId: string): Promise<UserProfile | null> {
+  if (!usernameOrId) {
+    return null;
+  }
 
   try {
     const headers = await getOptionalAuthHeader();
-    const res = await fetch(`${API_URL}/users/${id}`, {
+    // Support both username (with @ or %40) and ID
+    const decoded = decodeURIComponent(usernameOrId).trim();
+    const param = decoded.startsWith('@') ? decoded.slice(1) : decoded;
+    const url = `${API_URL}/users/${param}`;
+
+    const res = await fetch(url, {
       cache: 'no-store',
       headers,
     });
@@ -148,7 +155,7 @@ export async function getUserProfile(id: string): Promise<UserProfile | null> {
     const raw = (json?.data ?? {}) as Record<string, unknown>;
     return normalizeUserProfile(raw);
   } catch (err) {
-    console.warn(`[users] getUserProfile(${id}) gagal:`, err);
+    console.warn(`[users] getUserProfile(${usernameOrId}) gagal:`, err);
     return null;
   }
 }
