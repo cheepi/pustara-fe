@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import AvatarImage from '@/components/shared/AvatarImage';
 import type { RecommendedUser } from '@/types/user';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -14,7 +15,7 @@ type ModalTab = 'following' | 'followers' | 'suggestions';
 interface ModalUser {
   id: string;
   name: string;
-  avatar: string;
+  avatar_url: string | null;
   bio: string;
   books: number;
   genres: string[];
@@ -27,7 +28,7 @@ function toModalUser(u: RecommendedUser): ModalUser {
   return {
     id: u.id,
     name: displayName,
-    avatar: displayName.charAt(0).toUpperCase() || 'P',
+    avatar_url: u.avatar_url || null,
     bio: u.bio || 'Pembaca aktif di komunitas Pustara.',
     books: Number(u.total_read ?? 0),
     genres: Array.isArray(u.preferred_genres) ? u.preferred_genres.slice(0, 3) : [],
@@ -228,9 +229,13 @@ export default function FollowingModal({
 
                         <div className="flex items-start gap-3">
                           {/* Avatar */}
-                          <div className="w-11 h-11 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-base text-gold flex-shrink-0">
-                            {u.avatar}
-                          </div>
+                          <AvatarImage
+                            src={u.avatar_url}
+                            alt={u.name}
+                            initials={u.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                            size="md"
+                            className="w-11 h-11"
+                          />
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">

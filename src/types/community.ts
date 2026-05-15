@@ -1,6 +1,6 @@
 export interface CommunityReview {
   user: string;
-  avatar: string;
+  avatar_url: string | null;
   loc: string;
   rating: number;
   book: string;

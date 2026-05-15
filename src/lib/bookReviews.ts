@@ -11,7 +11,7 @@ function normalizeReview(raw: Record<string, unknown>): Review {
     book_id: String(raw.book_id ?? ''),
     body: String(raw.text ?? raw.reviewText ?? raw.body ?? ''),
     name: String(raw.name ?? raw.user ?? 'Anonymous'),
-    avatar: String(raw.avatar ?? 'U').slice(0, 1).toUpperCase(),
+    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
     rating: Number(raw.rating ?? 0),
     text: String(raw.text ?? raw.reviewText ?? ''),
     time: String(raw.time ?? '-'),

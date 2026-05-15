@@ -9,6 +9,7 @@ export interface UpdateMyProfilePayload {
   name?: string;
   username?: string;
   bio?: string;
+  avatar_url?: string;
   preferred_genres?: string[];
 }
 
@@ -262,7 +263,10 @@ export async function getMyProfile(): Promise<UserProfile | null> {
     if (!res.ok) return null;
     const json = await res.json();
     const raw = (json?.data ?? {}) as Record<string, unknown>;
-    return normalizeUserProfile(raw);
+    console.log('[DEBUG] getMyProfile raw response:', { avatar_url: raw.avatar_url, all_keys: Object.keys(raw) });
+    const normalized = normalizeUserProfile(raw);
+    console.log('[DEBUG] getMyProfile normalized:', { avatar_url: normalized.avatar_url });
+    return normalized;
   } catch (err) {
     console.warn('[users] getMyProfile gagal:', err);
     return null;

@@ -20,7 +20,7 @@ function normalizeNotification(raw: Record<string, unknown>, idx: number): Notif
     time: createdAt || '-',
     created_at: createdAt || '-',
     read: Boolean(raw.read ?? raw.is_read ?? false),
-    avatar: raw.avatar ? String(raw.avatar) : undefined,
+    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
     bookCover: String(raw.bookCover ?? raw.coverId ?? '') || undefined,
   };
 }

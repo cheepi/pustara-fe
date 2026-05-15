@@ -6,7 +6,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 function normalizeReview(raw: Record<string, unknown>): CommunityReview {
   return {
     user: String(raw.user ?? raw.name ?? 'Anonymous'),
-    avatar: String(raw.avatar ?? 'U').slice(0, 1).toUpperCase(),
+    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
     loc: String(raw.loc ?? '-'),
     rating: Number(raw.rating ?? 0),
     book: String(raw.book ?? raw.bookTitle ?? '-'),

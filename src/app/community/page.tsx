@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { fetchCommunityReviews } from '@/lib/community';
 import type { CommunityReview } from '@/types/community';
+import AvatarImage from '@/components/shared/AvatarImage';
 
 const coverUrl = (id?: number) => id ? `https://covers.openlibrary.org/b/id/${id}-M.jpg` : null;
 const TABS = ['Terbaru', 'Terpopuler', 'Diikuti'];
@@ -123,9 +124,12 @@ export default function CommunityPage() {
 
                   {/* Header */}
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                      {r.avatar}
-                    </div>
+                    <AvatarImage 
+                      src={r.avatar_url || null}
+                      alt={r.user || 'User avatar'}
+                      initials={r.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+                      size="sm"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className={cn('text-sm font-semibold', tk.text)}>{r.user}</p>
                       <p className={cn('text-xs', tk.muted)}>{r.loc} · {r.time}</p>

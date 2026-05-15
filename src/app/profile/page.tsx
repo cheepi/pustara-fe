@@ -8,6 +8,8 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
+import AvatarImage from '@/components/shared/AvatarImage';
+import AvatarUploadDialog from '@/components/profile/AvatarUploadDialog';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useAuthStore } from '@/store/authStore';
@@ -42,7 +44,7 @@ type ActivityItem = {
 type FollowingPreviewItem = {
   id: string;
   name: string;
-  avatar: string;
+  avatar_url: string | null;
   books: number;
 };
 
@@ -54,6 +56,8 @@ export default function ProfilePage() {
   const [editing,   setEditing]   = useState(false);
   const [name,      setName]      = useState(user?.displayName || 'Pembaca Pustara');
   const [bio,       setBio]       = useState('Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [draftName, setDraftName] = useState(name);
   const [draftBio,  setDraftBio]  = useState(bio);
   const [saving, setSaving] = useState(false);
@@ -114,6 +118,9 @@ export default function ProfilePage() {
         setDraftName(profile.name || 'Pembaca Pustara');
         setBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
         setDraftBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
+        console.log('[DEBUG] profile page fetched profile:', { avatar_url: profile.avatar_url });
+        setAvatarUrl(profile.avatar_url || null);
+        console.log('[DEBUG] profile page set avatarUrl to:', profile.avatar_url || null);
 
         setProfileCounts({
           followers: Number(profile.followers_count ?? 0),
@@ -205,7 +212,7 @@ export default function ProfilePage() {
             return {
               id: item.id,
               name: displayName,
-              avatar: displayName.charAt(0).toUpperCase() || 'P',
+              avatar_url: item.avatar_url || null,
               books: Number(item.total_read ?? 0),
             };
           })
@@ -368,11 +375,24 @@ export default function ProfilePage() {
 
             {/* Avatar */}
             <div className="relative flex-shrink-0">
-              <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-2xl bg-gradient-to-br from-gold/30 to-gold/10 border-2 border-gold/30 flex items-center justify-center shadow-lg">
-                <span className="font-serif font-black text-gold text-2xl lg:text-3xl">{initials}</span>
+              <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-2xl bg-gradient-to-br from-gold/30 to-gold/10 border-2 border-gold/30 flex items-center justify-center shadow-lg overflow-hidden">
+                {avatarUrl ? (
+                  <AvatarImage
+                    src={avatarUrl}
+                    alt="Your avatar"
+                    initials={initials}
+                    size="lg"
+                    className="w-full h-full rounded-2xl"
+                  />
+                ) : (
+                  <span className="font-serif font-black text-gold text-2xl lg:text-3xl">{initials}</span>
+                )}
               </div>
               {editing && (
-                <button className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-xl bg-gold text-navy-900 flex items-center justify-center shadow-md hover:bg-gold-light transition-colors">
+                <button 
+                  onClick={() => setUploadDialogOpen(true)}
+                  className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-xl bg-gold text-navy-900 flex items-center justify-center shadow-md hover:bg-gold-light transition-colors"
+                >
                   <Camera className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -431,6 +451,57 @@ export default function ProfilePage() {
             </div>
           </div>
         </motion.div>
+
+        {/* ── AVATAR UPLOAD DIALOG ── */}
+        {uploadDialogOpen && user?.uid && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            {/* Backdrop */}
+            <div
+              className="absolute inset-0 bg-black/50"
+              onClick={() => setUploadDialogOpen(false)}
+            />
+
+            {/* Dialog */}
+            <motion.div
+              className={cn(
+                'relative rounded-2xl p-6 max-w-sm w-full mx-4',
+                isLight ? 'bg-white' : 'bg-navy-800 border border-white/10'
+              )}
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={cn('font-serif text-lg font-bold', isLight ? 'text-navy-900' : 'text-white')}>
+                  Ubah Avatar
+                </h3>
+                <button
+                  onClick={() => setUploadDialogOpen(false)}
+                  className={cn(
+                    'p-1 rounded-lg transition-colors',
+                    isLight ? 'hover:bg-slate-100' : 'hover:bg-white/10'
+                  )}
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Upload component */}
+              <AvatarUploadDialog
+                userId={user.uid}
+                onUploadSuccess={(newUrl) => {
+                  setAvatarUrl(newUrl);
+                  setUploadDialogOpen(false);
+                }}
+                isLight={isLight}
+              />
+            </motion.div>
+          </motion.div>
+        )}
 
         {/* ── MAIN GRID ── */}
         <div className="lg:grid lg:grid-cols-[1fr_320px] lg:gap-5">
@@ -650,9 +721,13 @@ export default function ProfilePage() {
                   <motion.div key={f.id} className="flex items-center gap-3"
                     initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.16 + i * 0.04 }}>
-                    <div className="w-9 h-9 rounded-xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                      {f.avatar}
-                    </div>
+                    <AvatarImage
+                      src={f.avatar_url}
+                      alt={f.name}
+                      initials={f.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                      size="md"
+                      className="w-9 h-9"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className={cn('text-sm font-semibold', tk.text)}>{f.name}</p>
                       <p className={cn('text-xs', tk.muted)}>{f.books} buku dibaca</p>

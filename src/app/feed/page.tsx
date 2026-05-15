@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
+import AvatarImage from '@/components/shared/AvatarImage';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useProtectedRoute } from '@/hooks/useProtectedRoute';
@@ -42,6 +43,7 @@ const EMPTY_SIDEBAR_PAYLOAD: FeedSidebarPayload = {
     initials: 'P',
     name: 'Pembaca Pustara',
     subtitle: 'Pembaca aktif',
+    avatar_url: null,
     dipinjam: 0,
     streak: 0,
     selesai: 0,
@@ -94,19 +96,31 @@ function CoverThumb({ coverId, src, size = 'sm' }: { coverId?: number; src?: str
 // ── Card components ───────────────────────────────────────────────────────────
 function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark: boolean; tk: any; liked: boolean; onLike: () => void }) {
   const actorProfileHref = item.actorId ? `/profile/@${item.actorUsername || item.actorId}` : null;
+  const initials = item.user ? item.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() : 'U';
 
   return (
     <div className={cn('rounded-3xl border p-5 transition-all', tk.card)}>
       <div className="flex items-center gap-3 mb-4">
         {actorProfileHref ? (
           <Link href={actorProfileHref}
-            className="w-10 h-10 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0 hover:bg-gold/30 transition-colors"
             aria-label={`Buka profil ${item.user || 'user'}`}>
-            {item.avatar}
+            <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+              <AvatarImage 
+                src={item.avatar_url || null}
+                alt={item.user || 'User avatar'}
+                initials={initials}
+                size="sm"
+              />
+            </div>
           </Link>
         ) : (
-          <div className="w-10 h-10 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-            {item.avatar}
+          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
+            <AvatarImage 
+              src={item.avatar_url || null}
+              alt={item.user || 'User avatar'}
+              initials={initials}
+              size="sm"
+            />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -690,7 +704,16 @@ export default function FeedPage() {
                 ) : (
                   <>
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 rounded-2xl bg-gold/25 border border-gold/40 flex items-center justify-center font-bold text-lg text-gold">{sidebar.profile.initials}</div>
+                      <div className="w-12 h-12 rounded-2xl border border-gold/40 flex-shrink-0 overflow-hidden">
+                        <div className="w-full h-full rounded-2xl overflow-hidden">
+                          <AvatarImage
+                            src={sidebar.profile.avatar_url || null}
+                            alt={sidebar.profile.name || 'User avatar'}
+                            initials={sidebar.profile.initials}
+                            size="md"
+                          />
+                        </div>
+                      </div>
                       <div>
                         <p className={cn('font-semibold text-sm', tk.text)}>{sidebar.profile.name}</p>
                         <p className={cn('text-xs max-w-[180px] truncate', tk.muted)} title={sidebar.profile.subtitle}>{sidebar.profile.subtitle}</p>
@@ -894,18 +917,19 @@ export default function FeedPage() {
                   )}
                   {recommendedUsers.map((u) => {
                     const displayName = u.display_name || u.name || u.username || 'Pustara User';
-                    const initial = displayName.charAt(0).toUpperCase() || 'P';
+                    const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
                     const isPending = followLoadingIds.has(u.id);
 
                     return (
                     <div key={u.id} className="flex items-center gap-3">
-                      <Link
-                        href={`/profile/@${u.username || u.id}`}
-                        className="w-9 h-9 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0 hover:bg-gold/30 transition-colors"
-                        aria-label={`Buka profil ${displayName}`}
-                      >
-                        {initial}
-                      </Link>
+                      <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
+                        <AvatarImage
+                          src={u.avatar_url}
+                          alt={displayName}
+                          initials={initials}
+                          size="sm"
+                        />
+                      </div>
                       <div className="flex-1 min-w-0">
                         <p className={cn('text-sm font-semibold truncate', tk.text)} title={displayName}>{displayName}</p>
                         <p className={cn('text-xs truncate', tk.muted)} title={`@${u.username || 'pustara_user'} · ${u.followers_count} pengikut`}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>

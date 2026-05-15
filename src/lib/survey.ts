@@ -40,15 +40,23 @@ export async function getSurveyStatus(token?: string): Promise<SurveyStatusRespo
     const headers = await getAuthHeaderFromToken(token);
     if (!headers.Authorization) return null;
 
+    // Add 5s timeout to prevent AbortError on navigation
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
     const res = await fetch(`${API_URL}/survey/status`, {
       cache: 'no-store',
       headers,
+      signal: controller.signal,
     });
 
+    clearTimeout(timeout);
     if (!res.ok) return null;
     const json = await res.json();
     return (json?.data ?? null) as SurveyStatusResponse | null;
-  } catch {
+  } catch (err) {
+    // Silently handle AbortError (happens on navigation)
+    if (err instanceof Error && err.name === 'AbortError') return null;
     return null;
   }
 }
@@ -67,15 +75,23 @@ export async function getMySurvey(token?: string): Promise<SurveyDataResponse | 
     const headers = await getAuthHeaderFromToken(token);
     if (!headers.Authorization) return null;
 
+    // Add 5s timeout to prevent AbortError on navigation
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
     const response = await fetch(`${API_URL}/survey/my-survey`, {
       cache: 'no-store',
       headers,
+      signal: controller.signal,
     });
 
+    clearTimeout(timeout);
     if (!response.ok) return null;
     const data = await response.json().catch(() => ({}));
     return (data?.data ?? null) as SurveyDataResponse | null;
-  } catch {
+  } catch (err) {
+    // Silently handle AbortError (happens on navigation)
+    if (err instanceof Error && err.name === 'AbortError') return null;
     return null;
   }
 }

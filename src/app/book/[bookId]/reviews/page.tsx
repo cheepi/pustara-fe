@@ -10,6 +10,7 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { fetchBookReviewData } from '@/lib/bookReviews';
 import type { Review } from '@/types/book';
 import type { BookDetail } from '@/types/book';
+import AvatarImage from '@/components/shared/AvatarImage';
 const RATING_FILTERS = ['Semua', '5 ★', '4 ★', '3 ★', '2 ★', '1 ★'];
 const PAGE_SIZE = 3;
 
@@ -174,9 +175,12 @@ export default function ReviewsPage() {
                   transition={{ delay: i < PAGE_SIZE ? i * 0.04 : 0 }}>
 
                   <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                      {r.avatar}
-                    </div>
+                    <AvatarImage 
+                      src={r.avatar_url || null}
+                      alt={r.name || 'User avatar'}
+                      initials={r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+                      size="sm"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
                       <p className={cn('text-xs', tk.muted)}>{r.loc} · {r.time ?? '-'}</p>

@@ -15,7 +15,7 @@ export interface Review {
   updated_at: string;
   // UI enrichment fields
   name: string;
-  avatar: string;
+  avatar_url: string | null;
   text?: string;
   time?: string;
   loc?: string;

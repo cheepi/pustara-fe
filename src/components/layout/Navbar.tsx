@@ -14,6 +14,9 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Wordmark from '../icons/Wordmark';
 import Logo from '../icons/Logo';
+import AvatarImage from '@/components/shared/AvatarImage';
+import { getMyProfile } from '@/lib/users';
+import type { UserProfile } from '@/types/user';
 
 const MotionLogo = motion(Logo);
 export default function Navbar() {
@@ -21,6 +24,7 @@ export default function Navbar() {
   const [dropOpen,   setDropOpen]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { user }          = useAuthStore();
@@ -98,6 +102,25 @@ export default function Navbar() {
     const timeoutId = window.setTimeout(prefetchAll, 900);
     return () => window.clearTimeout(timeoutId);
   }, [router, user]);
+
+  // Fetch user profile to get avatar_url from database
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+
+    const fetchProfile = async () => {
+      try {
+        const profileData = await getMyProfile();
+        setProfile(profileData);
+      } catch (error) {
+        console.error('Failed to fetch profile in navbar:', error);
+      }
+    };
+
+    fetchProfile();
+  }, [user?.uid]);
 
   const firstName = user?.displayName?.split(' ')[0] || 'Akun';
   const initial   = (user?.displayName || user?.email || 'U')[0].toUpperCase();
@@ -230,8 +253,13 @@ export default function Navbar() {
                     <button
                       onClick={() => setDropOpen(v => !v)}
                       className={cn('flex items-center gap-1.5 pl-1.5 pr-1.5 py-1 rounded-xl transition-colors flex-shrink-0', hoverBg)}>
-                      <div className="w-7 h-7 rounded-full bg-gold/25 border border-gold/40 flex items-center justify-center font-bold text-xs text-gold flex-shrink-0">
-                        {initial}
+                      <div className="w-9 h-9 rounded-full overflow-hidden border border-gold/30 flex-shrink-0">
+                        <AvatarImage 
+                          src={profile?.avatar_url || null}
+                          alt={user?.displayName || 'User avatar'}
+                          initials={initial}
+                          size="sm"
+                        />
                       </div>
                       <span className={cn('hidden md:block text-sm max-w-[72px] truncate', isLight ? 'text-navy-800' : 'text-white')}>
                         {firstName}

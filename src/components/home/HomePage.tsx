@@ -15,6 +15,7 @@ import { useRecommendations } from '@/hooks/useRecommendations';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
 import AiRecoCard from '@/components/ai/AiRecoCard';
 import { DUMMY_COMMUNITY_REVIEWS } from '@/data/dummyData';
+import AvatarImage from '@/components/shared/AvatarImage';
 import {
   batchFetchCovers,
   getCoverFromMap,
@@ -326,9 +327,12 @@ function CommunityCard({ review, index, isLight, liked, onLike }: {
       transition={{ delay: index * 0.04 }} whileHover={{ y: -2 }}>
 
       <div className="flex items-start gap-3 mb-3">
-        <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-          {review.avatar}
-        </div>
+        <AvatarImage 
+          src={review.avatar_url || null}
+          alt={review.user || 'User avatar'}
+          initials={review.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+          size="sm"
+        />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{review.user}</p>
           <div className="flex items-center gap-1.5">

@@ -9,6 +9,7 @@ export interface FeedSidebarProfile {
   initials: string;
   name: string;
   subtitle: string;
+  avatar_url: string | null;
   dipinjam: number;
   streak: number;
   selesai: number;
@@ -19,7 +20,7 @@ export interface FeedSuggestion {
   name: string;
   loc: string;
   books: number;
-  avatar: string;
+  avatar_url: string | null;
 }
 
 export interface FeedSidebarPayload {
@@ -214,7 +215,7 @@ export async function fetchFeedActivities(limit = 8): Promise<FeedItem[]> {
       actorId: activity.actor_id ? String(activity.actor_id) : undefined,
       time: formatRelativeTime(activity.timestamp || undefined),
       user: activity.actor_name,
-      avatar: toInitials(activity.actor_name).charAt(0),
+      avatar_url: activity.actor_avatar,
       loc: 'Komunitas Pustara',
       action:
         activity.status === 'finished'
@@ -288,6 +289,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
         initials,
         name,
         subtitle: pickProfileSubtitle(profile),
+        avatar_url: profile?.avatar_url || null,
         dipinjam: readingCount,
         streak,
         selesai: finishedCount,
@@ -298,7 +300,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
         name: user.name,
         loc: user.bio || 'Komunitas Pustara',
         books: user.books_count,
-        avatar: toInitials(user.name).charAt(0),
+        avatar_url: user.avatar || null,
       })).slice(0, 5),
     };
   } catch (error) {
@@ -308,6 +310,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
         initials: 'P',
         name: 'Pembaca Pustara',
         subtitle: 'Pembaca aktif',
+        avatar_url: null,
         dipinjam: 0,
         streak: 0,
         selesai: 0,

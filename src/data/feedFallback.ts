@@ -3,7 +3,7 @@ import type { FeedItem } from '@/types/feed';
 export const STATIC_SOCIAL_FEED: FeedItem[] = [
   {
     id: 'ac1', type: 'activity', time: '2 jam lalu',
-    user: 'Anna R.', avatar: 'A', loc: 'Yogyakarta',
+    user: 'Anna R.', avatar_url: null, loc: 'Yogyakarta',
     action: 'selesai membaca', rating: 5,
     reviewText: 'Buku yang benar-benar mengubah cara pandangku. Andrea Hirata membawa kita ke Belitung dengan sangat hidup.',
     bookKey: 'd1', bookTitle: 'Laskar Pelangi', bookAuthor: 'Andrea Hirata', coverId: 8231568,
@@ -16,13 +16,13 @@ export const STATIC_SOCIAL_FEED: FeedItem[] = [
   },
   {
     id: 'ac2', type: 'activity', time: 'Kemarin',
-    user: 'Brandon S.', avatar: 'B', loc: 'Jakarta',
+    user: 'Brandon S.', avatar_url: null, loc: 'Jakarta',
     action: 'sedang membaca',
     bookKey: 'd2', bookTitle: 'Bumi Manusia', bookAuthor: 'Pramoedya Ananta Toer', coverId: 8750787,
   },
   {
     id: 'ac3', type: 'activity', time: '2 hari lalu',
-    user: 'Sarah A.', avatar: 'S', loc: 'Bandung',
+    user: 'Sarah A.', avatar_url: null, loc: 'Bandung',
     action: 'memberikan ulasan', rating: 5,
     reviewText: 'Realisme magis yang gelap dan indah. Eka Kurniawan memadukan sejarah kelam Indonesia dengan narasi yang memukau.',
     bookKey: 'd3', bookTitle: 'Cantik Itu Luka', bookAuthor: 'Eka Kurniawan', coverId: 12699828,

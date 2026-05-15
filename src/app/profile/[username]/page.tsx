@@ -9,6 +9,7 @@ import {
   Star, Flame, Users, BookMarked, TrendingUp,
 } from 'lucide-react';
 import Navbar from '@/components/layout/Navbar';
+import AvatarImage from '@/components/shared/AvatarImage';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
@@ -233,6 +234,7 @@ export default function UserProfilePage() {
   const [loading,       setLoading]       = useState(true);
   const [loadingFollow, setLoadingFollow] = useState(false);
   const [suggestions,   setSuggestions]   = useState<RecommendedUser[]>([]);
+  const [avatarUrl,     setAvatarUrl]     = useState<string | null>(null);
  
   useEffect(() => {
     if (!profileUsername) return;
@@ -246,6 +248,7 @@ export default function UserProfilePage() {
       .then(([profileData, recs]) => {
         if (!active) return;
         setProfile(profileData as FullProfile);
+        setAvatarUrl((profileData as FullProfile)?.avatar_url || null);
         setSuggestions(recs.filter((r: RecommendedUser) => r.id !== (profileData as FullProfile)?.id));
       })
       .finally(() => { if (active) setLoading(false); });
@@ -348,12 +351,22 @@ export default function UserProfilePage() {
               className="relative flex-shrink-0"
             >
               <div className={cn(
-                'w-24 h-24 lg:w-28 lg:h-28 rounded-3xl flex items-center justify-center shadow-2xl',
+                'w-24 h-24 lg:w-28 lg:h-28 rounded-3xl flex items-center justify-center shadow-2xl overflow-hidden',
                 'bg-gradient-to-br from-gold/30 via-gold/10 to-transparent border-2 border-gold/40'
               )}>
-                <span className="font-serif font-black text-gold text-3xl lg:text-4xl select-none">
-                  {initials}
-                </span>
+                {avatarUrl ? (
+                  <AvatarImage
+                    src={avatarUrl}
+                    alt={profile?.name || 'User avatar'}
+                    initials={initials}
+                    size="lg"
+                    className="w-full h-full rounded-3xl"
+                  />
+                ) : (
+                  <span className="font-serif font-black text-gold text-3xl lg:text-4xl select-none">
+                    {initials}
+                  </span>
+                )}
               </div>
               <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-gold/60 shadow-sm shadow-gold/50" />
             </motion.div>
@@ -616,9 +629,13 @@ function SuggestionRow({
           'flex items-center gap-3 p-2.5 rounded-2xl transition-colors cursor-pointer',
           isLight ? 'hover:bg-parchment' : 'hover:bg-white/5'
         )}>
-          <div className="w-8 h-8 rounded-xl bg-gold/15 border border-gold/20 flex items-center justify-center font-bold text-xs text-gold flex-shrink-0">
-            {initials}
-          </div>
+          <AvatarImage
+            src={user.avatar_url}
+            alt={name}
+            initials={initials}
+            size="md"
+            className="w-8 h-8"
+          />
           <div className="flex-1 min-w-0">
             <p className={cn('text-sm font-semibold truncate', tk.text)}>{name}</p>
             <p className={cn('text-xs', tk.muted)}>

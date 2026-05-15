@@ -16,7 +16,7 @@ export interface BrowseBook {
 
 export interface FriendActivityItem {
   user: string;
-  avatar: string;
+  avatar_url: string | null;
   action: string;
   book: string;
   coverUrl: string;

@@ -12,6 +12,7 @@ import type { NotificationItem } from '@/types/notifications';
 import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
 import { fetchNotifications } from '@/lib/notifications';
 import { NotificationType } from '@/types/database';
+import AvatarImage from '@/components/shared/AvatarImage';
 
 const TABS = [
   { id: 'all',    label: 'Semua'    },
@@ -171,8 +172,8 @@ export default function NotificationsPage() {
 
                   {/* Icon or avatar */}
                   <div className={cn(
-                    'flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center',
-                    n.bookCover ? 'overflow-hidden' : typeBg(n.type)
+                    'flex-shrink-0 w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center',
+                    n.bookCover ? 'overflow-hidden' : ''
                   )}>
                     {n.bookCover ? (
                       <img
@@ -180,16 +181,17 @@ export default function NotificationsPage() {
                         className="w-full h-full object-cover"
                         alt=""
                       />
-                    ) : n.avatar ? (
-                      <span className={cn(
-                        'w-full h-full rounded-xl flex items-center justify-center font-bold text-sm',
-                        typeBg(n.type),
-                        dark ? 'text-white' : 'text-navy-800'
-                      )}>
-                        {n.avatar}
-                      </span>
+                    ) : n.avatar_url ? (
+                      <AvatarImage 
+                        src={n.avatar_url}
+                        alt="User avatar"
+                        initials="U"
+                        size="sm"
+                      />
                     ) : (
-                      typeIcon(n.type, dark)
+                      <div className={typeBg(n.type)}>
+                        {typeIcon(n.type, dark)}
+                      </div>
                     )}
                   </div>
 

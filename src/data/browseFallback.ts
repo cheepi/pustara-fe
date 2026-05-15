@@ -10,8 +10,8 @@ export const BROWSE_POPULAR_BOOKS: BrowseBook[] = [
 ];
 
 export const BROWSE_FRIEND_ACTIVITY: FriendActivityItem[] = [
-  { user: 'Anna R.', avatar: 'A', action: 'sedang membaca', book: 'Laskar Pelangi', coverUrl: 'https://covers.openlibrary.org/b/id/8231568-S.jpg', key: 'd1', time: '2 jam lalu' },
-  { user: 'Brandon S.', avatar: 'B', action: 'selesai membaca', book: 'Bumi Manusia', coverUrl: 'https://covers.openlibrary.org/b/id/8750787-S.jpg', key: 'd2', time: '5 jam lalu' },
-  { user: 'Sarah A.', avatar: 'S', action: 'sedang membaca', book: 'Perahu Kertas', coverUrl: 'https://covers.openlibrary.org/b/id/7886745-S.jpg', key: 'd4', time: 'kemarin' },
-  { user: 'Dika P.', avatar: 'D', action: 'baru meminjam', book: 'Cantik Itu Luka', coverUrl: 'https://covers.openlibrary.org/b/id/12699828-S.jpg', key: 'd3', time: '2 hari lalu' },
+  { user: 'Anna R.', avatar_url: null, action: 'sedang membaca', book: 'Laskar Pelangi', coverUrl: 'https://covers.openlibrary.org/b/id/8231568-S.jpg', key: 'd1', time: '2 jam lalu' },
+  { user: 'Brandon S.', avatar_url: null, action: 'selesai membaca', book: 'Bumi Manusia', coverUrl: 'https://covers.openlibrary.org/b/id/8750787-S.jpg', key: 'd2', time: '5 jam lalu' },
+  { user: 'Sarah A.', avatar_url: null, action: 'sedang membaca', book: 'Perahu Kertas', coverUrl: 'https://covers.openlibrary.org/b/id/7886745-S.jpg', key: 'd4', time: 'kemarin' },
+  { user: 'Dika P.', avatar_url: null, action: 'baru meminjam', book: 'Cantik Itu Luka', coverUrl: 'https://covers.openlibrary.org/b/id/12699828-S.jpg', key: 'd3', time: '2 hari lalu' },
 ];
