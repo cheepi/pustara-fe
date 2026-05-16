@@ -117,11 +117,20 @@ export default function ReadPage() {
 
   const pdfFile = useMemo(() => {
     if (!token || !bookKey) return null;
+
+    const resolvedPdfUrl = book?.pdfUrl || book?.file_url || null;
+    if (resolvedPdfUrl) {
+      return {
+        url: resolvedPdfUrl,
+        httpHeaders: { Authorization: `Bearer ${token}` }
+      };
+    }
+
     return {
       url: `${API_URL}/books/${bookKey}/file`,
       httpHeaders: { Authorization: `Bearer ${token}` }
     };
-  }, [API_URL, bookKey, token]);
+  }, [API_URL, book?.file_url, book?.pdfUrl, bookKey, token]);
 
   const [numPages,    setNumPages]    = useState<number>(0);
   const [pageNumber,  setPageNumber]  = useState<number>(1);

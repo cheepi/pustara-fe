@@ -21,6 +21,7 @@ import type { FeedItem } from '@/types/feed';
 import type { RecommendedUser } from '@/types/user';
 import { fetchFeedActivities, fetchFeedSidebarPayload, fetchTrendingFeedItems, type FeedSidebarPayload } from '@/lib/feed';
 import { getRecommendedUsers, toggleFollowUser } from '@/lib/users';
+import { useSimilarUsers } from '@/hooks/useSimilarUsers';
 
 const pseudo = (n: number, mn: number, mx: number) =>
   mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
@@ -456,7 +457,7 @@ export default function FeedPage() {
   const dark = theme === 'dark';
 
   const { recommendations: aiRecs, loading: aiLoading } = useRecommendations();
-
+  const { books: similarUserBooks } = useSimilarUsers(2);
   const [filter, setFilter]               = useState('all');
   const [liked,  setLiked]                = useState<Set<string>>(new Set());
   const [visibleCount, setVisibleCount]   = useState(5);
@@ -627,6 +628,16 @@ export default function FeedPage() {
       feed.unshift({ id: 'ai_real_0', type: 'ai_reco', time: 'Baru saja', aiReco: aiRecs[0] });
       if (aiRecs.length > 1) feed.splice(5, 0, { id: 'ai_real_1', type: 'ai_reco', time: '5 jam lalu', aiReco: aiRecs[1] });
     }
+
+    similarUserBooks.forEach((reco, i) => {
+      feed.splice(7 + i * 3, 0, {
+        id: `similar_user_${i}`,
+        type: 'ai_reco',
+        time: 'Berdasarkan pembaca seperti kamu',
+        aiReco: { ...reco, reason_primary: '👥 Disukai pembaca dengan selera mirip kamu' },
+      });
+    });
+    
     return feed;
   })();
 

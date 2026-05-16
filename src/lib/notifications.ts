@@ -2,6 +2,8 @@ import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
 import type { NotificationItem } from '@/types/notifications';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
 
+export const NOTIFICATIONS_CHANGED_EVENT = 'pustara:notifications-changed';
+
 function formatNotificationTime(value: string) {
   if (!value || value === '-') return '-';
   const date = new Date(value);

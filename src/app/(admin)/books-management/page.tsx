@@ -719,7 +719,10 @@ function PustakrewPickModal({
       setSearching(true);
       try {
         const params = new URLSearchParams({ search: searchQ.trim(), limit: '10' });
-        const res = await fetch(`${API}/books?${params}`);
+        const token = await getToken();
+        const res = await fetch(`${API}/admin/books?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         const json = await res.json();
         setSearchResults(Array.isArray(json?.data) ? json.data : []);
       } catch {
@@ -982,7 +985,7 @@ export default function AdminBooksPage() {
       const params = new URLSearchParams({ page: String(page), limit: String(PAGE_SIZE) });
       if (q.trim()) params.set('search', q.trim());
  
-      const res = await fetch(`${API}/books?${params}`, {
+      const res = await fetch(`${API}/admin/books?${params}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Gagal memuat data buku');

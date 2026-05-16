@@ -83,7 +83,22 @@ export function useRecommendations(forceRefresh = false) {
         // Authenticated users should always go through backend cold-start proxy
         // so AI can switch to personalized mode based on interaction count.
         if (user?.uid) {
-          const res = await fetchColdStartRecommendations(genres, 10);
+          const GENRE_MOOD: Record<string, string> = {
+            'Romance': 'cinta romantis sedih perasaan',
+            'Thriller': 'tegang menegangkan seru misteri',
+            'Fantasi': 'ajaib petualangan magical seru',
+            'Self-help': 'motivasi produktif berkembang positif',
+            'Humor': 'lucu santai ringan menghibur',
+            'Drama': 'sedih haru emosional menyentuh',
+            'Misteri': 'penasaran teka-teki gelap detective',
+            'Sains': 'ilmiah fakta pengetahuan informatif',
+            'Filsafat': 'mendalam pemikiran renungan berat',
+            'Biografi': 'nyata kisah hidup inspirasi',
+          };
+          const enrichedGenres = genres.map(g =>
+            GENRE_MOOD[g] ? `${g} ${GENRE_MOOD[g]}` : g
+          );
+          const res = await fetchColdStartRecommendations(enrichedGenres, 10);
           recommendations = res.recommendations ?? [];
         }
 

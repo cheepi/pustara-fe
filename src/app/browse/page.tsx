@@ -499,6 +499,25 @@ function BrowseContent() {
         let fallbackList = localSearchCacheRef.current.get(cacheKey);
 
         if (!fallbackList) {
+          try {
+            const { fetchSemanticSearch } = await import('@/lib/api');
+            const semanticRes = await fetchSemanticSearch(options.search.trim(), 12);
+            if (semanticRes.results.length > 0) {
+              fallbackList = semanticRes.results.map((r) => ({
+                key: String(r.book_id ?? ''),
+                title: String(r.title ?? ''),
+                author: String(r.authors ?? 'Unknown'),
+                coverUrl: String(r.cover_url ?? ''),
+                available: true,
+                genres: [],
+                rating: Number(r.avg_rating ?? 0),
+                desc: String(r.reason_primary ?? ''),
+              }));
+              localSearchCacheRef.current.set(cacheKey, fallbackList);
+            }
+          } catch { /* silent fail, lanjut ke searchBooks */ }
+        }
+        if (!fallbackList) {
           const localMatches = await searchBooks(options.search);
           fallbackList = localMatches.map((book) => ({
             key: String(book.id ?? ''),
@@ -713,7 +732,7 @@ function BrowseContent() {
     if (matchedGenre) return 'Dari genre yang kamu cari';
     if (author.includes(q)) return 'Dari author yang kamu cari';
     if (title.includes(q)) return 'Cocok dari judul';
-    return 'Cocok untuk kamu';
+    return 'Cocok dengan yang kamu cari';
   }
 
   useEffect(() => {

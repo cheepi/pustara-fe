@@ -14,7 +14,6 @@ import Link from 'next/link';
 import { useRecommendations } from '@/hooks/useRecommendations';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
 import AiRecoCard from '@/components/ai/AiRecoCard';
-import { DUMMY_COMMUNITY_REVIEWS } from '@/data/dummyData';
 import AvatarImage from '@/components/shared/AvatarImage';
 import {
   batchFetchCovers,
@@ -72,6 +71,12 @@ const EMPTY_SIDEBAR: FeedSidebarPayload = {
   recentReads: [],
   suggestions: [],
 };
+
+const COMMUNITY_LIKE_STORAGE_PREFIX = 'pustara:community-liked:';
+
+function getCommunityReviewLikeKey(review: CommunityReview): string {
+  return review.review_id || review.key;
+}
 
 function AiRecoCardSkeleton({ isLight }: { isLight: boolean }) {
   const skel = isLight ? 'bg-parchment-darker' : 'bg-navy-700/60';
@@ -151,14 +156,58 @@ export default function HomePage() {
   const { theme }  = useTheme();
   const isLight    = theme === 'light';
   const firstName  = user?.displayName?.split(' ')[0] || 'Pembaca';
-  const { books: popularBooks, loading: popularLoading } = useTrendingBooks(6);
+  const { books: popularBooks, loading: popularLoading } = useTrendingBooks(12);
+  const homepagePopularBooks = popularBooks.slice(0, 6);
   const { recommendations: aiReco, loading: aiLoading } = useRecommendations();
   const [aiCovers, setAiCovers] = useState<Map<string, string | null>>(new Map());
-  const [communityReviews, setCommunityReviews] = useState<typeof DUMMY_COMMUNITY_REVIEWS>(DUMMY_COMMUNITY_REVIEWS);
+  const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>([]);
+  const [communityLoading, setCommunityLoading] = useState(true);
+  const [likedCommunityIds, setLikedCommunityIds] = useState<Record<string, boolean>>({});
   const [sidebar, setSidebar] = useState<FeedSidebarPayload>(EMPTY_SIDEBAR);
   const [greetingStats, setGreetingStats] = useState({ dipinjam: 0, streak: 0, selesai: 0 });
   const borrowedTooltip = sidebar?.profile?.borrowed_tooltip || '';
   const streakTooltip = sidebar?.profile?.streak_tooltip || '';
+  const communityLikeStorageKey = user?.uid ? `${COMMUNITY_LIKE_STORAGE_PREFIX}${user.uid}` : null;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    if (!communityLikeStorageKey) {
+      setLikedCommunityIds({});
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(communityLikeStorageKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      const next: Record<string, boolean> = {};
+
+      if (Array.isArray(parsed)) {
+        for (const value of parsed) {
+          if (typeof value === 'string' && value) {
+            next[value] = true;
+          }
+        }
+      }
+
+      setLikedCommunityIds(next);
+    } catch {
+      setLikedCommunityIds({});
+    }
+  }, [communityLikeStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !communityLikeStorageKey) return;
+
+    try {
+      const likedIds = Object.entries(likedCommunityIds)
+        .filter(([, liked]) => liked)
+        .map(([id]) => id);
+      window.localStorage.setItem(communityLikeStorageKey, JSON.stringify(likedIds));
+    } catch {
+      // ignore localStorage access failures
+    }
+  }, [communityLikeStorageKey, likedCommunityIds]);
 
   useEffect(() => {
     if (!aiReco || aiReco.length === 0) {
@@ -221,7 +270,13 @@ export default function HomePage() {
   useEffect(() => {
     let active = true;
     const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
-    if (!apiBase) return () => { active = false; };
+    setCommunityLoading(true);
+
+    if (!apiBase) {
+      setCommunityReviews([]);
+      setCommunityLoading(false);
+      return () => { active = false; };
+    }
 
     fetch(`${apiBase.replace(/\/$/, '')}/reviews/recent?limit=8`)
       .then((res) => res.ok ? res.json() : Promise.reject(new Error('Failed to fetch')))
@@ -229,10 +284,17 @@ export default function HomePage() {
         if (!active) return;
         if (json && json.success && Array.isArray(json.data)) {
           setCommunityReviews(json.data);
+        } else {
+          setCommunityReviews([]);
         }
       })
       .catch(() => {
-        // keep dummy reviews on error
+        if (!active) return;
+        setCommunityReviews([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setCommunityLoading(false);
       });
 
     return () => { active = false; };
@@ -308,7 +370,7 @@ export default function HomePage() {
         </div>
         {popularLoading
           ? <PopularSkeleton isLight={isLight} />
-          : <PopularCarousel books={popularBooks} isLight={isLight} />
+          : <PopularCarousel books={homepagePopularBooks} isLight={isLight} />
         }
       </section>
 
@@ -326,7 +388,6 @@ export default function HomePage() {
             ? Array(5).fill(0).map((_, i) => <AiRecoCardSkeleton key={i} isLight={isLight} />)
             : aiReco.length > 0
               ? aiReco.slice(0, 5).map((reco, i) => {
-                  // Lookup cover from batch-fetched map
                   const key = `${reco.title}—${reco.authors}`.toLowerCase();
                   const coverUrl = aiCovers.get(key) || (reco as any).cover_url;
                   return (
@@ -359,30 +420,121 @@ export default function HomePage() {
           </div>
           <Link href="/community" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
         </div>
-        <CommunitySection reviews={communityReviews} isLight={isLight} />
+        <CommunitySection
+          reviews={communityReviews}
+          loading={communityLoading}
+          isLight={isLight}
+          likedCommunityIds={likedCommunityIds}
+          onToggleLike={(review) => {
+            const likeKey = getCommunityReviewLikeKey(review);
+            if (!likeKey) return;
+
+            setLikedCommunityIds((current) => ({
+              ...current,
+              [likeKey]: !current[likeKey],
+            }));
+          }}
+        />
       </section>
     </div>
   );
 }
 
-function CommunitySection({ reviews, isLight }: { reviews: typeof DUMMY_COMMUNITY_REVIEWS; isLight: boolean }) {
-  const [liked, setLiked] = useState<Record<number, boolean>>({});
+function CommunitySection({
+  reviews,
+  loading,
+  isLight,
+  likedCommunityIds,
+  onToggleLike,
+}: {
+  reviews: CommunityReview[];
+  loading: boolean;
+  isLight: boolean;
+  likedCommunityIds: Record<string, boolean>;
+  onToggleLike: (review: CommunityReview) => void;
+}) {
   return (
     <>
-      <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
-        {reviews.slice(0, 5).map((r, i) => <CommunityCard key={i} review={r} index={i} isLight={isLight} liked={!!liked[i]} onLike={() => setLiked(l => ({ ...l, [i]: !l[i] }))} />)}
-      </div>
-      <div className="hidden lg:grid grid-cols-3 gap-3">
-        {reviews.slice(0, 8).map((r, i) => <CommunityCard key={i} review={r} index={i} isLight={isLight} liked={!!liked[i]} onLike={() => setLiked(l => ({ ...l, [i]: !l[i] }))} />)}
-      </div>
+      {loading ? (
+        <>
+          <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+            {Array.from({ length: 3 }).map((_, i) => <CommunityCardSkeleton key={i} isLight={isLight} />)}
+          </div>
+          <div className="hidden lg:grid grid-cols-3 gap-3">
+            {Array.from({ length: 3 }).map((_, i) => <CommunityCardSkeleton key={i} isLight={isLight} />)}
+          </div>
+        </>
+      ) : reviews.length === 0 ? (
+        <div className="rounded-2xl border p-5 text-sm" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--muted)' }}>
+          Koleksi komunitas belum tersedia saat ini.
+        </div>
+      ) : (
+        <>
+          <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+            {reviews.slice(0, 5).map((r, i) => {
+              const likeKey = getCommunityReviewLikeKey(r);
+              return (
+                <CommunityCard
+                  key={likeKey || i}
+                  review={r}
+                  index={i}
+                  isLight={isLight}
+                  liked={Boolean(likedCommunityIds[likeKey])}
+                  onLike={() => onToggleLike(r)}
+                />
+              );
+            })}
+          </div>
+          <div className="hidden lg:grid grid-cols-3 gap-3">
+            {reviews.slice(0, 8).map((r, i) => {
+              const likeKey = getCommunityReviewLikeKey(r);
+              return (
+                <CommunityCard
+                  key={likeKey || i}
+                  review={r}
+                  index={i}
+                  isLight={isLight}
+                  liked={Boolean(likedCommunityIds[likeKey])}
+                  onLike={() => onToggleLike(r)}
+                />
+              );
+            })}
+          </div>
+        </>
+      )}
     </>
   );
 }
 
+function CommunityCardSkeleton({ isLight }: { isLight: boolean }) {
+  return (
+    <div
+      className="flex-shrink-0 w-64 lg:w-auto rounded-2xl p-4 animate-pulse"
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+    >
+      <div className="flex items-start gap-3 mb-3">
+        <div className={cn('w-10 h-10 rounded-full', isLight ? 'bg-slate-200' : 'bg-white/10')} />
+        <div className="flex-1 min-w-0">
+          <div className={cn('h-3.5 rounded w-3/5 mb-2', isLight ? 'bg-slate-200' : 'bg-white/10')} />
+          <div className={cn('h-2.5 rounded w-1/2', isLight ? 'bg-slate-200' : 'bg-white/10')} />
+        </div>
+      </div>
+      <div className={cn('h-4 rounded w-full mb-2', isLight ? 'bg-slate-200' : 'bg-white/10')} />
+      <div className={cn('h-4 rounded w-5/6 mb-2', isLight ? 'bg-slate-200' : 'bg-white/10')} />
+      <div className={cn('h-3 rounded w-1/3', isLight ? 'bg-slate-200' : 'bg-white/10')} />
+    </div>
+  );
+}
+
 function CommunityCard({ review, index, isLight, liked, onLike }: {
-  review: CommunityReview; index: number; isLight: boolean; liked: boolean; onLike: () => void;
+  review: CommunityReview;
+  index: number;
+  isLight: boolean;
+  liked: boolean;
+  onLike: () => void;
 }) {
   const src = review.cover_url;
+
   function formatRelativeTime(t: string | null | undefined) {
     if (!t) return '-';
     const parsed = Date.parse(String(t));
@@ -402,14 +554,18 @@ function CommunityCard({ review, index, isLight, liked, onLike }: {
     if (mo < 12) return `${mo} bulan lalu`;
     return `${Math.floor(day / 365)} tahun lalu`;
   }
-  return (
-    <motion.div className="flex-shrink-0 w-64 lg:w-auto rounded-2xl p-4"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04 }} whileHover={{ y: -2 }}>
 
+  return (
+    <motion.div
+      className="flex-shrink-0 w-64 lg:w-auto rounded-2xl p-4"
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04 }}
+      whileHover={{ y: -2 }}
+    >
       <div className="flex items-start gap-3 mb-3">
-        <AvatarImage 
+        <AvatarImage
           src={review.avatar_url || null}
           alt={review.user || 'User avatar'}
           initials={review.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
@@ -419,8 +575,14 @@ function CommunityCard({ review, index, isLight, liked, onLike }: {
           <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{review.user}</p>
           <div className="flex items-center gap-1.5">
             <div className="flex gap-0.5">
-              {[1,2,3,4,5].map(s => (
-                <Star key={s} className={cn('w-2.5 h-2.5', s <= review.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+              {[1, 2, 3, 4, 5].map((s) => (
+                <Star
+                  key={s}
+                  className={cn(
+                    'w-2.5 h-2.5',
+                    s <= review.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700'
+                  )}
+                />
               ))}
             </div>
             <span className="text-[10px]" style={{ color: 'var(--muted)' }}>{formatRelativeTime(review.time)}</span>
@@ -438,9 +600,12 @@ function CommunityCard({ review, index, isLight, liked, onLike }: {
       </Link>
       <p className="text-xs leading-relaxed line-clamp-2 mb-3" style={{ color: 'var(--muted)' }}>{review.text}</p>
 
-      <motion.button onClick={onLike}
+      <motion.button
+        onClick={onLike}
         className={cn('flex items-center gap-1.5 text-xs font-medium transition-colors', liked ? 'text-rose-400' : '')}
-        style={!liked ? { color: 'var(--muted)' } : {}} whileTap={{ scale: 0.9 }}>
+        style={!liked ? { color: 'var(--muted)' } : {}}
+        whileTap={{ scale: 0.9 }}
+      >
         <motion.div animate={{ scale: liked ? [1, 1.4, 1] : 1 }} transition={{ duration: 0.3 }}>
           <Heart className={cn('w-3.5 h-3.5', liked && 'fill-rose-400')} />
         </motion.div>

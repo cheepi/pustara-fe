@@ -144,7 +144,7 @@ export default function CommunityPage() {
               {displayed.map((r, i) => (
                 <ReviewCard
                   key={`${tab}-${r.review_id || i}`}
-                  reviewId={r.review_id}
+                  reviewId={r.review_id || ''}
                   name={r.user}
                   avatarUrl={r.avatar_url}
                   rating={r.rating}

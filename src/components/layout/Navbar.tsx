@@ -16,7 +16,7 @@ import Wordmark from '../icons/Wordmark';
 import Logo from '../icons/Logo';
 import AvatarImage from '@/components/shared/AvatarImage';
 import { getMyProfile } from '@/lib/users';
-import { fetchUnreadNotificationCount } from '@/lib/notifications';
+import { fetchUnreadNotificationCount, NOTIFICATIONS_CHANGED_EVENT } from '@/lib/notifications';
 import type { UserProfile } from '@/types/user';
 
 const MotionLogo = motion(Logo);
@@ -140,10 +140,12 @@ export default function Navbar() {
 
     loadUnreadNotifications();
     const interval = window.setInterval(loadUnreadNotifications, 60_000);
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, loadUnreadNotifications);
 
     return () => {
       active = false;
       window.clearInterval(interval);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, loadUnreadNotifications);
     };
   }, [pathname, user?.uid]);
 

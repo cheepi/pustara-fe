@@ -4,8 +4,10 @@ import type { AiRecommendation } from '@/types/ai';
 import { apiCaches } from './cache';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-
-const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000;
+const TRENDING_CACHE = new Map<string, { data: TrendingBook[]; at: number }>();
+const TRENDING_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+const TRENDING_STORAGE_PREFIX = 'pustara:trending:';
+const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let cachedAuthHeader: Record<string, string> | null = null;
 let cachedAuthUid: string | null = null;
 let cachedAuthAt = 0;
@@ -80,6 +82,35 @@ function unwrapData<T>(json: unknown): T {
     return j.data as T;
   }
   return json as T;
+}
+
+function readTrendingStorage(cacheKey: string): TrendingBook[] | null {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem(`${TRENDING_STORAGE_PREFIX}${cacheKey}`);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw) as { at?: number; data?: TrendingBook[] };
+    if (!parsed || !Array.isArray(parsed.data) || typeof parsed.at !== 'number') return null;
+    if ((Date.now() - parsed.at) >= TRENDING_TTL_MS) return null;
+    return parsed.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeTrendingStorage(cacheKey: string, data: TrendingBook[]) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(
+      `${TRENDING_STORAGE_PREFIX}${cacheKey}`,
+      JSON.stringify({ at: Date.now(), data }),
+    );
+  } catch {
+    // ignore localStorage failures
+  }
 }
 
 export async function apiGet<T>(path: string): Promise<T> {
@@ -355,31 +386,37 @@ export async function fetchColdStartRecommendations(
  * Fetch trending books dari FastAPI (Redis sorted set).
  * Dipakai oleh feed/page.tsx untuk replace hardcoded trending items.
  * 
- * CACHED: 60 seconds to prevent redundant API calls
+ * CACHED: 6 hours to prevent redundant API calls
  */
 export async function fetchTrending(topN = 10): Promise<TrendingBook[]> {
   const cacheKey = `trending_${topN}`;
+  const cached = TRENDING_CACHE.get(cacheKey);
+  if (cached && Date.now() - cached.at < TRENDING_TTL_MS) {
+    return cached.data;
+  }
 
-  // Check cache first
-  const cached = apiCaches.trending.get(cacheKey) as TrendingBook[] | null;
-  if (cached !== null) {
-    return cached;
+  const stored = readTrendingStorage(cacheKey);
+  if (stored) {
+    TRENDING_CACHE.set(cacheKey, { data: stored, at: Date.now() });
+    return stored;
   }
 
   try {
-    const res = await apiGet<TrendingResponse & { recommendations?: TrendingBook[] }>(`/recommendations/trending?top_n=${topN}`);
+    const res = await apiGet<TrendingResponse & { recommendations?: TrendingBook[] }>(
+      `/recommendations/trending?top_n=${topN}`
+    );
     const source = Array.isArray(res.trending)
       ? res.trending
       : Array.isArray(res.recommendations)
         ? res.recommendations
         : [];
     const result = source.map(normalizeTrendingBook);
-
-    // Store in cache for 60 seconds
-    apiCaches.trending.set(cacheKey, result);
-
+    TRENDING_CACHE.set(cacheKey, { data: result, at: Date.now() });
+    writeTrendingStorage(cacheKey, result);
     return result;
   } catch {
+    const fallback = readTrendingStorage(cacheKey);
+    if (fallback) return fallback;
     return [];
   }
 }
@@ -405,4 +442,37 @@ export async function fetchOpenLibraryCoverId(
     OL_COVER_CACHE[key] = null;
     return null;
   }
+}
+
+export async function fetchSemanticSearch(
+  q: string,
+  n = 10,
+  language?: string,
+): Promise<{ results: AiRecommendation[]; query: string; n: number }> {
+  const params = new URLSearchParams({ q, n: String(n) });
+  if (language) params.set('language', language);
+  const raw = await apiGet<{ results?: unknown[]; query?: string; n?: number }>(
+    `/recommendations/search?${params}`
+  );
+  return {
+    query: raw.query ?? q,
+    n: raw.n ?? 0,
+    results: Array.isArray(raw.results)
+      ? raw.results.map(normalizeAiRecommendation)
+      : [],
+  };
+}
+
+export async function fetchSimilarUsers(
+  n = 8,
+): Promise<{ recommendations: AiRecommendation[]; similar_users: number }> {
+  const raw = await apiGet<{ recommendations?: unknown[]; similar_users?: number }>(
+    `/recommendations/similar-users?n=${n}`
+  );
+  return {
+    similar_users: raw.similar_users ?? 0,
+    recommendations: Array.isArray(raw.recommendations)
+      ? raw.recommendations.map(normalizeAiRecommendation)
+      : [],
+  };
 }

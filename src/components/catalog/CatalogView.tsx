@@ -12,7 +12,6 @@ import Link from 'next/link';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
 import { useGenreShelves } from '@/hooks/useGenreShelves';
 import { fetchBrowseBooks, fetchTopPustakrew } from '@/lib/browse';
-import { BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';
 import type { BrowseBook } from '@/types/browse';
 
 // ── Types & constants ──────────────────────────────────────────────────────────
@@ -42,19 +41,7 @@ export default function CatalogView() {
     loading: genreShelvesLoading,
     error: genreShelvesError,
   } = useGenreShelves({ targetGenres: ['Coming-of-age', 'Misteri', 'Drama', 'Fiksi', 'Sejarah', 'Romance', 'Non-fiksi'], booksLimit: 10 });
-  const popularFallbackBooks: PopularBook[] = BROWSE_POPULAR_BOOKS.map((b) => ({
-    key: b.key,
-    title: b.title,
-    author: b.author,
-    coverUrl: b.coverUrl,
-    coverId: b.coverId,
-    genre: b.genres,
-    desc: b.desc,
-    year: b.year ? String(b.year) : '',
-    pages: b.pages,
-    avgRating: b.rating,
-  }));
-  const popularBooksForCarousel = popularBooks.length > 0 ? popularBooks : popularFallbackBooks;
+  const popularBooksForCarousel = popularBooks;
   
   // ── Token classes ──
   const tk = {

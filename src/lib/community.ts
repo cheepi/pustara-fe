@@ -15,7 +15,7 @@ function normalizeReview(raw: Record<string, unknown>): CommunityReview {
     book: String(raw.book ?? raw.book_title ?? raw.bookTitle ?? '-'),
     author: String(raw.author ?? raw.bookAuthor ?? '-'),
     // Direct cover URL from books table (not OpenLibrary coverId)
-    cover_url: raw.cover_url ? String(raw.cover_url) : null,
+    cover_url: raw.cover_url ? String(raw.cover_url) : undefined,
     key: String(raw.key ?? raw.book_id ?? raw.bookId ?? ''),
     text: String(raw.text ?? raw.reviewText ?? raw.body ?? ''),
     likes: Number(raw.likes ?? 0),

@@ -25,7 +25,7 @@ import { toggleReviewLike, getReviewLikeStatus } from '@/lib/reviewLikes';
 
 export interface ReviewCardProps {
   /** Actual review UUID — required for like/unlike API call */
-  reviewId: string;
+  reviewId?: string;
   /**
    * Reviewer display name.
    * Pass display_name from the backend (preferred over username for display).

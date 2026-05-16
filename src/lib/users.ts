@@ -219,6 +219,7 @@ export async function getRecommendedUsers(limit = 8): Promise<RecommendedUser[]>
 export async function getMyFollowingUsers(limit = 30): Promise<RecommendedUser[]> {
   try {
     const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return [];
     const params = new URLSearchParams({ limit: String(limit) });
 
     const res = await fetch(`${API_URL}/users/me/following?${params.toString()}`, {
@@ -226,12 +227,15 @@ export async function getMyFollowingUsers(limit = 30): Promise<RecommendedUser[]
       headers,
     });
 
+    if (res.status === 401) return [];
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const list = Array.isArray(json?.data) ? json.data : [];
     return list.map((item: Record<string, unknown>) => normalizeRecommendedUser(item));
   } catch (err) {
-    console.warn('[users] getMyFollowingUsers gagal:', err);
+    if (!(err instanceof Error && /HTTP 401/.test(err.message))) {
+      console.warn('[users] getMyFollowingUsers gagal:', err);
+    }
     return [];
   }
 }
@@ -239,6 +243,7 @@ export async function getMyFollowingUsers(limit = 30): Promise<RecommendedUser[]
 export async function getMyFollowersUsers(limit = 30): Promise<RecommendedUser[]> {
   try {
     const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return [];
     const params = new URLSearchParams({ limit: String(limit) });
 
     const res = await fetch(`${API_URL}/users/me/followers?${params.toString()}`, {
@@ -246,12 +251,15 @@ export async function getMyFollowersUsers(limit = 30): Promise<RecommendedUser[]
       headers,
     });
 
+    if (res.status === 401) return [];
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const list = Array.isArray(json?.data) ? json.data : [];
     return list.map((item: Record<string, unknown>) => normalizeRecommendedUser(item));
   } catch (err) {
-    console.warn('[users] getMyFollowersUsers gagal:', err);
+    if (!(err instanceof Error && /HTTP 401/.test(err.message))) {
+      console.warn('[users] getMyFollowersUsers gagal:', err);
+    }
     return [];
   }
 }
