@@ -24,6 +24,8 @@ import {
 } from '@/lib/coverBatch';
 import { fetchFeedSidebarPayload } from '@/lib/feed';
 import type { FeedSidebarPayload } from '@/lib/feed';
+import type { CommunityReview } from "@/types/community";
+
 
 const REQUEST_BOOK_SUBJECT = encodeURIComponent('Request Buku Baru Pustara');
 const REQUEST_BOOK_BODY = encodeURIComponent(
@@ -378,9 +380,9 @@ function CommunitySection({ reviews, isLight }: { reviews: typeof DUMMY_COMMUNIT
 }
 
 function CommunityCard({ review, index, isLight, liked, onLike }: {
-  review: typeof DUMMY_COMMUNITY_REVIEWS[0]; index: number; isLight: boolean; liked: boolean; onLike: () => void;
+  review: CommunityReview; index: number; isLight: boolean; liked: boolean; onLike: () => void;
 }) {
-  const src = coverUrl(review.coverId);
+  const src = review.cover_url;
   function formatRelativeTime(t: string | null | undefined) {
     if (!t) return '-';
     const parsed = Date.parse(String(t));
