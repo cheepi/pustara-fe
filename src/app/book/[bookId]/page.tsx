@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Star, BookOpen, Users, CheckCircle,
   X, Bookmark, Share2, Clock, ChevronRight, PenLine, Sparkles,
-  Book,
+  Book, Heart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
@@ -15,10 +15,12 @@ import { useToast } from '@/components/feedback/ToastProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import ReviewModal from '@/components/shared/ReviewModal';
+import AvatarImage from '@/components/shared/AvatarImage';
 import { useSimilarBooks } from '@/hooks/useSimilarBooks';
 import { getBookById, getSimilarBooks } from '@/lib/books';
 import { borrowBookForMe, fetchMyBookShelfStatus, removeSavedBookForMe, saveBookForMe } from '@/lib/shelf';
 import { BookDetail } from '@/types/book';
+import ReviewCard from '@/components/shared/ReviewCard';
 import type { ModalState } from '@/types/bookPage';
 import { useBookCover, useBookCovers } from '@/hooks/useBookCover';
 
@@ -120,26 +122,23 @@ export default function BookDetailPage() {
   }
 
   useEffect(() => {
-  async function fetchReviews() {
-    try {
-      const response = await fetch(
-        `http://localhost:3000/books/${book?.id}/reviews?limit=5`
-      );
-
-      const data = await response.json();
-
-      if (data.success) {
-        setReviews(data.data);
+    async function fetchReviews() {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+        const response = await fetch(
+          `${apiBase.replace(/\/$/, '')}/books/${book?.id}/reviews?limit=5`
+        );
+        const data = await response.json();
+        if (data.success) setReviews(data.data);
+      } catch (error) {
+        console.error('Failed to fetch reviews:', error);
       }
-    } catch (error) {
-      console.error('Failed to fetch reviews:', error);
     }
-  }
 
-  if (book?.id) {
-    fetchReviews();
-  }
-}, [book?.id]);
+    if (book?.id) {
+      fetchReviews();
+    }
+  }, [book?.id]);
 
   useEffect(() => {
     if (!book) return;
@@ -524,49 +523,18 @@ export default function BookDetailPage() {
               <div className="flex flex-col gap-3">
                 {reviews.length > 0 ? (
                   reviews.slice(0, 5).map((r, i) => (
-                    <motion.div
+                    <ReviewCard
                       key={r.id || i}
-                      className={cn(
-                        'rounded-2xl border p-4',
-                        tk.surface,
-                        tk.border
-                      )}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.2 + i * 0.05 }}
-                    >
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                          {r.avatar?.charAt(0)?.toUpperCase() || 'U'}
-                        </div>
-
-                        <div>
-                          <p className={cn('text-sm font-semibold', tk.text)}>
-                            {r.name}
-                          </p>
-
-                          <div className="flex gap-0.5 mt-0.5">
-                            {[1, 2, 3, 4, 5].map((s) => (
-                              <Star
-                                key={s}
-                                className={cn(
-                                  'w-3 h-3',
-                                  s <= r.rating
-                                    ? 'text-gold fill-gold'
-                                    : isLight
-                                    ? 'text-slate-300'
-                                    : 'text-slate-700'
-                                )}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <p className={cn('text-sm leading-relaxed', tk.muted)}>
-                        {r.text}
-                      </p>
-                    </motion.div>
+                      reviewId={r.id}
+                      name={r.name}
+                      avatarUrl={r.avatar_url}
+                      rating={r.rating}
+                      text={r.text}
+                      initialLikes={r.likes}
+                      time={r.time}
+                      loc={r.loc}
+                      index={i}
+                    />
                   ))
                 ) : (
                   <div

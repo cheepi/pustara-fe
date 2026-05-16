@@ -38,6 +38,17 @@ const BOOK_PALETTE = [
 function bookColor(index: number) {
   return BOOK_PALETTE[index % BOOK_PALETTE.length];
 }
+
+function formatTooltipDay(value?: string | null) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
  
 function StarRating({ rating, max = 5 }: { rating: number; max?: number }) {
   return (
@@ -66,6 +77,7 @@ function StatPill({
   color,
   delay = 0,
   isLight,
+  tooltip,
 }: {
   icon: React.ElementType;
   value: string | number;
@@ -73,6 +85,7 @@ function StatPill({
   color: string;
   delay?: number;
   isLight: boolean;
+  tooltip?: string;
 }) {
   return (
     <motion.div
@@ -80,7 +93,7 @@ function StatPill({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }}
       className={cn(
-        'flex flex-col items-center gap-1.5 px-5 py-4 rounded-2xl flex-1',
+        'group relative flex flex-col items-center gap-1.5 px-5 py-4 rounded-2xl flex-1',
         isLight ? 'bg-white/60 backdrop-blur border border-parchment-darker' : 'bg-white/5 backdrop-blur border border-white/8'
       )}
     >
@@ -89,6 +102,11 @@ function StatPill({
         {value}
       </span>
       <span className={cn('text-[11px] text-center', isLight ? 'text-slate-500' : 'text-slate-400')}>{label}</span>
+      {tooltip ? (
+        <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden -translate-x-1/2 rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2 text-left text-[11px] leading-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] group-hover:block whitespace-pre-line min-w-52">
+          {tooltip}
+        </div>
+      ) : null}
     </motion.div>
   );
 }
@@ -327,6 +345,9 @@ export default function UserProfilePage() {
   const likedCount   = profile.liked_books?.length ?? 0;
   const followersNum = profile.followers_count ?? 0;
   const followingNum = profile.following_count ?? 0;
+  const streakTooltip = profile.streak_is_active
+    ? [`Streak aktif: ${streak} hari`, `Mulai: ${formatTooltipDay(profile.streak_last_start_day)}`, `Aktif terakhir: ${formatTooltipDay(profile.streak_last_end_day)}`].join('\n')
+    : [`Streak terakhir: ${profile.streak_last_length ?? streak} hari`, `Berakhir: ${formatTooltipDay(profile.streak_last_end_day)}`, `Reset: ${formatTooltipDay(profile.streak_reset_day)}`].join('\n');
  
   return (
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -420,7 +441,7 @@ export default function UserProfilePage() {
  
           <div className="flex gap-2.5 mt-6 overflow-x-auto pb-1 scrollbar-hide">
             <StatPill icon={BookOpen}   value={totalRead}    label="Buku Dibaca" color="text-gold"        delay={0.18} isLight={isLight} />
-            <StatPill icon={Flame}      value={streak}       label="Hari Streak" color="text-orange-400"  delay={0.22} isLight={isLight} />
+            <StatPill icon={Flame}      value={streak}       label="Hari Streak" color="text-orange-400"  delay={0.22} isLight={isLight} tooltip={streakTooltip} />
             <StatPill icon={Heart}      value={likedCount}   label="Disukai"     color="text-rose-400"    delay={0.26} isLight={isLight} />
             <StatPill icon={Users}      value={followersNum} label="Pengikut"    color="text-blue-400"    delay={0.30} isLight={isLight} />
             <StatPill icon={BookMarked} value={followingNum} label="Mengikuti"   color="text-emerald-400" delay={0.34} isLight={isLight} />

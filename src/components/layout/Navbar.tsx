@@ -16,6 +16,7 @@ import Wordmark from '../icons/Wordmark';
 import Logo from '../icons/Logo';
 import AvatarImage from '@/components/shared/AvatarImage';
 import { getMyProfile } from '@/lib/users';
+import { fetchUnreadNotificationCount } from '@/lib/notifications';
 import type { UserProfile } from '@/types/user';
 
 const MotionLogo = motion(Logo);
@@ -25,6 +26,7 @@ export default function Navbar() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const { user }          = useAuthStore();
@@ -107,6 +109,7 @@ export default function Navbar() {
   useEffect(() => {
     if (!user) {
       setProfile(null);
+      setUnreadNotifications(0);
       return;
     }
 
@@ -122,8 +125,31 @@ export default function Navbar() {
     fetchProfile();
   }, [user?.uid]);
 
-  const firstName = user?.displayName?.split(' ')[0] || 'Akun';
-  const initial   = (user?.displayName || user?.email || 'U')[0].toUpperCase();
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    const loadUnreadNotifications = async () => {
+      try {
+        const count = await fetchUnreadNotificationCount();
+        if (active) setUnreadNotifications(count);
+      } catch {
+        if (active) setUnreadNotifications(0);
+      }
+    };
+
+    loadUnreadNotifications();
+    const interval = window.setInterval(loadUnreadNotifications, 60_000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, [pathname, user?.uid]);
+
+  const displayName = profile?.display_name || profile?.name || user?.displayName || 'Pengguna';
+  const firstName = displayName.split(' ')[0] || 'Akun';
+  const initial = (displayName || user?.email || 'U')[0].toUpperCase();
 
   async function handleConfirmLogout() {
     setLogoutConfirmOpen(false);
@@ -228,7 +254,9 @@ export default function Navbar() {
                   <Link href="/notifications"
                     className={cn('relative p-2 rounded-xl transition-colors flex-shrink-0', txtSecondary, hoverTxt, hoverBg)}>
                     <Bell className="w-4 h-4" />
-                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-gold" />
+                    {unreadNotifications > 0 && (
+                      <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-gold" />
+                    )}
                   </Link>
 
                   {/* Theme toggle — desktop only, mobile lives in burger menu */}
@@ -250,15 +278,16 @@ export default function Navbar() {
 
                   {/* Profile dropdown — works on both mobile & desktop */}
                   <div className="relative">
-                    <button
+                      <button
                       onClick={() => setDropOpen(v => !v)}
-                      className={cn('flex items-center gap-1.5 pl-1.5 pr-1.5 py-1 rounded-xl transition-colors flex-shrink-0', hoverBg)}>
-                      <div className="w-9 h-9 rounded-full overflow-hidden border border-gold/30 flex-shrink-0">
+                      className={cn('flex items-center gap-1 pl-1 pr-1 py-0.5 rounded-xl transition-colors flex-shrink-0', hoverBg)}>
+                      <div className="w-7 h-7 rounded-full overflow-hidden border border-gold/30 flex-shrink-0">
                         <AvatarImage 
                           src={profile?.avatar_url || null}
-                          alt={user?.displayName || 'User avatar'}
+                          alt={displayName}
                           initials={initial}
                           size="sm"
+                          className="w-full h-full object-cover"
                         />
                       </div>
                       <span className={cn('hidden md:block text-sm max-w-[72px] truncate', isLight ? 'text-navy-800' : 'text-white')}>
@@ -287,7 +316,7 @@ export default function Navbar() {
                             right: '12px', // matches the mx-3 of the navbar pill
                           }}>
                           <div className="px-4 py-3">
-                            <p className={cn('text-sm font-semibold truncate', dropHead)}>{user.displayName || 'Pengguna'}</p>
+                            <p className={cn('text-sm font-semibold truncate', dropHead)}>{displayName}</p>
                             <p className={cn('text-xs truncate mt-0.5', dropSub)}>{user.email}</p>
                           </div>
                           <div>
@@ -400,11 +429,16 @@ export default function Navbar() {
 
             {/* User info pill */}
             <div className="flex items-center gap-3 px-4 py-3.5 mb-3 rounded-2xl" style={{ background: 'var(--surface2)' }}>
-              <div className="w-10 h-10 rounded-full bg-gold/[0.25] border border-gold/40 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                {initial}
+                      <div className="w-8 h-8 rounded-full overflow-hidden border border-gold/40 flex-shrink-0">
+                <AvatarImage
+                  src={profile?.avatar_url || null}
+                  alt={displayName}
+                  initials={initial}
+                  size="md"
+                />
               </div>
               <div className="min-w-0">
-                <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{user.displayName || 'Pengguna'}</p>
+                <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{displayName}</p>
                 <p className="text-xs truncate" style={{ color: 'var(--muted)' }}>{user.email}</p>
               </div>
             </div>

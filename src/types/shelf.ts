@@ -37,6 +37,7 @@ export interface RiwayatBook extends RakBook {
   readDays: number; // Computed from loan dates
   userRating?: number; // From review
   review?: Review;
+  status?: 'finished' | 'unfinished' | 'overdue';
 }
 
 /**
@@ -75,6 +76,7 @@ export interface ShelfData {
     total_reading: number;
     total_wishlist: number;
     total_read: number;
+    total_overdue?: number;
   };
 }
 

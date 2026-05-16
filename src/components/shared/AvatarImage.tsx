@@ -58,7 +58,6 @@ export default function AvatarImage({
 }: AvatarImageProps) {
   const [imageError, setImageError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  console.log('[DEBUG] AvatarImage rendered with src:', src, 'initials:', initials);
 
   // Size mappings (width/height in pixels)
   const sizeMap = {
@@ -99,33 +98,33 @@ export default function AvatarImage({
       </div>
     );
   }
-
-  // Render Next.js optimized image
+  // Render Image using `fill` so it always matches the parent container
   return (
-    <Image
-      src={src}
-      alt={alt}
-      width={px}
-      height={px}
+    <div
       className={cn(
-        'w-full h-full',
-        'rounded-full object-cover',
-        'flex-shrink-0 border border-gold/20',
-        'transition-opacity duration-300',
-        isLoading ? 'opacity-0' : 'opacity-100',
+        container,
+        'relative rounded-full overflow-hidden',
+        'flex-shrink-0',
+        'border border-gold/20',
         className
       )}
-      onError={(err) => {
-        console.log('[DEBUG] AvatarImage load error:', src, err);
-        setImageError(true);
-      }}
-      onLoad={() => {
-        console.log('[DEBUG] AvatarImage load complete:', src);
-        setIsLoading(false);
-      }}
-      priority={false}
-      unoptimized={true}
       title={alt}
-    />
+    >
+      <Image
+        src={src}
+        alt={alt}
+        fill
+        sizes={`${px}px`}
+        className={cn(
+          'object-cover w-full h-full',
+          'transition-opacity duration-300',
+          isLoading ? 'opacity-0' : 'opacity-100'
+        )}
+        onError={() => setImageError(true)}
+        onLoadingComplete={() => setIsLoading(false)}
+        priority={false}
+        unoptimized={true}
+      />
+    </div>
   );
 }

@@ -1285,6 +1285,20 @@ function TabRiwayat({ books, tk, isLight }: { books: RiwayatBook[]; tk: any; isL
       {books.map((book, i) => {
         const src = coverUrl(book.coverId, book.coverUrl);
         const bg = spineColor(book.key);
+        const historyStatus = book.status ?? 'finished';
+        const statusBadge = historyStatus === 'overdue'
+          ? {
+              label: 'OVERDUE',
+              icon: AlertTriangle,
+              className: 'bg-red-500/15 text-red-500 border-red-500/30',
+            }
+          : historyStatus === 'unfinished'
+            ? {
+                label: 'UNFINISHED',
+                icon: Clock,
+                className: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
+              }
+            : null;
         return (
           <motion.div layout key={`${book.key}-${i}`}
             className={cn('rounded-2xl border p-4 flex gap-4 items-center', tk.surface)}
@@ -1300,6 +1314,12 @@ function TabRiwayat({ books, tk, isLight }: { books: RiwayatBook[]; tk: any; isL
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
+                  {statusBadge && (
+                    <div className={cn('mb-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-[0.18em] border', statusBadge.className)}>
+                      <statusBadge.icon className="w-3 h-3" />
+                      {statusBadge.label}
+                    </div>
+                  )}
                   <h3 className={cn('font-serif font-bold leading-tight line-clamp-1', tk.text)}>{book.title}</h3>
                   <p className={cn('text-xs mt-0.5', tk.muted)}>{book.author}</p>
                 </div>
@@ -1313,8 +1333,17 @@ function TabRiwayat({ books, tk, isLight }: { books: RiwayatBook[]; tk: any; isL
               </div>
               <div className="flex items-center gap-3 mt-2">
                 <div className="flex items-center gap-1">
-                  <CheckCircle className="w-3 h-3 text-emerald-400" />
-                  <span className={cn('text-[11px]', tk.muted)}>Selesai {book.returnedAt}</span>
+                  {historyStatus === 'finished'
+                    ? <CheckCircle className="w-3 h-3 text-emerald-400" />
+                    : <AlertTriangle className={cn('w-3 h-3', historyStatus === 'overdue' ? 'text-red-400' : 'text-amber-400')} />
+                  }
+                  <span className={cn('text-[11px]', tk.muted)}>
+                    {historyStatus === 'finished'
+                      ? `Selesai ${book.returnedAt}`
+                      : historyStatus === 'overdue'
+                        ? `Terlambat ${book.returnedAt}`
+                        : `Belum selesai ${book.returnedAt}`}
+                  </span>
                 </div>
                 <span className={cn('text-[11px]', tk.muted)}>·</span>
                 <span className={cn('text-[11px]', tk.muted)}>{book.readDays} hari baca</span>

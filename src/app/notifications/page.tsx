@@ -10,7 +10,12 @@ import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import type { NotificationItem } from '@/types/notifications';
 import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
-import { fetchNotifications } from '@/lib/notifications';
+import {
+  deleteNotification,
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from '@/lib/notifications';
 import { NotificationType } from '@/types/database';
 import AvatarImage from '@/components/shared/AvatarImage';
 
@@ -52,9 +57,24 @@ export default function NotificationsPage() {
 
   const [notifs, setNotifs] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
   const [tab, setTab]       = useState('all');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchNotifications().then(setNotifs).catch(() => setNotifs(INITIAL_NOTIFICATIONS));
+    let active = true;
+    fetchNotifications()
+      .then((items) => {
+        if (active) setNotifs(items);
+      })
+      .catch(() => {
+        if (active) setNotifs(INITIAL_NOTIFICATIONS);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (!ready) return <PageSkeleton />;
@@ -68,16 +88,36 @@ export default function NotificationsPage() {
     return true;
   });
 
-  function markAllRead() {
+  async function markAllRead() {
     setNotifs(ns => ns.map(n => ({ ...n, read: true })));
+    try {
+      await markAllNotificationsRead();
+    } catch {
+      fetchNotifications().then(setNotifs).catch(() => {});
+    }
   }
 
-  function markRead(id: string) {
+  async function markRead(id: string) {
     setNotifs(ns => ns.map(n => n.id === id ? { ...n, read: true } : n));
+    try {
+      await markNotificationRead(id);
+    } catch {
+      fetchNotifications().then(setNotifs).catch(() => {});
+    }
   }
 
-  function deleteNotif(id: string) {
+  async function deleteNotif(id: string) {
     setNotifs(ns => ns.filter(n => n.id !== id));
+    try {
+      await deleteNotification(id);
+    } catch {
+      fetchNotifications().then(setNotifs).catch(() => {});
+    }
+  }
+
+  async function openNotif(n: NotificationItem) {
+    await markRead(n.id);
+    if (n.book_id) router.push(`/book/${n.book_id}`);
   }
 
   const tk = {
@@ -136,7 +176,15 @@ export default function NotificationsPage() {
 
         {/* List */}
         <AnimatePresence mode="popLayout">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <motion.div key="loading"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col gap-2">
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <div key={idx} className={cn('h-24 rounded-2xl border animate-pulse', tk.surface)} />
+              ))}
+            </motion.div>
+          ) : filtered.length === 0 ? (
             <motion.div key="empty"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center py-24 text-center">
@@ -157,7 +205,7 @@ export default function NotificationsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: 40, scale: 0.96 }}
                   transition={{ delay: idx * 0.03, type: 'spring', stiffness: 400, damping: 30 }}
-                  onClick={() => markRead(n.id)}
+                  onClick={() => openNotif(n)}
                   className={cn(
                     'group relative flex gap-3.5 p-4 rounded-2xl border cursor-pointer transition-all',
                     tk.surface,
@@ -189,7 +237,7 @@ export default function NotificationsPage() {
                         size="sm"
                       />
                     ) : (
-                      <div className={typeBg(n.type)}>
+                      <div className={cn('w-full h-full rounded-xl flex items-center justify-center', typeBg(n.type))}>
                         {typeIcon(n.type, dark)}
                       </div>
                     )}

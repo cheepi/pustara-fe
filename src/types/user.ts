@@ -26,6 +26,12 @@ export interface UserProfile {
   preferred_genres: string[];
   total_read: number;
   reading_streak: number;
+  streak_is_active?: boolean;
+  streak_last_length?: number;
+  streak_last_active_day?: string | null;
+  streak_last_start_day?: string | null;
+  streak_last_end_day?: string | null;
+  streak_reset_day?: string | null;
   created_at: string | null;
   updated_at?: string | null;
   followers_count: number;

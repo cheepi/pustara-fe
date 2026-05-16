@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ComponentType } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, Star, Flame, TrendingUp, Heart,
@@ -30,6 +30,18 @@ import { GENRE_OPTIONS } from '@/lib/genreOptions';
 const coverSrc = (coverId?: number, coverUrl?: string) =>
   coverUrl || (coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : null);
 
+function formatTooltipDay(dayKey?: string | null): string {
+  if (!dayKey) return '-';
+  const date = new Date(`${dayKey}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dayKey;
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
 type ActivityItem = {
   type: 'selesai' | 'pinjam' | 'wishlist';
   book: string;
@@ -46,6 +58,15 @@ type FollowingPreviewItem = {
   name: string;
   avatar_url: string | null;
   books: number;
+};
+
+type StatItem = {
+  label: string;
+  value: string | number;
+  icon: ComponentType<{ className?: string }>;
+  color: string;
+  suffix?: string;
+  tooltip?: string;
 };
 
 export default function ProfilePage() {
@@ -68,7 +89,7 @@ export default function ProfilePage() {
   const [followerUsers, setFollowerUsers] = useState<RecommendedUser[]>([]);
   const [suggestionUsers, setSuggestionUsers] = useState<RecommendedUser[]>([]);
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
-  const [stats, setStats] = useState([
+  const [stats, setStats] = useState<StatItem[]>([
     { label: 'Buku Dibaca', value: 0, icon: BookOpen, color: 'text-gold' },
     { label: 'Streak', value: '0', suffix: 'hari', icon: Flame, color: 'text-orange-400' },
     { label: 'Ulasan', value: 0, icon: Star, color: 'text-blue-400' },
@@ -131,10 +152,13 @@ export default function ProfilePage() {
         const finishedCount = Math.max(Number(profile.total_read ?? 0), finished.length);
         const streak = Math.max(0, Number(profile.reading_streak ?? 0));
         const ulasan = finishedCount;
+        const streakTooltip = profile.streak_is_active
+          ? [`Streak aktif: ${streak} hari`, `Mulai: ${formatTooltipDay(profile.streak_last_start_day)}`, `Aktif terakhir: ${formatTooltipDay(profile.streak_last_end_day)}`].join('\n')
+          : [`Streak terakhir: ${profile.streak_last_length ?? streak} hari`, `Berakhir: ${formatTooltipDay(profile.streak_last_end_day)}`, `Reset: ${formatTooltipDay(profile.streak_reset_day)}`].join('\n');
 
         setStats([
           { label: 'Buku Dibaca', value: finishedCount, icon: BookOpen, color: 'text-gold' },
-          { label: 'Streak', value: String(streak), suffix: 'hari', icon: Flame, color: 'text-orange-400' },
+          { label: 'Streak', value: String(streak), suffix: 'hari', icon: Flame, color: 'text-orange-400', tooltip: streakTooltip },
           { label: 'Ulasan', value: ulasan, icon: Star, color: 'text-blue-400' },
           { label: 'Wishlist', value: Number(profile.liked_books?.length ?? 0), icon: Heart, color: 'text-rose-400' },
         ]);
@@ -382,7 +406,7 @@ export default function ProfilePage() {
                     alt="Your avatar"
                     initials={initials}
                     size="lg"
-                    className="w-full h-full rounded-2xl"
+                    className="w-full h-full object-cover rounded-xl"
                   />
                 ) : (
                   <span className="font-serif font-black text-gold text-2xl lg:text-3xl">{initials}</span>
@@ -516,7 +540,7 @@ export default function ProfilePage() {
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {stats.map((s, i) => (
                   <motion.div key={s.label}
-                    className={cn('rounded-2xl p-3.5 text-center', isLight ? 'bg-parchment' : 'bg-navy-700/40')}
+                    className={cn('group relative rounded-2xl p-3.5 text-center', isLight ? 'bg-parchment' : 'bg-navy-700/40')}
                     initial={{ opacity: 0, scale: 0.93 }} animate={{ opacity: 1, scale: 1 }}
                     transition={{ delay: 0.08 + i * 0.04 }}>
                     <s.icon className={cn('w-5 h-5 mx-auto mb-2', s.color)} />
@@ -524,6 +548,11 @@ export default function ProfilePage() {
                       {s.value}{s.suffix && <span className={cn('text-sm font-sans font-normal ml-0.5', tk.muted)}>{s.suffix}</span>}
                     </p>
                     <p className={cn('text-[11px] mt-0.5', tk.muted)}>{s.label}</p>
+                    {s.tooltip ? (
+                      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden -translate-x-1/2 rounded-2xl border border-gold/20 bg-navy-950 px-3 py-2 text-left text-[11px] leading-5 text-white shadow-2xl group-hover:block whitespace-pre-line min-w-52">
+                        {s.tooltip}
+                      </div>
+                    ) : null}
                   </motion.div>
                 ))}
               </div>

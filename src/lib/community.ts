@@ -5,15 +5,19 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 function normalizeReview(raw: Record<string, unknown>): CommunityReview {
   return {
-    user: String(raw.user ?? raw.name ?? 'Anonymous'),
+    // review_id is the actual DB UUID used for likes
+    review_id: String(raw.review_id ?? raw.id ?? ''),
+    // display_name is the human-facing name; fall back to username then name
+    user: String(raw.display_name ?? raw.user ?? raw.username ?? raw.name ?? ''),
     avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
     loc: String(raw.loc ?? '-'),
     rating: Number(raw.rating ?? 0),
-    book: String(raw.book ?? raw.bookTitle ?? '-'),
+    book: String(raw.book ?? raw.book_title ?? raw.bookTitle ?? '-'),
     author: String(raw.author ?? raw.bookAuthor ?? '-'),
-    coverId: Number(raw.coverId ?? 0) || undefined,
-    key: String(raw.key ?? raw.bookId ?? ''),
-    text: String(raw.text ?? raw.reviewText ?? ''),
+    // Direct cover URL from books table (not OpenLibrary coverId)
+    cover_url: raw.cover_url ? String(raw.cover_url) : null,
+    key: String(raw.key ?? raw.book_id ?? raw.bookId ?? ''),
+    text: String(raw.text ?? raw.reviewText ?? raw.body ?? ''),
     likes: Number(raw.likes ?? 0),
     comments: Number(raw.comments ?? 0),
     time: String(raw.time ?? '-'),
@@ -21,7 +25,7 @@ function normalizeReview(raw: Record<string, unknown>): CommunityReview {
 }
 
 export async function fetchCommunityReviews(): Promise<CommunityReview[]> {
-  const endpoints = ['/community/reviews', '/reviews/community', '/reviews'];
+  const endpoints = ['/reviews/recent', '/community/recent', '/reviews', '/community'];
 
   for (const endpoint of endpoints) {
     try {
@@ -38,5 +42,5 @@ export async function fetchCommunityReviews(): Promise<CommunityReview[]> {
     }
   }
 
-  return DUMMY_ALL_REVIEWS as CommunityReview[];
+  return (DUMMY_ALL_REVIEWS as unknown[]).map((r) => normalizeReview(r as Record<string, unknown>));
 }

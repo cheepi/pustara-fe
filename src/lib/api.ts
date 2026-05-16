@@ -102,6 +102,18 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   return unwrapData<T>(json);
 }
 
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const headers = await getAuthHeader();
+  const res = await fetch(`${API_URL}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  const json = await res.json();
+  return unwrapData<T>(json);
+}
+
 export async function apiPostAllowAnonymous<T>(path: string, body: unknown): Promise<T> {
   const headers = await getOptionalAuthHeader();
   const res = await fetch(`${API_URL}${path}`, {

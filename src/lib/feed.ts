@@ -13,6 +13,8 @@ export interface FeedSidebarProfile {
   dipinjam: number;
   streak: number;
   selesai: number;
+  borrowed_tooltip?: string;
+  streak_tooltip?: string;
 }
 
 export interface FeedSuggestion {
@@ -157,6 +159,33 @@ function pickProfileSubtitle(profile: unknown): string {
   return value || 'Pembaca aktif';
 }
 
+function formatDayKey(dayKey?: string | null): string {
+  if (!dayKey) return '-';
+  const date = new Date(`${dayKey}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dayKey;
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: STREAK_TIME_ZONE,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+function buildStreakTooltip(profile: { reading_streak?: number; streak_is_active?: boolean; streak_last_length?: number; streak_last_start_day?: string | null; streak_last_end_day?: string | null; streak_reset_day?: string | null; }): string {
+  const streak = Math.max(0, Number(profile.reading_streak ?? 0));
+  const isActive = Boolean(profile.streak_is_active);
+  const lastLength = Math.max(0, Number(profile.streak_last_length ?? streak));
+  const startDay = formatDayKey(profile.streak_last_start_day);
+  const endDay = formatDayKey(profile.streak_last_end_day);
+  const resetDay = formatDayKey(profile.streak_reset_day);
+
+  if (isActive) {
+    return [`Streak aktif: ${streak} hari`, `Mulai: ${startDay}`, `Aktif terakhir: ${endDay}`].join('\n');
+  }
+
+  return [`Streak terakhir: ${lastLength} hari`, `Berakhir: ${endDay}`, `Reset: ${resetDay}`].join('\n');
+}
+
 function calcStreakFromActivities(activities: BackendActivity[]): number {
   const days = new Set<string>();
   for (const activity of activities) {
@@ -258,19 +287,22 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
       return value === 'reading' || value === 'in_progress' || value === 'borrowed' || value === 'started';
     };
 
-    // Prefer profile aggregates so counts are not limited by activity sample size.
-    const shelfBorrowedCount = Number(shelfData?.stats?.total_borrowed ?? 0);
+    // Prefer authoritative shelf stats (even when 0). Fallback to profile or activity counts.
+    const shelfBorrowedCount = typeof shelfData?.stats?.total_borrowed === 'number' ? Number(shelfData.stats.total_borrowed) : undefined;
     const profileReadingCount = Array.isArray(profile?.currently_reading) ? profile.currently_reading.length : 0;
     const activityReadingCount = feedResponse.activities.filter(a => isReadingStatus(a.status)).length;
-    const readingCount = Math.max(0, shelfBorrowedCount || profileReadingCount || activityReadingCount);
+    const readingCount = Math.max(0, Number(shelfBorrowedCount ?? profileReadingCount ?? activityReadingCount));
 
     const profileFinishedCount = Number(profile?.total_read ?? 0);
     const activityFinishedCount = feedResponse.activities.filter(a => a.status === 'finished').length;
     const finishedCount = Math.max(0, profileFinishedCount || activityFinishedCount);
 
     const profileStreak = Number(profile?.reading_streak ?? 0);
-    const computedStreak = calcStreakFromActivities(feedResponse.activities);
-    const streak = Math.max(0, profileStreak, computedStreak);
+    const streak = Math.max(0, profileStreak);
+    const streakTooltip = buildStreakTooltip(profile ?? {});
+    const borrowedTooltip = shelfData?.stats?.total_overdue
+      ? `Aktif ${readingCount} buku\nOverdue ${Number(shelfData.stats.total_overdue || 0)} buku dipindah ke riwayat`
+      : `Aktif ${readingCount} buku`;
 
     // Map recent reads from activities
     const recentReads = feedResponse.activities
@@ -293,6 +325,8 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
         dipinjam: readingCount,
         streak,
         selesai: finishedCount,
+        borrowed_tooltip: borrowedTooltip,
+        streak_tooltip: streakTooltip,
       },
       recentReads,
       suggestions: recoResponse.users.map((user) => ({
@@ -314,6 +348,8 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
         dipinjam: 0,
         streak: 0,
         selesai: 0,
+        borrowed_tooltip: 'Aktif 0 buku',
+        streak_tooltip: 'Streak aktif: 0 hari',
       },
       recentReads: [],
       suggestions: [],

@@ -55,11 +55,19 @@ interface BackendDibaca extends BackendBook {
 }
 
 interface BackendRiwayat extends BackendBook {
-  session_id: string;
+  loan_id: string | null;
+  session_id: string | null;
+  borrowed_at: string | null;
+  due_date: string | null;
+  returned_at: string | null;
   finished_at: string | null;
   started_at: string | null;
   reading_time_minutes: number;
+  progress_percentage: number;
+  current_page: number;
+  total_pages: number;
   days_read: number | null;
+  status: 'finished' | 'unfinished' | 'overdue';
 }
 
 interface BackendWishlist extends BackendBook {
@@ -72,6 +80,13 @@ interface BackendShelfResponse {
   dibaca: BackendDibaca[];
   riwayat: BackendRiwayat[];
   wishlist: BackendWishlist[];
+  stats?: {
+    total_borrowed?: number;
+    total_reading?: number;
+    total_wishlist?: number;
+    total_read?: number;
+    total_overdue?: number;
+  };
 }
 
 interface ShelfBookStatusResponse {
@@ -205,16 +220,23 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
         progress: Math.round(Number(loan.progress_percentage ?? 0)),  // ← pakai dari backend
       }));
 
-      const riwayat = response.riwayat.map((session) => ({
-        key: session.id,
-        title: session.title,
-        author: Array.isArray(session.authors) ? session.authors.join(', ') : String(session.authors),
-        coverUrl: session.cover_url,
-        genre: 'Selesai',
-        returnedAt: formatDateID(session.finished_at || undefined),
-        readDays: session.days_read ?? 1,
-        userRating: undefined,
-      }));
+      const riwayat = response.riwayat.map((session, index) => {
+        const historyKey = session.loan_id || session.session_id || `${session.id}-${index}`;
+        const historyStatus = session.status || 'finished';
+        const returnedAt = session.returned_at || session.finished_at || undefined;
+
+        return {
+          key: historyKey,
+          title: session.title,
+          author: Array.isArray(session.authors) ? session.authors.join(', ') : String(session.authors),
+          coverUrl: session.cover_url,
+          genre: historyStatus === 'overdue' ? 'Terlambat' : historyStatus === 'unfinished' ? 'Belum selesai' : 'Selesai',
+          returnedAt: formatDateID(returnedAt),
+          readDays: session.days_read ?? 1,
+          userRating: undefined,
+          status: historyStatus,
+        };
+      });
 
       const wishlist = response.wishlist.map((book) => ({
         key: book.id,
@@ -233,10 +255,11 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
         wishlist,
         riwayat,
         stats: {
-          total_borrowed: pinjaman.length,
-          total_reading: dibaca.length,
-          total_wishlist: wishlist.length,
-          total_read: riwayat.length,
+          total_borrowed: Number(response.stats?.total_borrowed ?? pinjaman.length),
+          total_reading: Number(response.stats?.total_reading ?? dibaca.length),
+          total_wishlist: Number(response.stats?.total_wishlist ?? wishlist.length),
+          total_read: Number(response.stats?.total_read ?? riwayat.length),
+          total_overdue: Number(response.stats?.total_overdue ?? riwayat.filter((book) => book.status === 'overdue').length),
         },
       };
       shelfMemoryCache = { data: nextData, fetchedAt: Date.now() };

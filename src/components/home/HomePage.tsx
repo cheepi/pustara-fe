@@ -15,7 +15,9 @@ import { useRecommendations } from '@/hooks/useRecommendations';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
 import AiRecoCard from '@/components/ai/AiRecoCard';
 import { DUMMY_COMMUNITY_REVIEWS } from '@/data/dummyData';
+import type { CommunityReview } from '@/types/community';
 import AvatarImage from '@/components/shared/AvatarImage';
+import ReviewCard from '@/components/shared/ReviewCard';
 import {
   batchFetchCovers,
   getCoverFromMap,
@@ -125,6 +127,7 @@ export default function HomePage() {
   const [aiCovers, setAiCovers] = useState<Map<string, string | null>>(new Map());
   const [greetingStats, setGreetingStats] = useState({ dipinjam: 0, streak: 0, selesai: 0 });
 
+  const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>(DUMMY_COMMUNITY_REVIEWS as unknown as CommunityReview[]);
   useEffect(() => {
     if (!aiReco || aiReco.length === 0) {
       setAiCovers(new Map());
@@ -180,6 +183,23 @@ export default function HomePage() {
     };
   }, [user?.uid]);
 
+
+  useEffect(() => {
+    let active = true;
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+    if (!apiBase) return () => { active = false; };
+    fetch(`${apiBase.replace(/\/$/, "")}/reviews/recent?limit=8`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(json => {
+        if (!active) return;
+        if (json?.success && Array.isArray(json.data)) {
+          setCommunityReviews(json.data as CommunityReview[]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => { active = false; });
+    return () => { active = false; };
+  }, []);
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
       <Navbar />
@@ -296,74 +316,54 @@ export default function HomePage() {
           </div>
           <Link href="/community" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
         </div>
-        <CommunitySection reviews={DUMMY_COMMUNITY_REVIEWS} isLight={isLight} />
+        <CommunitySection reviews={communityReviews} isLight={isLight} />
       </section>
     </div>
   );
 }
 
-function CommunitySection({ reviews, isLight }: { reviews: typeof DUMMY_COMMUNITY_REVIEWS; isLight: boolean }) {
-  const [liked, setLiked] = useState<Record<number, boolean>>({});
+function CommunitySection({ reviews, isLight: _isLight }: { reviews: CommunityReview[]; isLight: boolean }) {
   return (
     <>
-      <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
-        {reviews.slice(0, 5).map((r, i) => <CommunityCard key={i} review={r} index={i} isLight={isLight} liked={!!liked[i]} onLike={() => setLiked(l => ({ ...l, [i]: !l[i] }))} />)}
+      <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
+        {reviews.slice(0, 5).map((r, i) => (
+          <div key={r.review_id || i} className="flex-shrink-0 w-64">
+            <ReviewCard
+              reviewId={r.review_id}
+              name={r.user}
+              avatarUrl={r.avatar_url}
+              rating={r.rating}
+              text={r.text}
+              initialLikes={r.likes}
+              time={r.time}
+              bookTitle={r.book}
+              bookCoverUrl={r.cover_url}
+              bookId={r.key}
+              variant="compact"
+              index={i}
+            />
+          </div>
+        ))}
       </div>
       <div className="hidden lg:grid grid-cols-3 gap-3">
-        {reviews.slice(0, 8).map((r, i) => <CommunityCard key={i} review={r} index={i} isLight={isLight} liked={!!liked[i]} onLike={() => setLiked(l => ({ ...l, [i]: !l[i] }))} />)}
+        {reviews.slice(0, 8).map((r, i) => (
+          <ReviewCard
+            key={r.review_id || i}
+            reviewId={r.review_id}
+            name={r.user}
+            avatarUrl={r.avatar_url}
+            rating={r.rating}
+            text={r.text}
+            initialLikes={r.likes}
+            time={r.time}
+            bookTitle={r.book}
+            bookCoverUrl={r.cover_url}
+            bookId={r.key}
+            variant="compact"
+            index={i}
+          />
+        ))}
       </div>
     </>
-  );
-}
-
-function CommunityCard({ review, index, isLight, liked, onLike }: {
-  review: typeof DUMMY_COMMUNITY_REVIEWS[0]; index: number; isLight: boolean; liked: boolean; onLike: () => void;
-}) {
-  const src = coverUrl(review.coverId);
-  return (
-    <motion.div className="flex-shrink-0 w-64 lg:w-auto rounded-2xl p-4"
-      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04 }} whileHover={{ y: -2 }}>
-
-      <div className="flex items-start gap-3 mb-3">
-        <AvatarImage 
-          src={review.avatar_url || null}
-          alt={review.user || 'User avatar'}
-          initials={review.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-          size="sm"
-        />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{review.user}</p>
-          <div className="flex items-center gap-1.5">
-            <div className="flex gap-0.5">
-              {[1,2,3,4,5].map(s => (
-                <Star key={s} className={cn('w-2.5 h-2.5', s <= review.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
-              ))}
-            </div>
-            <span className="text-[10px]" style={{ color: 'var(--muted)' }}>{review.time}</span>
-          </div>
-        </div>
-        <Link href={`/book/${review.key}`} className="flex-shrink-0">
-          <div className="w-8 h-12 rounded-lg overflow-hidden shadow">
-            {src && <img src={src} alt={review.book} className="w-full h-full object-cover" />}
-          </div>
-        </Link>
-      </div>
-
-      <Link href={`/book/${review.key}`}>
-        <p className="text-xs font-semibold text-gold/80 hover:text-gold mb-1.5 transition-colors">{review.book}</p>
-      </Link>
-      <p className="text-xs leading-relaxed line-clamp-2 mb-3" style={{ color: 'var(--muted)' }}>{review.text}</p>
-
-      <motion.button onClick={onLike}
-        className={cn('flex items-center gap-1.5 text-xs font-medium transition-colors', liked ? 'text-rose-400' : '')}
-        style={!liked ? { color: 'var(--muted)' } : {}} whileTap={{ scale: 0.9 }}>
-        <motion.div animate={{ scale: liked ? [1, 1.4, 1] : 1 }} transition={{ duration: 0.3 }}>
-          <Heart className={cn('w-3.5 h-3.5', liked && 'fill-rose-400')} />
-        </motion.div>
-        {liked ? 'Disukai' : 'Suka'}
-      </motion.button>
-    </motion.div>
   );
 }

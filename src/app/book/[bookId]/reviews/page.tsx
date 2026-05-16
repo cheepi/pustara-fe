@@ -11,6 +11,7 @@ import { fetchBookReviewData } from '@/lib/bookReviews';
 import type { Review } from '@/types/book';
 import type { BookDetail } from '@/types/book';
 import AvatarImage from '@/components/shared/AvatarImage';
+import ReviewCard from '@/components/shared/ReviewCard';
 const RATING_FILTERS = ['Semua', '5 ★', '4 ★', '3 ★', '2 ★', '1 ★'];
 const PAGE_SIZE = 3;
 
@@ -25,7 +26,6 @@ export default function ReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [filter,  setFilter]  = useState('Semua');
-  const [liked,   setLiked]   = useState<Set<number>>(new Set());
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
 
@@ -164,52 +164,20 @@ export default function ReviewsPage() {
         {/* Reviews */}
         <div className="flex flex-col gap-3">
           <AnimatePresence initial={false}>
-            {displayed.map((r, i) => {
-              const isLiked = liked.has(i);
-              return (
-                <motion.div key={i}
-                  className={cn('rounded-2xl border p-4', tk.surface)}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ delay: i < PAGE_SIZE ? i * 0.04 : 0 }}>
-
-                  <div className="flex items-center gap-3 mb-3">
-                    <AvatarImage 
-                      src={r.avatar_url || null}
-                      alt={r.name || 'User avatar'}
-                      initials={r.name.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-                      size="sm"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
-                      <p className={cn('text-xs', tk.muted)}>{r.loc} · {r.time ?? '-'}</p>
-                    </div>
-                    <div className="flex gap-0.5">
-                      {[1,2,3,4,5].map(s => (
-                        <Star key={s} className={cn('w-3 h-3',
-                          s <= r.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
-                      ))}
-                    </div>
-                  </div>
-
-                  <p className={cn('text-sm leading-relaxed mb-3', tk.muted)}>{r.text}</p>
-
-                  {/* Actions */}
-                  <button
-                    onClick={() => setLiked(l => {
-                      const n = new Set(l);
-                      isLiked ? n.delete(i) : n.add(i);
-                      return n;
-                    })}
-                    className={cn('flex items-center gap-1.5 text-xs font-medium transition-colors',
-                      isLiked ? 'text-rose-400' : tk.muted, 'hover:text-rose-400')}>
-                    <Heart className={cn('w-3.5 h-3.5', isLiked && 'fill-rose-400')} />
-                    {(r.likes ?? 0) + (isLiked ? 1 : 0)}
-                  </button>
-                </motion.div>
-              );
-            })}
+            {displayed.map((r, i) => (
+              <ReviewCard
+                key={r.id || i}
+                reviewId={r.id || ''}
+                name={r.name || ''}
+                avatarUrl={r.avatar_url}
+                rating={r.rating}
+                text={r.text || r.body || ''}
+                initialLikes={r.likes}
+                time={r.time || ''}
+                loc={r.loc || ''}
+                index={i}
+              />
+            ))}
           </AnimatePresence>
         </div>
 

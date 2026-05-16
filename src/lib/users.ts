@@ -105,6 +105,12 @@ function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
     preferred_genres: parseStringArray(raw.preferred_genres),
     total_read: Number(raw.total_read ?? 0),
     reading_streak: Number(raw.reading_streak ?? 0),
+    streak_is_active: Boolean(raw.streak_is_active),
+    streak_last_length: Number(raw.streak_last_length ?? 0),
+    streak_last_active_day: raw.streak_last_active_day ? String(raw.streak_last_active_day) : null,
+    streak_last_start_day: raw.streak_last_start_day ? String(raw.streak_last_start_day) : null,
+    streak_last_end_day: raw.streak_last_end_day ? String(raw.streak_last_end_day) : null,
+    streak_reset_day: raw.streak_reset_day ? String(raw.streak_reset_day) : null,
     created_at: raw.created_at ? String(raw.created_at) : null,
     updated_at: raw.updated_at ? String(raw.updated_at) : null,
     followers_count: Number(raw.followers_count ?? 0),
@@ -263,10 +269,7 @@ export async function getMyProfile(): Promise<UserProfile | null> {
     if (!res.ok) return null;
     const json = await res.json();
     const raw = (json?.data ?? {}) as Record<string, unknown>;
-    console.log('[DEBUG] getMyProfile raw response:', { avatar_url: raw.avatar_url, all_keys: Object.keys(raw) });
-    const normalized = normalizeUserProfile(raw);
-    console.log('[DEBUG] getMyProfile normalized:', { avatar_url: normalized.avatar_url });
-    return normalized;
+    return normalizeUserProfile(raw);
   } catch (err) {
     console.warn('[users] getMyProfile gagal:', err);
     return null;
