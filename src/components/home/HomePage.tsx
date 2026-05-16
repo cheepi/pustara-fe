@@ -15,9 +15,7 @@ import { useRecommendations } from '@/hooks/useRecommendations';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
 import AiRecoCard from '@/components/ai/AiRecoCard';
 import { DUMMY_COMMUNITY_REVIEWS } from '@/data/dummyData';
-import type { CommunityReview } from '@/types/community';
 import AvatarImage from '@/components/shared/AvatarImage';
-import ReviewCard from '@/components/shared/ReviewCard';
 import {
   batchFetchCovers,
   getCoverFromMap,
@@ -25,6 +23,7 @@ import {
   type CoverRequest,
 } from '@/lib/coverBatch';
 import { fetchFeedSidebarPayload } from '@/lib/feed';
+import type { FeedSidebarPayload } from '@/lib/feed';
 
 const REQUEST_BOOK_SUBJECT = encodeURIComponent('Request Buku Baru Pustara');
 const REQUEST_BOOK_BODY = encodeURIComponent(
@@ -41,8 +40,36 @@ const REQUEST_BOOK_MAILTO = HAS_ADMIN_EMAIL
   : '';
 const PUSTAKREW_CONTACT_HREF = HAS_ADMIN_EMAIL ? REQUEST_BOOK_MAILTO : '/community';
 
+function formatTooltipDay(dayKey?: string | null): string {
+  if (!dayKey) return '-';
+  const date = new Date(`${dayKey}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dayKey;
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
 const coverUrl = (id?: number, s = 'M') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
+
+const EMPTY_SIDEBAR: FeedSidebarPayload = {
+  profile: {
+    initials: 'P',
+    name: 'Pembaca Pustara',
+    subtitle: 'Pembaca aktif',
+    avatar_url: null,
+    dipinjam: 0,
+    streak: 0,
+    selesai: 0,
+    borrowed_tooltip: '',
+    streak_tooltip: '',
+  },
+  recentReads: [],
+  suggestions: [],
+};
 
 function AiRecoCardSkeleton({ isLight }: { isLight: boolean }) {
   const skel = isLight ? 'bg-parchment-darker' : 'bg-navy-700/60';
@@ -125,9 +152,12 @@ export default function HomePage() {
   const { books: popularBooks, loading: popularLoading } = useTrendingBooks(6);
   const { recommendations: aiReco, loading: aiLoading } = useRecommendations();
   const [aiCovers, setAiCovers] = useState<Map<string, string | null>>(new Map());
+  const [communityReviews, setCommunityReviews] = useState<typeof DUMMY_COMMUNITY_REVIEWS>(DUMMY_COMMUNITY_REVIEWS);
+  const [sidebar, setSidebar] = useState<FeedSidebarPayload>(EMPTY_SIDEBAR);
   const [greetingStats, setGreetingStats] = useState({ dipinjam: 0, streak: 0, selesai: 0 });
+  const borrowedTooltip = sidebar?.profile?.borrowed_tooltip || '';
+  const streakTooltip = sidebar?.profile?.streak_tooltip || '';
 
-  const [communityReviews, setCommunityReviews] = useState<CommunityReview[]>(DUMMY_COMMUNITY_REVIEWS as unknown as CommunityReview[]);
   useEffect(() => {
     if (!aiReco || aiReco.length === 0) {
       setAiCovers(new Map());
@@ -159,6 +189,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!user) {
+      setSidebar(EMPTY_SIDEBAR);
       setGreetingStats({ dipinjam: 0, streak: 0, selesai: 0 });
       return;
     }
@@ -167,6 +198,7 @@ export default function HomePage() {
     fetchFeedSidebarPayload()
       .then((payload) => {
         if (!active) return;
+        setSidebar(payload);
         setGreetingStats({
           dipinjam: Number(payload.profile.dipinjam || 0),
           streak: Number(payload.profile.streak || 0),
@@ -175,6 +207,7 @@ export default function HomePage() {
       })
       .catch(() => {
         if (!active) return;
+        setSidebar(EMPTY_SIDEBAR);
         setGreetingStats({ dipinjam: 0, streak: 0, selesai: 0 });
       });
 
@@ -183,23 +216,26 @@ export default function HomePage() {
     };
   }, [user?.uid]);
 
-
   useEffect(() => {
     let active = true;
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || "";
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
     if (!apiBase) return () => { active = false; };
-    fetch(`${apiBase.replace(/\/$/, "")}/reviews/recent?limit=8`)
-      .then(res => res.ok ? res.json() : Promise.reject())
-      .then(json => {
+
+    fetch(`${apiBase.replace(/\/$/, '')}/reviews/recent?limit=8`)
+      .then((res) => res.ok ? res.json() : Promise.reject(new Error('Failed to fetch')))
+      .then((json) => {
         if (!active) return;
-        if (json?.success && Array.isArray(json.data)) {
-          setCommunityReviews(json.data as CommunityReview[]);
+        if (json && json.success && Array.isArray(json.data)) {
+          setCommunityReviews(json.data);
         }
       })
-      .catch(() => {})
-      .finally(() => { active = false; });
+      .catch(() => {
+        // keep dummy reviews on error
+      });
+
     return () => { active = false; };
   }, []);
+
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
       <Navbar />
@@ -207,7 +243,7 @@ export default function HomePage() {
       {/* ── HERO GREETING ── */}
       <section className="px-4 pt-6 pb-0 max-w-7xl mx-auto">
         <motion.div
-          className="relative rounded-2xl overflow-hidden px-6 py-5 mb-1"
+          className="relative rounded-2xl overflow-visible px-6 py-5 mb-1"
           style={{
             background: isLight
               ? 'linear-gradient(135deg, rgba(201,168,76,0.08) 0%, rgba(201,168,76,0.03) 50%, transparent 100%)'
@@ -242,14 +278,19 @@ export default function HomePage() {
             <motion.div className="hidden sm:flex items-center gap-5 flex-shrink-0"
               initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
               {[
-                { icon: BookCopy,        val: String(greetingStats.dipinjam),  label: 'Dipinjam'    },
-                { icon: Flame,           val: String(greetingStats.streak), label: 'Hari streak' },
-                { icon: CircleCheckBig,  val: String(greetingStats.selesai), label: 'Selesai'     },
-              ].map(({ icon: Icon, val, label }) => (
-                <div key={label} className="flex flex-col items-center justify-center">
+                { icon: BookCopy,       val: String(greetingStats.dipinjam),  label: 'Dipinjam',   tooltip: borrowedTooltip },
+                { icon: Flame,          val: String(greetingStats.streak),    label: 'Hari streak', tooltip: streakTooltip },
+                { icon: CircleCheckBig, val: String(greetingStats.selesai),   label: 'Selesai',    tooltip: `Total selesai ${greetingStats.selesai} buku` },
+              ].map(({ icon: Icon, val, label, tooltip }) => (
+                <div key={label} className="group relative flex flex-col items-center justify-center">
                   <Icon className="w-6 h-6 text-gold/70" />
                   <p className="font-black text-sm leading-none mt-1.5" style={{ color: 'var(--text)' }}>{val}</p>
                   <p className="text-[10px] mt-0.5 whitespace-nowrap" style={{ color: 'var(--muted)' }}>{label}</p>
+                  {tooltip ? (
+                    <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden -translate-x-1/2 rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2 text-left text-[11px] leading-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] group-hover:block whitespace-pre-line min-w-44">
+                      {tooltip}
+                    </div>
+                  ) : null}
                 </div>
               ))}
             </motion.div>
@@ -322,48 +363,87 @@ export default function HomePage() {
   );
 }
 
-function CommunitySection({ reviews, isLight: _isLight }: { reviews: CommunityReview[]; isLight: boolean }) {
+function CommunitySection({ reviews, isLight }: { reviews: typeof DUMMY_COMMUNITY_REVIEWS; isLight: boolean }) {
+  const [liked, setLiked] = useState<Record<number, boolean>>({});
   return (
     <>
-      <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: "none" }}>
-        {reviews.slice(0, 5).map((r, i) => (
-          <div key={r.review_id || i} className="flex-shrink-0 w-64">
-            <ReviewCard
-              reviewId={r.review_id}
-              name={r.user}
-              avatarUrl={r.avatar_url}
-              rating={r.rating}
-              text={r.text}
-              initialLikes={r.likes}
-              time={r.time}
-              bookTitle={r.book}
-              bookCoverUrl={r.cover_url}
-              bookId={r.key}
-              variant="compact"
-              index={i}
-            />
-          </div>
-        ))}
+      <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+        {reviews.slice(0, 5).map((r, i) => <CommunityCard key={i} review={r} index={i} isLight={isLight} liked={!!liked[i]} onLike={() => setLiked(l => ({ ...l, [i]: !l[i] }))} />)}
       </div>
       <div className="hidden lg:grid grid-cols-3 gap-3">
-        {reviews.slice(0, 8).map((r, i) => (
-          <ReviewCard
-            key={r.review_id || i}
-            reviewId={r.review_id}
-            name={r.user}
-            avatarUrl={r.avatar_url}
-            rating={r.rating}
-            text={r.text}
-            initialLikes={r.likes}
-            time={r.time}
-            bookTitle={r.book}
-            bookCoverUrl={r.cover_url}
-            bookId={r.key}
-            variant="compact"
-            index={i}
-          />
-        ))}
+        {reviews.slice(0, 8).map((r, i) => <CommunityCard key={i} review={r} index={i} isLight={isLight} liked={!!liked[i]} onLike={() => setLiked(l => ({ ...l, [i]: !l[i] }))} />)}
       </div>
     </>
+  );
+}
+
+function CommunityCard({ review, index, isLight, liked, onLike }: {
+  review: typeof DUMMY_COMMUNITY_REVIEWS[0]; index: number; isLight: boolean; liked: boolean; onLike: () => void;
+}) {
+  const src = coverUrl(review.coverId);
+  function formatRelativeTime(t: string | null | undefined) {
+    if (!t) return '-';
+    const parsed = Date.parse(String(t));
+    if (Number.isNaN(parsed)) return String(t);
+    const diff = Date.now() - parsed;
+    const sec = Math.floor(diff / 1000);
+    if (sec < 60) return `${sec} detik lalu`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min} menit lalu`;
+    const hr = Math.floor(min / 60);
+    if (hr < 24) return `${hr} jam lalu`;
+    const day = Math.floor(hr / 24);
+    if (day < 7) return `${day} hari lalu`;
+    const wk = Math.floor(day / 7);
+    if (wk < 5) return `${wk} minggu lalu`;
+    const mo = Math.floor(day / 30);
+    if (mo < 12) return `${mo} bulan lalu`;
+    return `${Math.floor(day / 365)} tahun lalu`;
+  }
+  return (
+    <motion.div className="flex-shrink-0 w-64 lg:w-auto rounded-2xl p-4"
+      style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.04 }} whileHover={{ y: -2 }}>
+
+      <div className="flex items-start gap-3 mb-3">
+        <AvatarImage 
+          src={review.avatar_url || null}
+          alt={review.user || 'User avatar'}
+          initials={review.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+          size="sm"
+        />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{review.user}</p>
+          <div className="flex items-center gap-1.5">
+            <div className="flex gap-0.5">
+              {[1,2,3,4,5].map(s => (
+                <Star key={s} className={cn('w-2.5 h-2.5', s <= review.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+              ))}
+            </div>
+            <span className="text-[10px]" style={{ color: 'var(--muted)' }}>{formatRelativeTime(review.time)}</span>
+          </div>
+        </div>
+        <Link href={`/book/${review.key}`} className="flex-shrink-0">
+          <div className="w-8 h-12 rounded-lg overflow-hidden shadow">
+            {src && <img src={src} alt={review.book} className="w-full h-full object-cover" />}
+          </div>
+        </Link>
+      </div>
+
+      <Link href={`/book/${review.key}`}>
+        <p className="text-xs font-semibold text-gold/80 hover:text-gold mb-1.5 transition-colors">{review.book}</p>
+      </Link>
+      <p className="text-xs leading-relaxed line-clamp-2 mb-3" style={{ color: 'var(--muted)' }}>{review.text}</p>
+
+      <motion.button onClick={onLike}
+        className={cn('flex items-center gap-1.5 text-xs font-medium transition-colors', liked ? 'text-rose-400' : '')}
+        style={!liked ? { color: 'var(--muted)' } : {}} whileTap={{ scale: 0.9 }}>
+        <motion.div animate={{ scale: liked ? [1, 1.4, 1] : 1 }} transition={{ duration: 0.3 }}>
+          <Heart className={cn('w-3.5 h-3.5', liked && 'fill-rose-400')} />
+        </motion.div>
+        {liked ? 'Disukai' : 'Suka'}
+      </motion.button>
+    </motion.div>
   );
 }

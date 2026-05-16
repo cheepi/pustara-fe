@@ -39,11 +39,12 @@ function bookColor(index: number) {
   return BOOK_PALETTE[index % BOOK_PALETTE.length];
 }
 
-function formatTooltipDay(value?: string | null) {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
+function formatTooltipDay(dayKey?: string | null): string {
+  if (!dayKey) return '-';
+  const date = new Date(`${dayKey}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dayKey;
   return new Intl.DateTimeFormat('id-ID', {
+    timeZone: 'Asia/Jakarta',
     day: '2-digit',
     month: 'short',
     year: 'numeric',

@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, type ComponentType } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, Star, Flame, TrendingUp, Heart,
@@ -60,12 +60,12 @@ type FollowingPreviewItem = {
   books: number;
 };
 
-type StatItem = {
+type ProfileStatItem = {
   label: string;
   value: string | number;
-  icon: ComponentType<{ className?: string }>;
-  color: string;
   suffix?: string;
+  icon: React.ElementType;
+  color: string;
   tooltip?: string;
 };
 
@@ -89,7 +89,7 @@ export default function ProfilePage() {
   const [followerUsers, setFollowerUsers] = useState<RecommendedUser[]>([]);
   const [suggestionUsers, setSuggestionUsers] = useState<RecommendedUser[]>([]);
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
-  const [stats, setStats] = useState<StatItem[]>([
+  const [stats, setStats] = useState<ProfileStatItem[]>([
     { label: 'Buku Dibaca', value: 0, icon: BookOpen, color: 'text-gold' },
     { label: 'Streak', value: '0', suffix: 'hari', icon: Flame, color: 'text-orange-400' },
     { label: 'Ulasan', value: 0, icon: Star, color: 'text-blue-400' },
@@ -149,7 +149,7 @@ export default function ProfilePage() {
           wishlist: Number(profile.liked_books?.length ?? 0),
         });
 
-        const finishedCount = Math.max(Number(profile.total_read ?? 0), finished.length);
+        const finishedCount = Number(profile.total_read ?? finished.length ?? 0);
         const streak = Math.max(0, Number(profile.reading_streak ?? 0));
         const ulasan = finishedCount;
         const streakTooltip = profile.streak_is_active
@@ -406,7 +406,7 @@ export default function ProfilePage() {
                     alt="Your avatar"
                     initials={initials}
                     size="lg"
-                    className="w-full h-full object-cover rounded-xl"
+                    className="w-full h-full rounded-2xl"
                   />
                 ) : (
                   <span className="font-serif font-black text-gold text-2xl lg:text-3xl">{initials}</span>

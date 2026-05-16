@@ -272,12 +272,30 @@ export async function fetchFeedActivities(limit = 8): Promise<FeedItem[]> {
 
 export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
   try {
-    const [profile, feedResponse, recoResponse, shelfData] = await Promise.all([
+    const [profileResult, feedResult, recoResult, shelfResult] = await Promise.allSettled([
       getMyProfile(),
       apiGet<BackendActivityResponse>('/feed/me/activity?limit=60'),
       apiGet<BackendRecommendationsResponse>('/feed/me/recommendations?limit=3'),
       fetchShelfData(),
     ]);
+
+    const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+    const feedResponse = feedResult.status === 'fulfilled' ? feedResult.value : { activities: [] };
+    const recoResponse = recoResult.status === 'fulfilled' ? recoResult.value : { users: [] };
+    const shelfData = shelfResult.status === 'fulfilled' ? shelfResult.value : null;
+
+    if (profileResult.status === 'rejected') {
+      console.warn('Error fetching sidebar profile payload:', profileResult.reason);
+    }
+    if (feedResult.status === 'rejected') {
+      console.warn('Error fetching sidebar activity payload:', feedResult.reason);
+    }
+    if (recoResult.status === 'rejected') {
+      console.warn('Error fetching sidebar recommendation payload:', recoResult.reason);
+    }
+    if (shelfResult.status === 'rejected') {
+      console.warn('Error fetching sidebar shelf payload:', shelfResult.reason);
+    }
 
     const name = profile?.name || 'Pembaca Pustara';
     const initials = toInitials(name);
@@ -287,15 +305,16 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
       return value === 'reading' || value === 'in_progress' || value === 'borrowed' || value === 'started';
     };
 
-    // Prefer authoritative shelf stats (even when 0). Fallback to profile or activity counts.
-    const shelfBorrowedCount = typeof shelfData?.stats?.total_borrowed === 'number' ? Number(shelfData.stats.total_borrowed) : undefined;
+    // Prefer profile aggregates so counts are not limited by activity sample size.
+    const shelfBorrowedCount = Number(shelfData?.stats?.total_borrowed ?? 0);
     const profileReadingCount = Array.isArray(profile?.currently_reading) ? profile.currently_reading.length : 0;
     const activityReadingCount = feedResponse.activities.filter(a => isReadingStatus(a.status)).length;
-    const readingCount = Math.max(0, Number(shelfBorrowedCount ?? profileReadingCount ?? activityReadingCount));
+    const readingCount = Math.max(0, shelfBorrowedCount || profileReadingCount || activityReadingCount);
 
+    const shelfFinishedCount = Number(shelfData?.stats?.total_read ?? 0);
     const profileFinishedCount = Number(profile?.total_read ?? 0);
     const activityFinishedCount = feedResponse.activities.filter(a => a.status === 'finished').length;
-    const finishedCount = Math.max(0, profileFinishedCount || activityFinishedCount);
+    const finishedCount = Math.max(0, shelfFinishedCount || profileFinishedCount || activityFinishedCount);
 
     const profileStreak = Number(profile?.reading_streak ?? 0);
     const streak = Math.max(0, profileStreak);
