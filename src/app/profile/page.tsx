@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { updateProfile as updateFirebaseProfile } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, Star, Flame, TrendingUp, Heart,
@@ -10,6 +11,7 @@ import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import AvatarImage from '@/components/shared/AvatarImage';
 import AvatarUploadDialog from '@/components/profile/AvatarUploadDialog';
+import { auth } from '@/lib/firebase';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useAuthStore } from '@/store/authStore';
@@ -101,7 +103,7 @@ type ProfileStatItem = {
 
 export default function ProfilePage() {
   const { theme } = useTheme();
-  const { user, setProfileCache }  = useAuthStore();
+  const { user }  = useAuthStore();
   const isLight   = theme === 'light';
 
   const [editing,   setEditing]   = useState(false);
@@ -166,13 +168,6 @@ export default function ProfilePage() {
     ])
       .then(([profile, survey, readingNow, finished, suggestions, following, followers]) => {
         if (!active || !profile) return;
-
-        setProfileCache({
-          uid: user?.uid || profile.id,
-          displayName: profile.display_name || profile.name || user?.displayName || 'Pembaca Pustara',
-          avatarUrl: profile.avatar_url || user?.photoURL || null,
-          email: profile.email || user?.email || null,
-        });
 
         setName(profile.name || 'Pembaca Pustara');
         setDraftName(profile.name || 'Pembaca Pustara');
@@ -312,10 +307,20 @@ export default function ProfilePage() {
         bio: draftBio,
       });
 
+      const finalName = updated?.name || draftName;
+
+      if (auth.currentUser && finalName) {
+        try {
+          await updateFirebaseProfile(auth.currentUser, { displayName: finalName });
+        } catch (error) {
+          console.warn('[profile] update Firebase Auth displayName gagal:', error);
+        }
+      }
+
       if (updated) {
-        setName(updated.name || draftName);
+        setName(finalName);
         setBio(updated.bio || draftBio);
-        setDraftName(updated.name || draftName);
+        setDraftName(finalName);
         setDraftBio(updated.bio || draftBio);
       } else {
         setName(draftName);

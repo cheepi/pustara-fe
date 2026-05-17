@@ -155,7 +155,8 @@ export default function HomePage() {
   const { user }   = useAuthStore();
   const { theme }  = useTheme();
   const isLight    = theme === 'light';
-  const firstName  = user?.displayName?.split(' ')[0] || 'Pembaca';
+  const displayName = user?.displayName || user?.email || 'Pembaca';
+  const firstName  = displayName.split(' ')[0] || 'Pembaca';
   const { books: popularBooks, loading: popularLoading } = useTrendingBooks(12);
   const homepagePopularBooks = popularBooks.slice(0, 6);
   const { recommendations: aiReco, loading: aiLoading } = useRecommendations();
