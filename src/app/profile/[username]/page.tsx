@@ -203,10 +203,25 @@ function BookPosterCard({
         className="relative rounded-xl overflow-hidden cursor-pointer group"
         style={{ aspectRatio: '2/3' }}
       >
-        <div className={cn('absolute inset-0 bg-gradient-to-br', gradient)} />
-        <div className="absolute inset-0 opacity-20"
-          style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: 'cover' }}
-        />
+        {/* If book has cover URL, render it; otherwise fallback to gradient poster */}
+        {(() => {
+          const anyBook = book as any;
+          const imgSrc = String(anyBook.cover_url ?? anyBook.coverUrl ?? '') || '';
+          if (imgSrc) {
+            return (
+              <img src={imgSrc} alt={book.title} className="absolute inset-0 w-full h-full object-cover" />
+            );
+          }
+
+          return (
+            <>
+              <div className={cn('absolute inset-0 bg-gradient-to-br', gradient)} />
+              <div className="absolute inset-0 opacity-20"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: 'cover' }}
+              />
+            </>
+          );
+        })()}
         <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
           <p className="text-white text-[10px] font-bold leading-tight line-clamp-2">{shortTitle}</p>
           <p className="text-white/60 text-[9px] mt-0.5 line-clamp-1">
