@@ -46,6 +46,18 @@ function parseStringArray(value: unknown): string[] {
   return [];
 }
 
+function normalizeGenreStats(value: unknown): Array<{ genre: string; count: number; pct: number }> {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => ({
+      genre: String((item as Record<string, unknown>).genre ?? '').trim(),
+      count: Number((item as Record<string, unknown>).count ?? 0),
+      pct: Number((item as Record<string, unknown>).pct ?? 0),
+    }))
+    .filter((item) => Boolean(item.genre));
+}
+
 function toShortId(value: unknown): string {
   const compact = String(value ?? '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
   return compact.slice(0, 6) || 'reader';
@@ -118,6 +130,15 @@ function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
     is_following: Boolean(raw.is_following),
     currently_reading: Array.isArray(raw.currently_reading) ? raw.currently_reading as UserProfile['currently_reading'] : [],
     liked_books: Array.isArray(raw.liked_books) ? raw.liked_books as UserProfile['liked_books'] : [],
+    stats: raw.stats && typeof raw.stats === 'object'
+      ? {
+          total_read: Number((raw.stats as Record<string, unknown>).total_read ?? 0),
+          reading_streak: Number((raw.stats as Record<string, unknown>).reading_streak ?? 0),
+          borrowed_books: Number((raw.stats as Record<string, unknown>).borrowed_books ?? 0),
+          reviews_written: Number((raw.stats as Record<string, unknown>).reviews_written ?? 0),
+          favorite_genres: normalizeGenreStats((raw.stats as Record<string, unknown>).favorite_genres),
+        }
+      : undefined,
   };
 }
 
@@ -212,6 +233,26 @@ export async function getRecommendedUsers(limit = 8): Promise<RecommendedUser[]>
     return list.map((item: Record<string, unknown>) => normalizeRecommendedUser(item));
   } catch (err) {
     console.warn('[users] getRecommendedUsers gagal:', err);
+    return [];
+  }
+}
+
+export async function searchUsers(query: string, limit = 12): Promise<RecommendedUser[]> {
+  try {
+    const headers = await getOptionalAuthHeader();
+    const params = new URLSearchParams({ q: String(query || ''), limit: String(limit) });
+
+    const res = await fetch(`${API_URL}/users/search?${params.toString()}`, {
+      cache: 'no-store',
+      headers,
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const list = Array.isArray(json?.data) ? json.data : [];
+    return list.map((item: Record<string, unknown>) => normalizeRecommendedUser(item));
+  } catch (err) {
+    console.warn('[users] searchUsers gagal:', err);
     return [];
   }
 }

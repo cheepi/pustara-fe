@@ -11,6 +11,12 @@ export interface UserBookSummary extends Pick<BookDetail, 'id' | 'title' | 'auth
   reading_session?: ReadingSession;
 }
 
+export interface GenreStat {
+  genre: string;
+  count: number;
+  pct: number;
+}
+
 /**
  * Complete user profile with related data
  */
@@ -44,6 +50,7 @@ export interface UserProfile {
     reading_streak: number;
     borrowed_books: number;
     reviews_written: number;
+    favorite_genres?: GenreStat[];
   };
 }
 

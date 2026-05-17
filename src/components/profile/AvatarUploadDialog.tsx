@@ -4,6 +4,7 @@ import { useState, useRef } from 'react';
 import { Camera, X, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { uploadAvatarToSupabase } from '@/lib/avatarUpload';
+import { useAuthStore } from '@/store/authStore';
 
 interface Props {
   userId: string;
@@ -20,6 +21,7 @@ export default function AvatarUploadDialog({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const { user, setProfileCache } = useAuthStore();
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,6 +41,14 @@ export default function AvatarUploadDialog({
 
       // Success
       setSuccess('Avatar berhasil diperbarui!');
+      if (user) {
+        setProfileCache({
+          uid: user.uid,
+          displayName: user.displayName || user.email || 'Pengguna',
+          avatarUrl: result.avatarUrl!,
+          email: user.email || null,
+        });
+      }
       onUploadSuccess(result.avatarUrl!);
 
       // Clear success message after 2s

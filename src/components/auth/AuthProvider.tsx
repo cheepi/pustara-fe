@@ -84,8 +84,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Tidak login
         resolveAuth(null);
 
-        const isProtected  = PROTECTED.some(p => pathname.startsWith(p));
         const isAdminRoute = ADMIN_ROUTES.some(p => pathname.startsWith(p));
+        const isProtected = PROTECTED.some((p) => {
+          // Keep `/profile` protected only when visiting the personal `/profile` page,
+          // but allow `/profile/@username` to be publicly viewable.
+          if (p === '/profile') return pathname === '/profile';
+          return pathname.startsWith(p);
+        });
+
         if (isProtected || isAdminRoute) {
           router.replace('/auth/login');
         }

@@ -14,6 +14,7 @@ import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { getRecommendedUsers, getUserProfile, toggleFollowUser } from '@/lib/users';
+import { useAuthStore } from '@/store/authStore';
 import type { RecommendedUser, UserProfile } from '@/types/user';
  
 type UserProfileWithStats = UserProfile & {
@@ -49,6 +50,36 @@ function formatTooltipDay(dayKey?: string | null): string {
     month: 'short',
     year: 'numeric',
   }).format(date);
+}
+
+function buildGenreStatsFromGenres(genres: string[], limit = 5) {
+  const genreMap = new Map<string, number>();
+  for (const genre of genres) {
+    genreMap.set(genre, (genreMap.get(genre) ?? 0) + 1);
+  }
+
+  const topGenres = Array.from(genreMap.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'id'))
+    .slice(0, limit)
+    .map(([genre, count]) => ({ genre, count }));
+
+  if (topGenres.length === 0) return [];
+
+  const total = topGenres.reduce((sum, item) => sum + item.count, 0) || 1;
+  const ranked = topGenres.map((item) => {
+    const exact = (item.count / total) * 100;
+    const base = Math.floor(exact);
+    return { ...item, pct: base, remainder: exact - base };
+  });
+
+  let remaining = 100 - ranked.reduce((sum, item) => sum + item.pct, 0);
+  const order = [...ranked].sort((a, b) => b.remainder - a.remainder || b.count - a.count || a.genre.localeCompare(b.genre, 'id'));
+
+  for (let index = 0; index < remaining; index += 1) {
+    order[index % order.length].pct += 1;
+  }
+
+  return ranked.map(({ genre, count, pct }) => ({ genre, count, pct }));
 }
  
 function StarRating({ rating, max = 5 }: { rating: number; max?: number }) {
@@ -139,12 +170,12 @@ function GenreBar({
         <motion.div
           className="h-full bg-gold rounded-full"
           initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
+          animate={{ width: `${Math.max(pct, 8)}%` }}
           transition={{ delay: 0.3 + index * 0.06, duration: 0.55, ease: 'easeOut' }}
         />
       </div>
-      <span className={cn('text-xs w-5 text-right flex-shrink-0 tabular-nums', isLight ? 'text-slate-400' : 'text-slate-500')}>
-        {count}
+      <span className={cn('text-xs w-10 text-right flex-shrink-0 tabular-nums', isLight ? 'text-slate-400' : 'text-slate-500')}>
+        {pct}%
       </span>
     </motion.div>
   );
@@ -274,6 +305,8 @@ export default function UserProfilePage() {
  
     return () => { active = false; };
   }, [profileUsername]);
+
+  const { user } = useAuthStore();
  
   const initials = useMemo(() => {
     const src = profile?.name || 'Pustara';
@@ -282,6 +315,21 @@ export default function UserProfilePage() {
  
   const genreStats = useMemo(() => {
     if (!profile) return [];
+
+    const backendGenreStats = Array.isArray(profile.stats?.favorite_genres)
+      ? profile.stats.favorite_genres
+          .map((item: any) => ({
+            genre: String(item?.genre ?? '').trim(),
+            count: Number(item?.count ?? 0),
+            pct: Number(item?.pct ?? 0),
+          }))
+          .filter((item) => Boolean(item.genre))
+      : [];
+
+    if (backendGenreStats.length > 0) {
+      return backendGenreStats;
+    }
+
     const allGenres = [
       ...(profile.currently_reading ?? []).flatMap((b: any) =>
         Array.isArray((b as any).genres) ? (b as any).genres : []
@@ -289,17 +337,9 @@ export default function UserProfilePage() {
       ...(profile.liked_books ?? []).flatMap((b: any) =>
         Array.isArray((b as any).genres) ? (b as any).genres : []
       ),
-      ...(profile.preferred_genres ?? []),
     ].map((g: unknown) => String(g).trim()).filter(Boolean);
- 
-    const map = new Map<string, number>();
-    for (const g of allGenres) map.set(g, (map.get(g) ?? 0) + 1);
- 
-    const total = allGenres.length || 1;
-    return Array.from(map.entries())
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([genre, count]) => ({ genre, count, pct: Math.max(8, Math.round((count / total) * 100)) }));
+
+    return buildGenreStatsFromGenres(allGenres, 6);
   }, [profile]);
  
   async function handleFollow() {
@@ -422,7 +462,7 @@ export default function UserProfilePage() {
             >
               <button
                 onClick={handleFollow}
-                disabled={loadingFollow}
+                disabled={loadingFollow || !user}
                 className={cn(
                   'px-5 py-2.5 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-60',
                   profile.is_following
@@ -432,10 +472,15 @@ export default function UserProfilePage() {
                     : 'bg-gold text-navy-900 hover:brightness-110 shadow-lg shadow-gold/20'
                 )}
               >
-                {profile.is_following
-                  ? <><UserCheck className="w-4 h-4" /> Mengikuti</>
-                  : <><UserPlus  className="w-4 h-4" /> Ikuti</>
-                }
+                {user ? (
+                  profile.is_following
+                    ? <><UserCheck className="w-4 h-4" /> Mengikuti</>
+                    : <><UserPlus  className="w-4 h-4" /> Ikuti</>
+                ) : (
+                  <Link href="/auth/login" className="flex items-center gap-2">
+                    <UserPlus className="w-4 h-4" /> Masuk untuk mengikuti
+                  </Link>
+                )}
               </button>
             </motion.div>
           </div>
@@ -557,11 +602,15 @@ export default function UserProfilePage() {
                   <div>
                     <p className={cn('text-xs mb-1.5', tk.muted)}>Genre Pilihan</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {profile.preferred_genres.slice(0, 6).map((g: string) => (
+                      {profile.preferred_genres.filter((g: string) => g && g !== '__SKIPPED__').length > 0 ? (
+                        profile.preferred_genres.filter((g: string) => g && g !== '__SKIPPED__').slice(0, 6).map((g: string) => (
                         <span key={g} className={cn('px-2 py-0.5 rounded-xl border text-[10px] font-medium', tk.chip)}>
                           {g}
                         </span>
-                      ))}
+                        ))
+                      ) : (
+                        <span className={cn('text-[10px]', tk.muted)}>belum ada preferensi</span>
+                      )}
                     </div>
                   </div>
                 )}

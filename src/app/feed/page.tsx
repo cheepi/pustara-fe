@@ -20,7 +20,8 @@ import type { AiRecommendation } from '@/types/ai';
 import type { FeedItem } from '@/types/feed';
 import type { RecommendedUser } from '@/types/user';
 import { fetchFeedActivities, fetchFeedSidebarPayload, fetchTrendingFeedItems, type FeedSidebarPayload } from '@/lib/feed';
-import { getRecommendedUsers, toggleFollowUser } from '@/lib/users';
+import { fetchRecommendedUsers } from '@/lib/api';
+import { toggleFollowUser } from '@/lib/users';
 import { useSimilarUsers } from '@/hooks/useSimilarUsers';
 
 const pseudo = (n: number, mn: number, mx: number) =>
@@ -507,7 +508,7 @@ export default function FeedPage() {
     const authUid = String(user.uid || '').trim();
 
     const sidebarPromise = fetchFeedSidebarPayload();
-    const usersPromise = getRecommendedUsers(8);
+    const usersPromise = fetchRecommendedUsers(8);
 
     try {
       const [trending, activities] = await Promise.all([
@@ -939,6 +940,7 @@ export default function FeedPage() {
                           alt={displayName}
                           initials={initials}
                           size="sm"
+                          className="w-full h-full object-cover"
                         />
                       </div>
                       <div className="flex-1 min-w-0">

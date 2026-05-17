@@ -25,11 +25,10 @@ export default function Navbar() {
   const [dropOpen,   setDropOpen]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const { user }          = useAuthStore();
+  const { user, profileCache, setProfileCache, clearProfileCache } = useAuthStore();
   const { theme, toggle } = useTheme();
   const router            = useRouter();
   const pathname          = usePathname();
@@ -108,22 +107,41 @@ export default function Navbar() {
   // Fetch user profile to get avatar_url from database
   useEffect(() => {
     if (!user) {
-      setProfile(null);
+      clearProfileCache();
       setUnreadNotifications(0);
       return;
+    }
+
+    const cachedDisplayName = user.displayName || user.email || 'Pengguna';
+    const cachedAvatarUrl = user.photoURL || null;
+    const isSameUserCache = profileCache?.uid === user.uid;
+
+    if (!isSameUserCache) {
+      setProfileCache({
+        uid: user.uid,
+        displayName: cachedDisplayName,
+        avatarUrl: cachedAvatarUrl,
+        email: user.email || null,
+      });
     }
 
     const fetchProfile = async () => {
       try {
         const profileData = await getMyProfile();
-        setProfile(profileData);
+        if (!profileData) return;
+        setProfileCache({
+          uid: user.uid,
+          displayName: profileData.display_name || profileData.name || cachedDisplayName,
+          avatarUrl: profileData.avatar_url || cachedAvatarUrl,
+          email: profileData.email || user.email || null,
+        });
       } catch (error) {
         console.error('Failed to fetch profile in navbar:', error);
       }
     };
 
     fetchProfile();
-  }, [user?.uid]);
+  }, [clearProfileCache, setProfileCache, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -149,9 +167,10 @@ export default function Navbar() {
     };
   }, [pathname, user?.uid]);
 
-  const displayName = profile?.display_name || profile?.name || user?.displayName || 'Pengguna';
+  const displayName = profileCache?.displayName || user?.displayName || user?.email || 'Pengguna';
   const firstName = displayName.split(' ')[0] || 'Akun';
   const initial = (displayName || user?.email || 'U')[0].toUpperCase();
+  const avatarUrl = profileCache?.avatarUrl || user?.photoURL || null;
 
   async function handleConfirmLogout() {
     setLogoutConfirmOpen(false);
@@ -285,7 +304,7 @@ export default function Navbar() {
                       className={cn('flex items-center gap-1 pl-1 pr-1 py-0.5 rounded-xl transition-colors flex-shrink-0', hoverBg)}>
                       <div className="w-7 h-7 rounded-full overflow-hidden border border-gold/30 flex-shrink-0">
                         <AvatarImage 
-                          src={profile?.avatar_url || null}
+                          src={avatarUrl}
                           alt={displayName}
                           initials={initial}
                           size="sm"
@@ -433,7 +452,7 @@ export default function Navbar() {
             <div className="flex items-center gap-3 px-4 py-3.5 mb-3 rounded-2xl" style={{ background: 'var(--surface2)' }}>
                       <div className="w-8 h-8 rounded-full overflow-hidden border border-gold/40 flex-shrink-0">
                 <AvatarImage
-                  src={profile?.avatar_url || null}
+                          src={avatarUrl}
                   alt={displayName}
                   initials={initial}
                   size="md"

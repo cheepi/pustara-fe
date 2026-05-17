@@ -42,6 +42,36 @@ function formatTooltipDay(dayKey?: string | null): string {
   }).format(date);
 }
 
+function buildGenreStatsFromGenres(genres: string[], limit = 5) {
+  const genreMap = new Map<string, number>();
+  for (const genre of genres) {
+    genreMap.set(genre, (genreMap.get(genre) ?? 0) + 1);
+  }
+
+  const topGenres = Array.from(genreMap.entries())
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'id'))
+    .slice(0, limit)
+    .map(([genre, count]) => ({ genre, count }));
+
+  if (topGenres.length === 0) return [];
+
+  const total = topGenres.reduce((sum, item) => sum + item.count, 0) || 1;
+  const ranked = topGenres.map((item) => {
+    const exact = (item.count / total) * 100;
+    const base = Math.floor(exact);
+    return { ...item, pct: base, remainder: exact - base };
+  });
+
+  let remaining = 100 - ranked.reduce((sum, item) => sum + item.pct, 0);
+  const order = [...ranked].sort((a, b) => b.remainder - a.remainder || b.count - a.count || a.genre.localeCompare(b.genre, 'id'));
+
+  for (let index = 0; index < remaining; index += 1) {
+    order[index % order.length].pct += 1;
+  }
+
+  return ranked.map(({ genre, count, pct }) => ({ genre, count, pct }));
+}
+
 type ActivityItem = {
   type: 'selesai' | 'pinjam' | 'wishlist';
   book: string;
@@ -71,7 +101,7 @@ type ProfileStatItem = {
 
 export default function ProfilePage() {
   const { theme } = useTheme();
-  const { user }  = useAuthStore();
+  const { user, setProfileCache }  = useAuthStore();
   const isLight   = theme === 'light';
 
   const [editing,   setEditing]   = useState(false);
@@ -101,6 +131,8 @@ export default function ProfilePage() {
   const [surveyGender, setSurveyGender] = useState('');
   const [surveyAge, setSurveyAge] = useState('');
   const [surveyGenres, setSurveyGenres] = useState<string[]>([]);
+  const [profileUsername, setProfileUsername] = useState('');
+  const [profileCreatedAt, setProfileCreatedAt] = useState<string | null>(null);
 
   const genderOptions = ['Laki-Laki', 'Perempuan', 'Tidak ingin diketahui'];
   const ageOptions = ['< 20 Tahun', '21 - 30 Tahun', '31 - 40 Tahun', '> 40 Tahun'];
@@ -135,6 +167,13 @@ export default function ProfilePage() {
       .then(([profile, survey, readingNow, finished, suggestions, following, followers]) => {
         if (!active || !profile) return;
 
+        setProfileCache({
+          uid: user?.uid || profile.id,
+          displayName: profile.display_name || profile.name || user?.displayName || 'Pembaca Pustara',
+          avatarUrl: profile.avatar_url || user?.photoURL || null,
+          email: profile.email || user?.email || null,
+        });
+
         setName(profile.name || 'Pembaca Pustara');
         setDraftName(profile.name || 'Pembaca Pustara');
         setBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
@@ -148,10 +187,12 @@ export default function ProfilePage() {
           following: Number(profile.following_count ?? 0),
           wishlist: Number(profile.liked_books?.length ?? 0),
         });
+        setProfileUsername(profile.username || '');
+        setProfileCreatedAt(profile.created_at || null);
 
-        const finishedCount = Number(profile.total_read ?? finished.length ?? 0);
+        const finishedCount = Number(profile.stats?.total_read ?? profile.total_read ?? finished.length ?? 0);
         const streak = Math.max(0, Number(profile.reading_streak ?? 0));
-        const ulasan = finishedCount;
+        const ulasan = Number(profile.stats?.reviews_written ?? finished.filter((s: any) => s.review_text || s.rating).length ?? 0);
         const streakTooltip = profile.streak_is_active
           ? [`Streak aktif: ${streak} hari`, `Mulai: ${formatTooltipDay(profile.streak_last_start_day)}`, `Aktif terakhir: ${formatTooltipDay(profile.streak_last_end_day)}`].join('\n')
           : [`Streak terakhir: ${profile.streak_last_length ?? streak} hari`, `Berakhir: ${formatTooltipDay(profile.streak_last_end_day)}`, `Reset: ${formatTooltipDay(profile.streak_reset_day)}`].join('\n');
@@ -163,29 +204,28 @@ export default function ProfilePage() {
           { label: 'Wishlist', value: Number(profile.liked_books?.length ?? 0), icon: Heart, color: 'text-rose-400' },
         ]);
 
-        const allGenres = [
-          ...(profile.currently_reading ?? []).flatMap((book) => Array.isArray(book.genres) ? book.genres : []),
-          ...(profile.liked_books ?? []).flatMap((book) => Array.isArray(book.genres) ? book.genres : []),
-        ]
-          .map((genre) => String(genre).trim())
-          .filter(Boolean);
+        const backendGenreStats = Array.isArray(profile.stats?.favorite_genres)
+          ? profile.stats.favorite_genres
+              .map((item: any) => ({
+                genre: String(item?.genre ?? '').trim(),
+                count: Number(item?.count ?? 0),
+                pct: Number(item?.pct ?? 0),
+              }))
+              .filter((item) => Boolean(item.genre))
+          : [];
 
-        const genreMap = new Map<string, number>();
-        for (const genre of allGenres) {
-          genreMap.set(genre, (genreMap.get(genre) ?? 0) + 1);
+        if (backendGenreStats.length > 0) {
+          setGenreStats(backendGenreStats);
+        } else {
+          const allGenres = [
+            ...(profile.currently_reading ?? []).flatMap((book) => Array.isArray(book.genres) ? book.genres : []),
+            ...(profile.liked_books ?? []).flatMap((book) => Array.isArray(book.genres) ? book.genres : []),
+          ]
+            .map((genre) => String(genre).trim())
+            .filter(Boolean);
+
+          setGenreStats(buildGenreStatsFromGenres(allGenres, 5));
         }
-
-        const totalGenres = allGenres.length || 1;
-        const topGenres = Array.from(genreMap.entries())
-          .sort((a, b) => b[1] - a[1])
-          .slice(0, 5)
-          .map(([genre, count]) => ({
-            genre,
-            count,
-            pct: Math.max(4, Math.round((count / totalGenres) * 100)),
-          }));
-
-        setGenreStats(topGenres);
 
         if (survey) {
           setSurveyGender(survey.gender || '');
@@ -256,8 +296,11 @@ export default function ProfilePage() {
   }, []);
 
   const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const email    = user?.email || 'user@email.com';
-  const joinDate = 'Bergabung Maret 2026';
+  const email = user?.email || 'user@email.com';
+  const joinDate = profileCreatedAt
+    ? `Bergabung ${new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(profileCreatedAt))}`
+    : 'Bergabung';
+  const usernameLabel = profileUsername ? `@${profileUsername}` : '';
 
   async function saveEdit() {
     if (saving) return;
@@ -454,7 +497,9 @@ export default function ProfilePage() {
                       </button>
                     </div>
                     <p className={cn('text-sm mt-1 max-w-md', tk.muted)}>{bio}</p>
-                    <p className={cn('text-xs mt-2', tk.muted)}>{email} · {joinDate}</p>
+                    <p className={cn('text-xs mt-2', tk.muted)}>
+                      {[usernameLabel, email, joinDate].filter(Boolean).join(' · ')}
+                    </p>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -565,10 +610,10 @@ export default function ProfilePage() {
                       <span className={cn('text-xs w-20 flex-shrink-0', tk.text)}>{g.genre}</span>
                       <div className={cn('flex-1 h-1.5 rounded-full overflow-hidden', isLight ? 'bg-parchment-darker' : 'bg-navy-700')}>
                         <motion.div className="h-full bg-gold rounded-full"
-                          initial={{ width: 0 }} animate={{ width: `${g.pct}%` }}
+                          initial={{ width: 0 }} animate={{ width: `${Math.max(g.pct, 8)}%` }}
                           transition={{ delay: 0.3 + i * 0.05, duration: 0.5, ease: 'easeOut' }} />
                       </div>
-                      <span className={cn('text-xs w-6 text-right flex-shrink-0', tk.muted)}>{g.count}</span>
+                      <span className={cn('text-xs w-10 text-right flex-shrink-0 tabular-nums', tk.muted)}>{g.pct}%</span>
                     </div>
                   ))}
                 </div>
@@ -666,17 +711,17 @@ export default function ProfilePage() {
                 <div className="flex flex-wrap gap-2">
                   {surveyGender && (
                     <span className={cn('px-2.5 py-1 rounded-xl border text-xs', tk.chip)}>
-                      Gender: {surveyGender}
+                      Gender: {surveyGender === '__SKIPPED__' ? 'belum ada preferensi' : surveyGender}
                     </span>
                   )}
                   {surveyAge && (
                     <span className={cn('px-2.5 py-1 rounded-xl border text-xs', tk.chip)}>
-                      Umur: {surveyAge}
+                      Umur: {surveyAge === '__SKIPPED__' ? 'belum ada preferensi' : surveyAge}
                     </span>
                   )}
                   {surveyGenres.slice(0, 8).map((genre) => (
                     <span key={genre} className={cn('px-2.5 py-1 rounded-xl border text-xs', tk.chip)}>
-                      {genre}
+                      {genre === '__SKIPPED__' ? 'belum ada preferensi' : genre}
                     </span>
                   ))}
                   {!surveyGender && !surveyAge && surveyGenres.length === 0 && (

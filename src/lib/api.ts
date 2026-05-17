@@ -476,3 +476,51 @@ export async function fetchSimilarUsers(
       : [],
   };
 }
+
+export async function fetchRecommendedUsers(
+  n = 8,
+): Promise<Array<{
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  name?: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  preferred_genres: string[];
+  followers_count: number;
+  total_read: number;
+  reading_streak: number;
+  is_following: boolean;
+}>> {
+  try {
+    const raw = await apiGet<{
+      recommendations?: Array<any>;
+      data?: Array<any>;
+    }>(`/users/recommendations?limit=${n}`);
+
+    const users = Array.isArray(raw.recommendations)
+      ? raw.recommendations
+      : Array.isArray(raw.data)
+        ? raw.data
+        : [];
+
+    return users
+      .filter((user) => !user.is_following) // Filter out already followed users
+      .map((user) => ({
+        id: String(user.id || ''),
+        username: user.username || null,
+        display_name: user.display_name || null,
+        name: user.name || user.display_name || null,
+        bio: user.bio || null,
+        avatar_url: user.avatar_url || null,
+        preferred_genres: Array.isArray(user.preferred_genres) ? user.preferred_genres : [],
+        followers_count: Number(user.followers_count || 0),
+        total_read: Number(user.total_read || 0),
+        reading_streak: Number(user.reading_streak || 0),
+        is_following: false,
+      }))
+      .slice(0, n);
+  } catch {
+    return [];
+  }
+}
