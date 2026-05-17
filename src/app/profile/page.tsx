@@ -87,6 +87,7 @@ type ActivityItem = {
 
 type FollowingPreviewItem = {
   id: string;
+  username: string | null;
   name: string;
   avatar_url: string | null;
   books: number;
@@ -270,6 +271,7 @@ export default function ProfilePage() {
             const displayName = item.display_name?.trim() || item.name?.trim() || item.username?.trim() || 'Pustara User';
             return {
               id: item.id,
+              username: item.username ?? null,
               name: displayName,
               avatar_url: item.avatar_url || null,
               books: Number(item.total_read ?? 0),
@@ -811,11 +813,11 @@ export default function ProfilePage() {
                       <p className={cn('text-sm font-semibold', tk.text)}>{f.name}</p>
                       <p className={cn('text-xs', tk.muted)}>{f.books} buku dibaca</p>
                     </div>
-                    <button
-                      onClick={() => openModal('following')}
+                    <Link
+                      href={`/profile/@${f.username || f.id}`}
                       className={cn('flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all', tk.chip, 'hover:border-gold/40 hover:text-gold')}>
                       Profil
-                    </button>
+                    </Link>
                   </motion.div>
                 ))}
               </div>
