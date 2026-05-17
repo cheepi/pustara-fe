@@ -20,8 +20,7 @@ import type { AiRecommendation } from '@/types/ai';
 import type { FeedItem } from '@/types/feed';
 import type { RecommendedUser } from '@/types/user';
 import { fetchFeedActivities, fetchFeedSidebarPayload, fetchTrendingFeedItems, type FeedSidebarPayload } from '@/lib/feed';
-import { fetchRecommendedUsers } from '@/lib/api';
-import { toggleFollowUser } from '@/lib/users';
+import { getRecommendedUsers, toggleFollowUser } from '@/lib/users';
 import { useSimilarUsers } from '@/hooks/useSimilarUsers';
 
 const pseudo = (n: number, mn: number, mx: number) =>
@@ -508,7 +507,7 @@ export default function FeedPage() {
     const authUid = String(user.uid || '').trim();
 
     const sidebarPromise = fetchFeedSidebarPayload();
-    const usersPromise = fetchRecommendedUsers(8);
+    const usersPromise = getRecommendedUsers(8);
 
     try {
       const [trending, activities] = await Promise.all([
@@ -530,9 +529,10 @@ export default function FeedPage() {
       setFeedLoading(false);
     }
 
-    try {
-      const [payload, users] = await Promise.all([sidebarPromise, usersPromise]);
+    const [payloadResult, usersResult] = await Promise.allSettled([sidebarPromise, usersPromise]);
 
+    if (payloadResult.status === 'fulfilled') {
+      const payload = payloadResult.value;
       const profileName = normalizeComparable(payload.profile.name);
       const shouldPatchName = profileName === 'pembaca pustara' || !profileName;
       const finalName = shouldPatchName && authDisplayName ? authDisplayName : payload.profile.name;
@@ -546,18 +546,8 @@ export default function FeedPage() {
         },
       };
 
-      const filteredUsers = users.filter((candidate) => {
-        const candidateName = normalizeComparable(candidate.display_name || candidate.name);
-        const candidateHandle = normalizeComparable(candidate.username);
-        const byName = authName && (candidateName === authName || candidateHandle === authName);
-        const byEmailPrefix = authEmailPrefix && (candidateName === authEmailPrefix || candidateHandle === authEmailPrefix);
-        const byId = authUid && String(candidate.id) === authUid;
-        return !(byName || byEmailPrefix || byId);
-      }).slice(0, 5);
-
       setSidebar(patchedPayload);
-      setRecommendedUsers(filteredUsers);
-    } catch {
+    } else {
       setSidebar({
         ...EMPTY_SIDEBAR_PAYLOAD,
         profile: {
@@ -566,11 +556,25 @@ export default function FeedPage() {
           initials: toInitials(authDisplayName || EMPTY_SIDEBAR_PAYLOAD.profile.name),
         },
       });
-      setRecommendedUsers([]);
-    } finally {
-      setSidebarLoading(false);
-      setSuggestionsLoading(false);
     }
+
+    if (usersResult.status === 'fulfilled') {
+      const filteredUsers = usersResult.value.filter((candidate) => {
+        const candidateName = normalizeComparable(candidate.display_name || candidate.name);
+        const candidateHandle = normalizeComparable(candidate.username);
+        const byName = authName && (candidateName === authName || candidateHandle === authName);
+        const byEmailPrefix = authEmailPrefix && (candidateName === authEmailPrefix || candidateHandle === authEmailPrefix);
+        const byId = authUid && String(candidate.id) === authUid;
+        return !(byName || byEmailPrefix || byId);
+      }).slice(0, 5);
+
+      setRecommendedUsers(filteredUsers);
+    } else {
+      setRecommendedUsers([]);
+    }
+
+    setSidebarLoading(false);
+    setSuggestionsLoading(false);
   }
 
   // Fetch live data
