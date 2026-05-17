@@ -20,6 +20,7 @@ import type { AiRecommendation } from '@/types/ai';
 import type { FeedItem } from '@/types/feed';
 import type { RecommendedUser } from '@/types/user';
 import { fetchFeedActivities, fetchFeedSidebarPayload, fetchTrendingFeedItems, type FeedSidebarPayload } from '@/lib/feed';
+import { fetchNotifications } from '@/lib/notifications';
 import { getRecommendedUsers, toggleFollowUser } from '@/lib/users';
 import { useSimilarUsers } from '@/hooks/useSimilarUsers';
 
@@ -462,6 +463,7 @@ export default function FeedPage() {
   const [loadingMore, setLoadingMore]     = useState(false);
   const [trendingItems, setTrendingItems] = useState<FeedItem[]>([]);
   const [activityItems, setActivityItems] = useState<FeedItem[]>([]);
+  const [notificationItems, setNotificationItems] = useState<FeedItem[]>([]);
   const [sidebar, setSidebar]             = useState<FeedSidebarPayload>(EMPTY_SIDEBAR_PAYLOAD);
   const [recommendedUsers, setRecommendedUsers] = useState<RecommendedUser[]>([]);
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
@@ -506,6 +508,7 @@ export default function FeedPage() {
 
     const sidebarPromise = fetchFeedSidebarPayload();
     const usersPromise = getRecommendedUsers(8);
+    const notificationsPromise = fetchNotifications();
 
     try {
       const [trending, activities] = await Promise.all([
@@ -525,6 +528,23 @@ export default function FeedPage() {
       setActivityItems([]);
     } finally {
       setFeedLoading(false);
+    }
+
+    try {
+      const notifications = await notificationsPromise;
+      setNotificationItems(
+        notifications.slice(0, 8).map((item) => ({
+          id: `notif_${item.id}`,
+          type: 'notif',
+          time: item.time || 'Baru saja',
+          notifTitle: item.title,
+          notifBody: item.body,
+          avatar_url: item.avatar_url || null,
+          bookKey: item.book_id || undefined,
+        }))
+      );
+    } catch {
+      setNotificationItems([]);
     }
 
     const [payloadResult, usersResult] = await Promise.allSettled([sidebarPromise, usersPromise]);
@@ -619,7 +639,7 @@ export default function FeedPage() {
 
   // Build FEED: gabung semua sources
   const FEED: FeedItem[] = (() => {
-    const feed = [...activityItems];
+    const feed = [...activityItems, ...notificationItems];
 
     if (trendingItems.length > 0) {
       feed.splice(0, 0, trendingItems[0]);
