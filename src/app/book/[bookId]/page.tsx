@@ -454,14 +454,8 @@ export default function BookDetailPage() {
                     <Star key={s} className={cn('w-4 h-4', s <= Math.round(book.avg_rating) ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
                   ))}
                 </div>
-                <span className="text-gold font-bold">{book.avg_rating}</span>
-                <span className={cn(
-                  'text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter border',
-                  isLight ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-white/5 border-white/10 text-white/40'
-                )}>
-                  Source: Goodreads
-                </span>
-                <span className={cn('text-sm', tk.muted)}>({book.rating_count?.toLocaleString()} ulasan)</span>
+                <span className="text-gold font-bold">{Number(book.avg_rating || 0).toFixed(1)}</span>
+                <span className={cn('text-sm', tk.muted)}>({Number(book.rating_count || 0).toLocaleString()} ulasan)</span>
                 <span className={cn('text-sm', tk.muted)}>· {book.year} · {book.pages} halaman</span>
               </div>
             </div>

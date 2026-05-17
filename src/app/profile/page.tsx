@@ -24,6 +24,7 @@ import {
   toggleFollowUser,
   updateMyProfile,
 } from '@/lib/users';
+import { fetchShelfData } from '@/lib/shelf';
 import { formatRelativeTime, getMyReadingSessions } from '@/lib/reading';
 import type { RecommendedUser } from '@/types/user';
 import { getMySurvey, saveSurvey } from '@/lib/survey';
@@ -116,6 +117,7 @@ export default function ProfilePage() {
   const [draftBio,  setDraftBio]  = useState(bio);
   const [saving, setSaving] = useState(false);
   const [profileCounts, setProfileCounts] = useState({ followers: 0, following: 0, wishlist: 0 });
+  const [borrowedCount, setBorrowedCount] = useState(0);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [followingPreview, setFollowingPreview] = useState<FollowingPreviewItem[]>([]);
   const [followingUsers, setFollowingUsers] = useState<RecommendedUser[]>([]);
@@ -160,6 +162,7 @@ export default function ProfilePage() {
 
     Promise.all([
       getMyProfile(),
+      fetchShelfData(),
       getMySurvey(),
       getMyReadingSessions('reading', 20),
       getMyReadingSessions('finished', 20),
@@ -167,7 +170,7 @@ export default function ProfilePage() {
       getMyFollowingUsers(30),
       getMyFollowersUsers(30),
     ])
-      .then(([profile, survey, readingNow, finished, suggestions, following, followers]) => {
+      .then(([profile, shelfData, survey, readingNow, finished, suggestions, following, followers]) => {
         if (!active || !profile) return;
 
         setName(profile.name || 'Pembaca Pustara');
@@ -187,6 +190,8 @@ export default function ProfilePage() {
         setProfileCreatedAt(profile.created_at || null);
 
         const finishedCount = Number(profile.stats?.total_read ?? profile.total_read ?? finished.length ?? 0);
+        const borrowedCountValue = Number(shelfData?.stats?.total_borrowed ?? shelfData?.pinjaman?.length ?? 0);
+        setBorrowedCount(borrowedCountValue);
         const streak = Math.max(0, Number(profile.reading_streak ?? 0));
         const ulasan = Number(profile.stats?.reviews_written ?? finished.filter((s: any) => s.review_text || s.rating).length ?? 0);
         const streakTooltip = profile.streak_is_active
@@ -836,7 +841,7 @@ export default function ProfilePage() {
               <h2 className={cn('font-serif text-lg font-bold mb-4', tk.text)}>Pintasan</h2>
               <div className="flex flex-col gap-1.5">
                 {[
-                  { href: '/shelf',    icon: BookMarked,  label: 'Rak Buku',     sub: `${stats[0].value} buku`  },
+                  { href: '/shelf',    icon: BookMarked,  label: 'Rak Buku',     sub: `${borrowedCount} buku`    },
                   { href: '/browse',   icon: TrendingUp,  label: 'Eksplor Buku', sub: 'Temukan bacaan baru'     },
                   { href: '/settings', icon: Edit3,       label: 'Pengaturan',   sub: 'Tema & preferensi'       },
                 ].map(item => (

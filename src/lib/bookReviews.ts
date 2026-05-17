@@ -33,9 +33,7 @@ async function fetchReviewsFromApi(bookId: string): Promise<Review[] | null> {
 
       const json = await res.json();
       const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-      if (raw.length > 0) {
-        return raw.map((item: Record<string, unknown>) => normalizeReview(item));
-      }
+      return raw.map((item: Record<string, unknown>) => normalizeReview(item));
     } catch {
       // try next endpoint
     }

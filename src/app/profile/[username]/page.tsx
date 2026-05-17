@@ -40,6 +40,10 @@ function bookColor(index: number) {
   return BOOK_PALETTE[index % BOOK_PALETTE.length];
 }
 
+function resolveBookCover(book: { cover_url?: string | null; coverUrl?: string | null }) {
+  return book.cover_url || book.coverUrl || null;
+}
+
 function formatTooltipDay(dayKey?: string | null): string {
   if (!dayKey) return '-';
   const date = new Date(`${dayKey}T00:00:00Z`);
@@ -239,11 +243,12 @@ function ReadingCard({
   index,
   isLight,
 }: {
-  book: { id: string; title: string; authors: string[]; progress_percentage?: number };
+  book: { id: string; title: string; authors: string[]; progress_percentage?: number; cover_url?: string | null; coverUrl?: string | null };
   index: number;
   isLight: boolean;
 }) {
   const pct = Math.round(book.progress_percentage || 0);
+  const cover = resolveBookCover(book);
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -258,9 +263,13 @@ function ReadingCard({
             : 'bg-white/5 border-white/8 hover:border-gold/30'
         )}>
           <div className="flex items-start gap-3">
-            <div className={cn('w-8 flex-shrink-0 rounded-md bg-gradient-to-br', bookColor(index))}
-              style={{ aspectRatio: '2/3', minHeight: 48 }}
-            />
+            <div className="w-8 flex-shrink-0 rounded-md overflow-hidden" style={{ aspectRatio: '2/3', minHeight: 48 }}>
+              {cover ? (
+                <img src={cover} alt={book.title} className="w-full h-full object-cover" />
+              ) : (
+                <div className={cn('w-full h-full bg-gradient-to-br', bookColor(index))} />
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <p className={cn('text-sm font-bold leading-snug line-clamp-1 group-hover:text-gold transition-colors', isLight ? 'text-navy-900' : 'text-white')}>
                 {book.title}

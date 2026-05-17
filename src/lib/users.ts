@@ -153,7 +153,6 @@ function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
       ? {
           total_read: Number((raw.stats as Record<string, unknown>).total_read ?? 0),
           reading_streak: Number((raw.stats as Record<string, unknown>).reading_streak ?? 0),
-          borrowed_books: Number((raw.stats as Record<string, unknown>).borrowed_books ?? 0),
           reviews_written: Number((raw.stats as Record<string, unknown>).reviews_written ?? 0),
           favorite_genres: normalizeGenreStats((raw.stats as Record<string, unknown>).favorite_genres),
         }
