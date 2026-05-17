@@ -220,7 +220,7 @@ export default function PersonalizationPage() {
       <main className={cn(
         'flex flex-col flex-1 min-h-screen',
         // On mobile: full width. On desktop: constrain to readable width
-        'w-full lg:max-w-2xl xl:max-w-3xl',
+        'w-full lg:max-w-5xl xl:max-w-6xl',
       )}>
         {/* Mobile-only header */}
         <div className="lg:hidden px-6 pt-12 pb-4">

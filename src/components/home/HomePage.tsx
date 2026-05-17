@@ -24,7 +24,7 @@ import {
 import { fetchFeedSidebarPayload } from '@/lib/feed';
 import type { FeedSidebarPayload } from '@/lib/feed';
 import type { CommunityReview } from "@/types/community";
-
+import ReviewCard from '@/components/shared/ReviewCard';
 
 const REQUEST_BOOK_SUBJECT = encodeURIComponent('Request Buku Baru Pustara');
 const REQUEST_BOOK_BODY = encodeURIComponent(
@@ -471,34 +471,42 @@ function CommunitySection({
       ) : (
         <>
           <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
-            {reviews.slice(0, 5).map((r, i) => {
-              const likeKey = getCommunityReviewLikeKey(r);
-              return (
-                <CommunityCard
-                  key={likeKey || i}
-                  review={r}
-                  index={i}
-                  isLight={isLight}
-                  liked={Boolean(likedCommunityIds[likeKey])}
-                  onLike={() => onToggleLike(r)}
-                />
-              );
-            })}
+           {reviews.slice(0, 5).map((r, i) => (
+            <ReviewCard
+              key={r.review_id || r.key}
+              reviewId={r.review_id}
+              name={r.user}
+              avatarUrl={r.avatar_url}
+              rating={r.rating}
+              text={r.text}
+              initialLikes={r.likes}
+              time={r.time}
+              bookTitle={r.book}
+              bookAuthor={r.author}
+              bookCoverUrl={r.cover_url}
+              bookId={r.key}
+              index={i}
+            />
+          ))}
           </div>
           <div className="hidden lg:grid grid-cols-3 gap-3">
-            {reviews.slice(0, 8).map((r, i) => {
-              const likeKey = getCommunityReviewLikeKey(r);
-              return (
-                <CommunityCard
-                  key={likeKey || i}
-                  review={r}
-                  index={i}
-                  isLight={isLight}
-                  liked={Boolean(likedCommunityIds[likeKey])}
-                  onLike={() => onToggleLike(r)}
-                />
-              );
-            })}
+            {reviews.slice(0, 8).map((r, i) => (
+              <ReviewCard
+                key={r.review_id || r.key}
+                reviewId={r.review_id}
+                name={r.user}
+                avatarUrl={r.avatar_url}
+                rating={r.rating}
+                text={r.text}
+                initialLikes={r.likes}
+                time={r.time}
+                bookTitle={r.book}
+                bookAuthor={r.author}
+                bookCoverUrl={r.cover_url}
+                bookId={r.key}
+                index={i}
+              />
+            ))}
           </div>
         </>
       )}
