@@ -10,6 +10,7 @@ import {
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import AvatarImage from '@/components/shared/AvatarImage';
+import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import AvatarUploadDialog from '@/components/profile/AvatarUploadDialog';
 import { auth } from '@/lib/firebase';
 import Link from 'next/link';
@@ -109,12 +110,13 @@ export default function ProfilePage() {
   const isLight   = theme === 'light';
 
   const [editing,   setEditing]   = useState(false);
-  const [name,      setName]      = useState(user?.displayName || 'Pembaca Pustara');
-  const [bio,       setBio]       = useState('Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
+  const [name,      setName]      = useState('');
+  const [bio,       setBio]       = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [draftName, setDraftName] = useState(name);
-  const [draftBio,  setDraftBio]  = useState(bio);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [draftName, setDraftName] = useState('');
+  const [draftBio,  setDraftBio]  = useState('');
   const [saving, setSaving] = useState(false);
   const [profileCounts, setProfileCounts] = useState({ followers: 0, following: 0, wishlist: 0 });
   const [borrowedCount, setBorrowedCount] = useState(0);
@@ -152,10 +154,6 @@ export default function ProfilePage() {
   }
 
   useEffect(() => { document.title = 'Pustara | Profil'; }, []);
-  useEffect(() => {
-    setName(user?.displayName || 'Pembaca Pustara');
-    setDraftName(user?.displayName || 'Pembaca Pustara');
-  }, [user]);
 
   useEffect(() => {
     let active = true;
@@ -173,10 +171,12 @@ export default function ProfilePage() {
       .then(([profile, shelfData, survey, readingNow, finished, suggestions, following, followers]) => {
         if (!active || !profile) return;
 
-        setName(profile.name || 'Pembaca Pustara');
-        setDraftName(profile.name || 'Pembaca Pustara');
-        setBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
-        setDraftBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
+        const resolvedName = String(profile.name ?? profile.username ?? '').trim();
+        const resolvedBio = String(profile.bio ?? '').trim();
+        setName(resolvedName);
+        setDraftName(resolvedName);
+        setBio(resolvedBio);
+        setDraftBio(resolvedBio);
         console.log('[DEBUG] profile page fetched profile:', { avatar_url: profile.avatar_url });
         setAvatarUrl(profile.avatar_url || null);
         console.log('[DEBUG] profile page set avatarUrl to:', profile.avatar_url || null);
@@ -290,6 +290,11 @@ export default function ProfilePage() {
       })
       .catch(() => {
         // keep local fallback
+      })
+      .finally(() => {
+        if (active) {
+          setProfileLoading(false);
+        }
       });
 
     return () => {
@@ -297,12 +302,21 @@ export default function ProfilePage() {
     };
   }, []);
 
-  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const email = user?.email || 'user@email.com';
-  const joinDate = profileCreatedAt
-    ? `Bergabung ${new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(profileCreatedAt))}`
-    : 'Bergabung';
-  const usernameLabel = profileUsername ? `@${profileUsername}` : '';
+  const safeName = name.trim();
+  const initials = safeName
+    ? safeName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : '';
+  const profileMetaLine = [
+    profileUsername ? `@${profileUsername}` : '',
+    user?.email || '',
+    profileCreatedAt
+      ? `Bergabung ${new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(profileCreatedAt))}`
+      : '',
+  ].filter(Boolean).join(' · ');
+
+  if (profileLoading) {
+    return <PageSkeleton />;
+  }
 
   async function saveEdit() {
     if (saving) return;
@@ -502,16 +516,16 @@ export default function ProfilePage() {
                 ) : (
                   <motion.div key="view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <div className="flex items-start gap-3 flex-wrap">
-                      <h1 className={cn('font-serif text-2xl lg:text-3xl font-black', tk.text)}>{name}</h1>
+                      {safeName ? (
+                        <h1 className={cn('font-serif text-2xl lg:text-3xl font-black', tk.text)}>{safeName}</h1>
+                      ) : null}
                       <button onClick={() => setEditing(true)}
                         className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all mt-1', tk.chip, 'hover:border-gold/40 hover:text-gold')}>
                         <Edit3 className="w-3 h-3" /> Edit Profil
                       </button>
                     </div>
-                    <p className={cn('text-sm mt-1 max-w-md', tk.muted)}>{bio}</p>
-                    <p className={cn('text-xs mt-2', tk.muted)}>
-                      {[usernameLabel, email, joinDate].filter(Boolean).join(' · ')}
-                    </p>
+                    {bio ? <p className={cn('text-sm mt-1 max-w-md', tk.muted)}>{bio}</p> : null}
+                    {profileMetaLine ? <p className={cn('text-xs mt-2', tk.muted)}>{profileMetaLine}</p> : null}
                   </motion.div>
                 )}
               </AnimatePresence>
