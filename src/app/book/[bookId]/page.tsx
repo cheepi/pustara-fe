@@ -125,17 +125,46 @@ export default function BookDetailPage() {
     async function fetchReviews() {
       try {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-        const response = await fetch(
-          `${apiBase.replace(/\/$/, '')}/books/${book?.id}/reviews?limit=5`
-        );
+        console.log('[BOOK DETAIL] book object:', { id: book?.id, title: book?.title, idType: typeof book?.id });
+        
+        if (!book?.id) {
+          console.warn('[BOOK DETAIL] ABORT: book.id is empty or undefined');
+          setReviews([]);
+          return;
+        }
+        
+        const endpoint = `${apiBase.replace(/\/$/, '')}/books/${book.id}/reviews?limit=5`;
+        console.log('[BOOK DETAIL] Fetching reviews from:', endpoint);
+        const response = await fetch(endpoint);
         const data = await response.json();
-        if (data.success) setReviews(data.data);
+        console.log('[BOOK DETAIL] FULL RESPONSE:', data);
+        console.log('[BOOK DETAIL] response.ok:', response.ok, 'status:', response.status);
+        console.log('[BOOK DETAIL] data.success:', data.success);
+        console.log('[BOOK DETAIL] data.data:', data.data);
+        console.log('[BOOK DETAIL] Array.isArray(data.data):', Array.isArray(data.data));
+        console.log('[BOOK DETAIL] data.data?.length:', data.data?.length);
+        
+        if (data.success && Array.isArray(data.data)) {
+          console.log('[BOOK DETAIL] SUCCESS - Setting reviews with count:', data.data.length);
+          if (data.data.length === 0) {
+            console.warn('[BOOK DETAIL] WARNING: Empty array received from API!');
+          }
+          data.data.forEach((r: any, idx: number) => {
+            console.log(`[BOOK DETAIL] REVIEW ${idx}:`, { id: r.id, rating: r.rating, textLen: String(r.text || '').length, hasAvatar: !!r.avatar_url });
+          });
+          setReviews(data.data);
+        } else {
+          console.warn('[BOOK DETAIL] FAILED - Invalid response format:', { success: data.success, isArray: Array.isArray(data.data), data });
+          setReviews([]);
+        }
       } catch (error) {
-        console.error('Failed to fetch reviews:', error);
+        console.error('[BOOK DETAIL] EXCEPTION - Failed to fetch reviews:', error);
+        setReviews([]);
       }
     }
 
     if (book?.id) {
+      console.log('[BOOK DETAIL] useEffect triggered for book:', book.id);
       fetchReviews();
     }
   }, [book?.id]);
@@ -522,20 +551,29 @@ export default function BookDetailPage() {
 
               <div className="flex flex-col gap-3">
                 {reviews.length > 0 ? (
-                  reviews.slice(0, 5).map((r, i) => (
-                    <ReviewCard
-                      key={r.id || i}
-                      reviewId={r.id}
-                      name={r.name}
-                      avatarUrl={r.avatar_url}
-                      rating={r.rating}
-                      text={r.text}
-                      initialLikes={r.likes}
-                      time={r.time}
-                      loc={r.loc}
-                      index={i}
-                    />
-                  ))
+                  reviews.slice(0, 5).map((r: any, i: number) => {
+                    console.log(`BOOK REVIEW ${i} MAPPED:`, { 
+                      id: r.id, 
+                      name: r.name, 
+                      rating: r.rating, 
+                      textLength: r.text?.length || 0,
+                      avatarUrl: !!r.avatar_url,
+                    });
+                    return (
+                      <ReviewCard
+                        key={r.id || i}
+                        reviewId={r.id}
+                        name={r.name || 'Anonim'}
+                        avatarUrl={r.avatar_url || null}
+                        rating={r.rating || 0}
+                        text={r.text || r.body || r.review_text || ''}
+                        initialLikes={r.likes || 0}
+                        time={r.time}
+                        loc={r.loc || '-'}
+                        index={i}
+                      />
+                    );
+                  })
                 ) : (
                   <div
                     className={cn(

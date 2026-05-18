@@ -32,31 +32,46 @@ async function fetchReviewsFromApi(bookId: string): Promise<Review[] | null> {
       if (!res.ok) continue;
 
       const json = await res.json();
+      console.log('[BookReviews] API response:', { endpoint, hasData: !!json?.data, dataLength: json?.data?.length || 0 });
       const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
       if (raw.length > 0) {
-        return raw.map((item: Record<string, unknown>) => normalizeReview(item));
+        const normalized = raw.map((item: Record<string, unknown>, idx: number) => {
+          const review = normalizeReview(item);
+          if (idx < 2) console.log('[BookReviews] Normalized review:', { id: review.id, rating: review.rating, textLength: review.text?.length });
+          return review;
+        });
+        console.log('[BookReviews] Normalized:', normalized.length, 'reviews from', endpoint);
+        return normalized;
       }
-    } catch {
+    } catch (error) {
+      console.warn('[BookReviews] Endpoint failed:', endpoint, error);
       // try next endpoint
     }
   }
 
+  console.warn('[BookReviews] All endpoints failed, returning null');
   return null;
 }
 
 export async function fetchBookReviewData(bookId: string): Promise<{ meta: BookDetail | null; reviews: Review[] }> {
   const meta = await fetchBookById(bookId);
+  console.log('[BookReviews] Fetching review data for:', bookId);
   const apiReviews = await fetchReviewsFromApi(bookId);
+  
   if (meta && apiReviews) {
+    console.log('[BookReviews] Using API reviews:', apiReviews.length);
     return { meta, reviews: apiReviews };
   }
 
   if (meta?.reviews && meta.reviews.length > 0) {
+    console.log('[BookReviews] Using embedded reviews from book:', meta.reviews.length);
     return { meta, reviews: meta.reviews };
   }
 
   const fallbackMeta = meta ?? DUMMY_BOOKS[bookId] ?? DUMMY_BOOKS.d1;
   const fallbackReviews = DUMMY_REVIEWS_BY_BOOK[bookId] ?? fallbackMeta.reviews ?? [];
+
+  console.log('[BookReviews] Using fallback:', { hasApiReviews: !!apiReviews, hasEmbedded: !!meta?.reviews?.length, fallbackCount: fallbackReviews.length });
 
   return {
     meta: fallbackMeta,

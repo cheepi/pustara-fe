@@ -32,6 +32,14 @@ export default function ReviewsPage() {
   useEffect(() => {
     fetchBookReviewData(bookKey)
       .then(({ meta, reviews }) => {
+        console.log('[REVIEWS PAGE] Data loaded:', { bookKey, reviewCount: reviews.length });
+        reviews.slice(0, 3).forEach((r: any, idx: number) => {
+          console.log(`[REVIEWS PAGE] Review ${idx}:`, { 
+            id: r.id, 
+            rating: r.rating, 
+            textLength: r.text?.length || r.body?.length || 0 
+          });
+        });
         setMeta(meta);
         setReviews(reviews);
       })
