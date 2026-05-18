@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
+import { updateProfile as updateFirebaseProfile } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, Star, Flame, TrendingUp, Heart,
@@ -9,7 +10,9 @@ import {
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import AvatarImage from '@/components/shared/AvatarImage';
+import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import AvatarUploadDialog from '@/components/profile/AvatarUploadDialog';
+import { auth } from '@/lib/firebase';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useAuthStore } from '@/store/authStore';
@@ -22,6 +25,7 @@ import {
   toggleFollowUser,
   updateMyProfile,
 } from '@/lib/users';
+import { fetchShelfData } from '@/lib/shelf';
 import { formatRelativeTime, getMyReadingSessions } from '@/lib/reading';
 import type { RecommendedUser } from '@/types/user';
 import { getMySurvey, saveSurvey } from '@/lib/survey';
@@ -85,6 +89,7 @@ type ActivityItem = {
 
 type FollowingPreviewItem = {
   id: string;
+  username: string | null;
   name: string;
   avatar_url: string | null;
   books: number;
@@ -101,18 +106,20 @@ type ProfileStatItem = {
 
 export default function ProfilePage() {
   const { theme } = useTheme();
-  const { user, setProfileCache }  = useAuthStore();
+  const { user }  = useAuthStore();
   const isLight   = theme === 'light';
 
   const [editing,   setEditing]   = useState(false);
-  const [name,      setName]      = useState(user?.displayName || 'Pembaca Pustara');
-  const [bio,       setBio]       = useState('Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
+  const [name,      setName]      = useState('');
+  const [bio,       setBio]       = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
-  const [draftName, setDraftName] = useState(name);
-  const [draftBio,  setDraftBio]  = useState(bio);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [draftName, setDraftName] = useState('');
+  const [draftBio,  setDraftBio]  = useState('');
   const [saving, setSaving] = useState(false);
   const [profileCounts, setProfileCounts] = useState({ followers: 0, following: 0, wishlist: 0 });
+  const [borrowedCount, setBorrowedCount] = useState(0);
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
   const [followingPreview, setFollowingPreview] = useState<FollowingPreviewItem[]>([]);
   const [followingUsers, setFollowingUsers] = useState<RecommendedUser[]>([]);
@@ -147,16 +154,13 @@ export default function ProfilePage() {
   }
 
   useEffect(() => { document.title = 'Pustara | Profil'; }, []);
-  useEffect(() => {
-    setName(user?.displayName || 'Pembaca Pustara');
-    setDraftName(user?.displayName || 'Pembaca Pustara');
-  }, [user]);
 
   useEffect(() => {
     let active = true;
 
     Promise.all([
       getMyProfile(),
+      fetchShelfData(),
       getMySurvey(),
       getMyReadingSessions('reading', 20),
       getMyReadingSessions('finished', 20),
@@ -164,20 +168,15 @@ export default function ProfilePage() {
       getMyFollowingUsers(30),
       getMyFollowersUsers(30),
     ])
-      .then(([profile, survey, readingNow, finished, suggestions, following, followers]) => {
+      .then(([profile, shelfData, survey, readingNow, finished, suggestions, following, followers]) => {
         if (!active || !profile) return;
 
-        setProfileCache({
-          uid: user?.uid || profile.id,
-          displayName: profile.display_name || profile.name || user?.displayName || 'Pembaca Pustara',
-          avatarUrl: profile.avatar_url || user?.photoURL || null,
-          email: profile.email || user?.email || null,
-        });
-
-        setName(profile.name || 'Pembaca Pustara');
-        setDraftName(profile.name || 'Pembaca Pustara');
-        setBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
-        setDraftBio(profile.bio || 'Pecinta sastra Indonesia 📚 | Membaca adalah perjalanan tanpa batas.');
+        const resolvedName = String(profile.name ?? profile.username ?? '').trim();
+        const resolvedBio = String(profile.bio ?? '').trim();
+        setName(resolvedName);
+        setDraftName(resolvedName);
+        setBio(resolvedBio);
+        setDraftBio(resolvedBio);
         console.log('[DEBUG] profile page fetched profile:', { avatar_url: profile.avatar_url });
         setAvatarUrl(profile.avatar_url || null);
         console.log('[DEBUG] profile page set avatarUrl to:', profile.avatar_url || null);
@@ -191,6 +190,8 @@ export default function ProfilePage() {
         setProfileCreatedAt(profile.created_at || null);
 
         const finishedCount = Number(profile.stats?.total_read ?? profile.total_read ?? finished.length ?? 0);
+        const borrowedCountValue = Number(shelfData?.stats?.total_borrowed ?? shelfData?.pinjaman?.length ?? 0);
+        setBorrowedCount(borrowedCountValue);
         const streak = Math.max(0, Number(profile.reading_streak ?? 0));
         const ulasan = Number(profile.stats?.reviews_written ?? finished.filter((s: any) => s.review_text || s.rating).length ?? 0);
         const streakTooltip = profile.streak_is_active
@@ -275,6 +276,7 @@ export default function ProfilePage() {
             const displayName = item.display_name?.trim() || item.name?.trim() || item.username?.trim() || 'Pustara User';
             return {
               id: item.id,
+              username: item.username ?? null,
               name: displayName,
               avatar_url: item.avatar_url || null,
               books: Number(item.total_read ?? 0),
@@ -288,6 +290,11 @@ export default function ProfilePage() {
       })
       .catch(() => {
         // keep local fallback
+      })
+      .finally(() => {
+        if (active) {
+          setProfileLoading(false);
+        }
       });
 
     return () => {
@@ -295,12 +302,21 @@ export default function ProfilePage() {
     };
   }, []);
 
-  const initials = name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-  const email = user?.email || 'user@email.com';
-  const joinDate = profileCreatedAt
-    ? `Bergabung ${new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(profileCreatedAt))}`
-    : 'Bergabung';
-  const usernameLabel = profileUsername ? `@${profileUsername}` : '';
+  const safeName = name.trim();
+  const initials = safeName
+    ? safeName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
+    : '';
+  const profileMetaLine = [
+    profileUsername ? `@${profileUsername}` : '',
+    user?.email || '',
+    profileCreatedAt
+      ? `Bergabung ${new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date(profileCreatedAt))}`
+      : '',
+  ].filter(Boolean).join(' · ');
+
+  if (profileLoading) {
+    return <PageSkeleton />;
+  }
 
   async function saveEdit() {
     if (saving) return;
@@ -312,10 +328,20 @@ export default function ProfilePage() {
         bio: draftBio,
       });
 
+      const finalName = updated?.name || draftName;
+
+      if (auth.currentUser && finalName) {
+        try {
+          await updateFirebaseProfile(auth.currentUser, { displayName: finalName });
+        } catch (error) {
+          console.warn('[profile] update Firebase Auth displayName gagal:', error);
+        }
+      }
+
       if (updated) {
-        setName(updated.name || draftName);
+        setName(finalName);
         setBio(updated.bio || draftBio);
-        setDraftName(updated.name || draftName);
+        setDraftName(finalName);
         setDraftBio(updated.bio || draftBio);
       } else {
         setName(draftName);
@@ -490,16 +516,16 @@ export default function ProfilePage() {
                 ) : (
                   <motion.div key="view" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                     <div className="flex items-start gap-3 flex-wrap">
-                      <h1 className={cn('font-serif text-2xl lg:text-3xl font-black', tk.text)}>{name}</h1>
+                      {safeName ? (
+                        <h1 className={cn('font-serif text-2xl lg:text-3xl font-black', tk.text)}>{safeName}</h1>
+                      ) : null}
                       <button onClick={() => setEditing(true)}
                         className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all mt-1', tk.chip, 'hover:border-gold/40 hover:text-gold')}>
                         <Edit3 className="w-3 h-3" /> Edit Profil
                       </button>
                     </div>
-                    <p className={cn('text-sm mt-1 max-w-md', tk.muted)}>{bio}</p>
-                    <p className={cn('text-xs mt-2', tk.muted)}>
-                      {[usernameLabel, email, joinDate].filter(Boolean).join(' · ')}
-                    </p>
+                    {bio ? <p className={cn('text-sm mt-1 max-w-md', tk.muted)}>{bio}</p> : null}
+                    {profileMetaLine ? <p className={cn('text-xs mt-2', tk.muted)}>{profileMetaLine}</p> : null}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -806,11 +832,11 @@ export default function ProfilePage() {
                       <p className={cn('text-sm font-semibold', tk.text)}>{f.name}</p>
                       <p className={cn('text-xs', tk.muted)}>{f.books} buku dibaca</p>
                     </div>
-                    <button
-                      onClick={() => openModal('following')}
+                    <Link
+                      href={`/profile/@${f.username || f.id}`}
                       className={cn('flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-semibold border transition-all', tk.chip, 'hover:border-gold/40 hover:text-gold')}>
                       Profil
-                    </button>
+                    </Link>
                   </motion.div>
                 ))}
               </div>
@@ -829,7 +855,7 @@ export default function ProfilePage() {
               <h2 className={cn('font-serif text-lg font-bold mb-4', tk.text)}>Pintasan</h2>
               <div className="flex flex-col gap-1.5">
                 {[
-                  { href: '/shelf',    icon: BookMarked,  label: 'Rak Buku',     sub: `${stats[0].value} buku`  },
+                  { href: '/shelf',    icon: BookMarked,  label: 'Rak Buku',     sub: `${borrowedCount} buku`    },
                   { href: '/browse',   icon: TrendingUp,  label: 'Eksplor Buku', sub: 'Temukan bacaan baru'     },
                   { href: '/settings', icon: Edit3,       label: 'Pengaturan',   sub: 'Tema & preferensi'       },
                 ].map(item => (

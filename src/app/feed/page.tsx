@@ -20,6 +20,7 @@ import type { AiRecommendation } from '@/types/ai';
 import type { FeedItem } from '@/types/feed';
 import type { RecommendedUser } from '@/types/user';
 import { fetchFeedActivities, fetchFeedSidebarPayload, fetchTrendingFeedItems, type FeedSidebarPayload } from '@/lib/feed';
+import { fetchNotifications } from '@/lib/notifications';
 import { getRecommendedUsers, toggleFollowUser } from '@/lib/users';
 import { useSimilarUsers } from '@/hooks/useSimilarUsers';
 import { toggleReviewLike, getReviewLikeStatus } from '@/lib/reviewLikes';
@@ -112,24 +113,22 @@ function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark:
         {actorProfileHref ? (
           <Link href={actorProfileHref}
             aria-label={`Buka profil ${item.user || 'user'}`}>
-            <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-              <AvatarImage 
-                src={item.avatar_url || null}
-                alt={item.user || 'User avatar'}
-                initials={initials}
-                size="sm"
-              />
-            </div>
-          </Link>
-        ) : (
-          <div className="w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
             <AvatarImage 
               src={item.avatar_url || null}
               alt={item.user || 'User avatar'}
               initials={initials}
               size="sm"
+              className="w-10 h-10 rounded-2xl flex-shrink-0"
             />
-          </div>
+          </Link>
+        ) : (
+          <AvatarImage 
+            src={item.avatar_url || null}
+            alt={item.user || 'User avatar'}
+            initials={initials}
+            size="sm"
+            className="w-10 h-10 rounded-2xl flex-shrink-0"
+          />
         )}
         <div className="flex-1 min-w-0">
           {actorProfileHref ? (
@@ -471,6 +470,7 @@ export default function FeedPage() {
   const [loadingMore, setLoadingMore]     = useState(false);
   const [trendingItems, setTrendingItems] = useState<FeedItem[]>([]);
   const [activityItems, setActivityItems] = useState<FeedItem[]>([]);
+  const [notificationItems, setNotificationItems] = useState<FeedItem[]>([]);
   const [sidebar, setSidebar]             = useState<FeedSidebarPayload>(EMPTY_SIDEBAR_PAYLOAD);
   const [recommendedUsers, setRecommendedUsers] = useState<RecommendedUser[]>([]);
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
@@ -518,6 +518,7 @@ export default function FeedPage() {
 
     const sidebarPromise = fetchFeedSidebarPayload();
     const usersPromise = getRecommendedUsers(8);
+    const notificationsPromise = fetchNotifications();
 
     try {
       const [trending, activities] = await Promise.all([
@@ -543,6 +544,23 @@ export default function FeedPage() {
       setActivityItems([]);
     } finally {
       setFeedLoading(false);
+    }
+
+    try {
+      const notifications = await notificationsPromise;
+      setNotificationItems(
+        notifications.slice(0, 8).map((item) => ({
+          id: `notif_${item.id}`,
+          type: 'notif',
+          time: item.time || 'Baru saja',
+          notifTitle: item.title,
+          notifBody: item.body,
+          avatar_url: item.avatar_url || null,
+          bookKey: item.book_id || undefined,
+        }))
+      );
+    } catch {
+      setNotificationItems([]);
     }
 
     const [payloadResult, usersResult] = await Promise.allSettled([sidebarPromise, usersPromise]);
@@ -669,7 +687,7 @@ export default function FeedPage() {
 
   // Build FEED: gabung semua sources
   const FEED: FeedItem[] = (() => {
-    const feed = [...activityItems];
+    const feed = [...activityItems, ...notificationItems];
 
     if (trendingItems.length > 0) {
       feed.splice(0, 0, trendingItems[0]);
@@ -768,16 +786,13 @@ export default function FeedPage() {
                 ) : (
                   <>
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 rounded-2xl border border-gold/40 flex-shrink-0 overflow-hidden">
-                        <div className="w-full h-full rounded-2xl overflow-hidden">
-                          <AvatarImage
-                            src={sidebar.profile.avatar_url || null}
-                            alt={sidebar.profile.name || 'User avatar'}
-                            initials={sidebar.profile.initials}
-                            size="md"
-                          />
-                        </div>
-                      </div>
+                      <AvatarImage
+                        src={sidebar.profile.avatar_url || null}
+                        alt={sidebar.profile.name || 'User avatar'}
+                        initials={sidebar.profile.initials}
+                        size="md"
+                        className="w-12 h-12 rounded-2xl border border-gold/40 flex-shrink-0"
+                      />
                       <div>
                         <p className={cn('font-semibold text-sm', tk.text)}>{sidebar.profile.name}</p>
                         <p className={cn('text-xs max-w-[180px] truncate', tk.muted)} title={sidebar.profile.subtitle}>{sidebar.profile.subtitle}</p>
@@ -1013,15 +1028,13 @@ export default function FeedPage() {
 
                     return (
                     <div key={u.id} className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-full overflow-hidden flex-shrink-0">
-                        <AvatarImage
-                          src={u.avatar_url}
-                          alt={displayName}
-                          initials={initials}
-                          size="sm"
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
+                      <AvatarImage
+                        src={u.avatar_url}
+                        alt={displayName}
+                        initials={initials}
+                        size="sm"
+                        className="w-9 h-9 rounded-2xl flex-shrink-0"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className={cn('text-sm font-semibold truncate', tk.text)} title={displayName}>{displayName}</p>
                         <p className={cn('text-xs truncate', tk.muted)} title={`@${u.username || 'pustara_user'} · ${u.followers_count} pengikut`}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>
