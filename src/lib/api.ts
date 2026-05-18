@@ -19,10 +19,12 @@ function clearAuthCache() {
 }
 
 async function resolveCurrentUser(): Promise<User | null> {
-  if (auth.currentUser) return auth.currentUser;
+  const currentAuth = auth;
+  if (!currentAuth) return null;
+  if (currentAuth.currentUser) return currentAuth.currentUser;
 
   return new Promise<User | null>((resolve) => {
-    const unsubscribe = auth.onAuthStateChanged((user) => {
+    const unsubscribe = currentAuth.onAuthStateChanged((user) => {
       unsubscribe();
       resolve(user);
     });
@@ -55,6 +57,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 }
 
 async function getOptionalAuthHeader(): Promise<Record<string, string>> {
+  if (!auth) return {};
   const user = auth.currentUser;
   if (!user) return {};
 

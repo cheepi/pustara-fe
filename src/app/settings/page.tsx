@@ -26,6 +26,10 @@ export default function SettingsPage() {
   }
 
   async function handleLogout() {
+    if (!auth) {
+      router.replace('/catalog');
+      return;
+    }
     await signOut(auth);
     router.replace('/catalog');
   }

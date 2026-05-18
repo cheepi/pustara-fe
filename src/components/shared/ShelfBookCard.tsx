@@ -53,7 +53,7 @@ export function ShelfBookCard({
               : 'bg-rose-500/85 text-white border-rose-300/60'
           )}
         >
-          {isAvailable ? 'Available' : 'Tidak tersedia'}
+          {isAvailable ? 'Available' : 'Unavailable'}
         </div>
       </motion.div>
 

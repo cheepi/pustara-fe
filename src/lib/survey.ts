@@ -24,6 +24,7 @@ async function getAuthHeaderFromToken(token?: string): Promise<Record<string, st
     return { Authorization: `Bearer ${token}` };
   }
 
+  if (!auth) return {};
   const user = auth.currentUser;
   if (!user) return {};
 

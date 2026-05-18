@@ -49,6 +49,67 @@ export default function RegisterPage() {
   const usernameCheckCache = useRef<Map<string, { available: boolean; message: string }>>(new Map());
   const usernameCheckSeq = useRef(0);
   const { token: captchaToken, error: captchaError, captchaRef, reset: resetCaptcha } = useCaptcha();
+    const [stats, setStats] = useState({
+    totalBooks: 10000,
+    readers: 50000,
+    rating: 4.8,
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadStats() {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const base = apiBase.replace(/\/$/, '');
+
+      try {
+        const [booksRes, communityRes, recentRes] = await Promise.all([
+          fetch(`${base}/books?limit=1`),
+          fetch(`${base}/reviews/stats`),
+          fetch(`${base}/books/recent?limit=20`),
+        ]);
+
+        const booksJson = booksRes.ok ? await booksRes.json() : null;
+        const communityJson = communityRes.ok ? await communityRes.json() : null;
+        const recentJson = recentRes.ok ? await recentRes.json() : null;
+
+        if (!active) return;
+
+        const totalBooks = Number(
+          booksJson?.pagination?.total
+          ?? booksJson?.pagination?.total_items
+          ?? booksJson?.data?.length
+          ?? 0
+        );
+        const readers = Number(
+          communityJson?.data?.raw?.total_readers
+          ?? communityJson?.data?.readers
+          ?? 0
+        );
+        const recentBooks = Array.isArray(recentJson?.data) ? recentJson.data : [];
+        const ratingValues = recentBooks
+          .map((book: Record<string, unknown>) => Number(book.avg_rating ?? book.rating ?? 0))
+          .filter((value: number) => Number.isFinite(value) && value > 0);
+        const rating = ratingValues.length > 0
+          ? ratingValues.reduce((sum: number, value: number) => sum + value, 0) / ratingValues.length
+          : 0;
+
+        setStats((current) => ({
+          totalBooks: totalBooks > 0 ? totalBooks : current.totalBooks,
+          readers: readers > 0 ? readers : current.readers,
+          rating: rating > 0 ? Number(rating.toFixed(1)) : current.rating,
+        }));
+      } catch {
+        // Keep fallback values if public stats endpoints are unavailable.
+      }
+    }
+
+    void loadStats();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const normalized = username
@@ -107,6 +168,7 @@ export default function RegisterPage() {
     if (usernameStatus === 'unavailable') { setError(usernameHint || 'Username tidak tersedia.'); return; }
     if (password !== confirm) { setError('Kata sandi tidak cocok.'); return; }
     if (password.length < 6)  { setError('Kata sandi minimal 6 karakter.'); return; }
+    if (!auth) { setError('Layanan autentikasi belum siap. Muat ulang halaman.'); return; }
     setLoading(true);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -151,6 +213,10 @@ export default function RegisterPage() {
   async function handleGoogle() {
     if (!captchaToken) {
       setError('Verifikasi CAPTCHA diperlukan sebelum melanjutkan dengan Google.');
+      return;
+    }
+    if (!auth) {
+      setError('Layanan autentikasi belum siap. Muat ulang halaman.');
       return;
     }
     setError(''); setLoading(true);
@@ -258,15 +324,23 @@ export default function RegisterPage() {
               Bergabung dengan ribuan pembaca Indonesia di Pustara.
             </motion.p>
           </div>
+          
           <motion.div className="flex gap-8 mb-10"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-            {[['10K+','Judul Buku'],['500+','Penulis'],['50K+','Pembaca']].map(([v,l]) => (
-              <div key={l}>
-                <div className="font-serif text-2xl font-black text-gold">{v}</div>
-                <div className="text-slate-500 text-xs mt-0.5">{l}</div>
+            {[
+              [stats.totalBooks, 'Judul Buku'],
+              [stats.readers, 'Pembaca'],
+              [stats.rating, 'Rating'],
+            ].map(([value, label]) => (
+              <div key={label}>
+                <div className="font-serif text-2xl font-black text-gold">
+                  {typeof value === 'number' && value < 100 ? value.toFixed(label === 'Rating' ? 1 : 0) : Number(value).toLocaleString('id-ID')}{label === 'Rating' ? '' : '+'}
+                </div>
+                <div className="text-slate-500 text-xs mt-0.5">{label}</div>
               </div>
             ))}
           </motion.div>
+
           <motion.div className="p-4 bg-white/5 border border-white/10 rounded-2xl max-w-xs backdrop-blur-sm"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}>
             <div className="flex gap-0.5 mb-2">

@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { supabase, isSupabaseConfigured } from './supabase';
 import { updateMyProfile } from './users';
 
 interface UploadResult {
@@ -23,6 +23,13 @@ export async function uploadAvatarToSupabase(
   userId: string
 ): Promise<UploadResult> {
   try {
+    if (!isSupabaseConfigured || !supabase) {
+      return {
+        success: false,
+        error: 'Supabase belum dikonfigurasi di environment production.',
+      };
+    }
+
     // ─────────────────────────────────────────────────────────────
     // 1. Validate file
     // ─────────────────────────────────────────────────────────────

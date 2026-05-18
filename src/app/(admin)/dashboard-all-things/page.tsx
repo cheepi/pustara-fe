@@ -82,7 +82,7 @@ function downloadCsv(filename: string, rows: string[][]) {
 export default function AdminDashboardAllThings() {
   const { theme } = useTheme();
   const dark = theme === 'dark';
-  const firstName = auth.currentUser?.displayName?.split(' ')?.[0] || 'Admin';
+  const firstName = auth?.currentUser?.displayName?.split(' ')?.[0] || 'Admin';
   const [categoryFilter, setCategoryFilter] = useState('Semua Kategori');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);

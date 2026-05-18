@@ -1,11 +1,11 @@
 'use client';
  
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, RefreshCw, AlertTriangle, Trash2, Pencil, X, Plus,
   Search, Check, Upload, ToggleLeft, ToggleRight, ChevronLeft,
-  ChevronRight, BookMarked, Star,
+  ChevronRight, BookMarked, Star, Eye,
   FileText, Loader,
 } from 'lucide-react';
 import { auth } from '@/lib/firebase';
@@ -171,8 +171,8 @@ function BookModal({
       const genresArr = form.genres.split(',').map(g => g.trim()).filter(Boolean);
       const payload = {
         title: form.title.trim(),
-        authors: `{${authorsArr.map(a => `"${a}"`).join(',')}}`,
-        genres: `{${genresArr.map(g => `"${g}"`).join(',')}}`,
+        authors: authorsArr,
+        genres: genresArr,
         description: form.description.trim(),
         year: form.year.trim(),
         pages: form.pages.trim(),
@@ -224,35 +224,40 @@ function BookModal({
         return;
       }
  
-      const formData = new FormData();
-      formData.append('title', payload.title);
-      formData.append('authors', payload.authors);
-      formData.append('genres', payload.genres);
-
-      if (payload.description) formData.append('description', payload.description);
-      if (payload.year) formData.append('year', payload.year);
-      if (payload.pages) formData.append('pages', payload.pages);
-      if (payload.isbn) formData.append('isbn', payload.isbn);
-      formData.append('language', payload.language);
-      formData.append('total_stock', form.total_stock);
-      formData.append('available', form.available);
-      formData.append('is_active', String(form.is_active));
-      if (file) formData.append('bookFile', file);
- 
-      const url = isEdit ? `${API}/admin/books/${book.id}` : `${API}/admin/books`;
-      const method = isEdit ? 'PUT' : 'POST';
- 
-      const res = await fetch(url, {
-        method,
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
+      // Edit mode: update metadata first
+      const updateRes = await fetch(`${API}/admin/books/${book.id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
       });
- 
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.message || `Gagal ${isEdit ? 'memperbarui' : 'menambah'} buku`);
+
+      if (!updateRes.ok) {
+        const d = await updateRes.json().catch(() => ({}));
+        throw new Error(d.message || 'Gagal memperbarui buku');
       }
- 
+
+      // If file is provided, upload it and update file_url
+      if (file && book.id) {
+        const fileUrlToSend = await uploadPdfFile(file, book.id);
+
+        const fileUpdateRes = await fetch(`${API}/admin/books/${book.id}`, {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ file_url: fileUrlToSend }),
+        });
+
+        if (!fileUpdateRes.ok) {
+          const d = await fileUpdateRes.json().catch(() => ({}));
+          throw new Error(d.message || 'Gagal update file PDF');
+        }
+      }
+
       onSaved();
       onClose();
     } catch (e) {
@@ -269,7 +274,7 @@ function BookModal({
         animate={{ opacity: 1, scale: 1,    y: 0 }}
         exit={{    opacity: 0, scale: 0.96        }}
         className={cn(
-          'w-full max-w-2xl rounded-2xl border shadow-2xl max-h-[90vh] overflow-y-auto',
+          'w-full max-w-5xl rounded-2xl border shadow-2xl max-h-[90vh] overflow-hidden flex flex-col',
           tk.card
         )}
       >
@@ -285,9 +290,11 @@ function BookModal({
             <X className="w-5 h-5" />
           </button>
         </div>
- 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
+
+        {/* Body: Form */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {/* Form side */}
+          <form onSubmit={handleSubmit} className="p-6 flex flex-col gap-4">
  
           {/* Error banner */}
           <AnimatePresence>
@@ -529,7 +536,8 @@ function BookModal({
               }
             </button>
           </div>
-        </form>
+          </form>
+        </div>
       </motion.div>
     </div>
   );
@@ -551,6 +559,15 @@ function UploadPdfModal({
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const previewUrl = useMemo(() => {
+    if (!file) return null;
+    return URL.createObjectURL(file);
+  }, [file]);
+
+  useEffect(() => {
+    if (!previewUrl) return;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -638,6 +655,16 @@ function UploadPdfModal({
             </div>
           </label>
 
+          {previewUrl && (
+            <div className={cn('overflow-hidden rounded-xl border', dark ? 'border-white/10 bg-black/30' : 'border-slate-200 bg-slate-50')}>
+              <div className={cn('flex items-center justify-between px-3 py-2 border-b text-xs', dark ? 'border-white/10 text-slate-300' : 'border-slate-200 text-slate-500')}>
+                <span className="font-semibold">Preview file terpilih</span>
+                <span>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : ''}</span>
+              </div>
+              <iframe src={`${previewUrl}#toolbar=1`} className="h-72 w-full border-none bg-black" title="Preview PDF terpilih" />
+            </div>
+          )}
+
           {err && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-red-500/10 text-red-400 text-sm">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />
@@ -669,6 +696,235 @@ function UploadPdfModal({
   );
 }
 
+function DeleteBookModal({
+  title,
+  dark,
+  tk,
+  onClose,
+  onSoftDelete,
+  onPermanentDelete,
+  softLoading,
+  permanentLoading,
+}: {
+  title: string;
+  dark: boolean;
+  tk: Record<string, string>;
+  onClose: () => void;
+  onSoftDelete: () => void;
+  onPermanentDelete: () => void;
+  softLoading: boolean;
+  permanentLoading: boolean;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+      onClick={onClose}
+      role="presentation"
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        className={cn('w-full max-w-lg rounded-2xl border shadow-2xl overflow-hidden', tk.card)}
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-book-title"
+      >
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b"
+          style={{ borderColor: 'var(--border)', background: dark ? 'var(--surface)' : 'white' }}
+        >
+          <h3 id="delete-book-title" className={cn('font-bold text-base', tk.text)}>Konfirmasi Hapus</h3>
+          <button type="button" onClick={onClose} className={cn('p-1 rounded-lg hover:opacity-70', tk.muted)}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-6 flex flex-col gap-5">
+          <div className="flex items-start gap-4">
+            <div className={cn(
+              'w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 border',
+              dark ? 'bg-red-500/10 border-red-500/20 text-red-300' : 'bg-red-50 border-red-200 text-red-600'
+            )}>
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className={cn('text-sm uppercase tracking-[0.16em] font-semibold mb-1', dark ? 'text-red-300' : 'text-red-600')}>
+                Tindakan permanen
+              </p>
+              <p className={cn('text-sm leading-relaxed', tk.text)}>
+                Buku ini akan disembunyikan dari katalog dan dinonaktifkan sebagai soft delete.
+              </p>
+            </div>
+          </div>
+
+          <div className={cn('rounded-2xl border px-4 py-4', dark ? 'bg-white/5 border-white/10' : 'bg-slate-50 border-slate-200')}>
+            <p className={cn('text-xs uppercase tracking-widest mb-1.5', tk.muted)}>Buku yang akan dihapus</p>
+            <p className={cn('font-semibold text-base leading-snug', tk.text)} title={title}>
+              {title}
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className={cn('py-2.5 rounded-xl border text-sm font-semibold transition', tk.btnGhost)}
+              disabled={softLoading || permanentLoading}
+            >
+              Batal
+            </button>
+            <button
+              type="button"
+              onClick={onSoftDelete}
+              disabled={softLoading || permanentLoading}
+              className="py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold hover:brightness-110 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-black/10"
+            >
+              {softLoading ? <><Loader className="w-4 h-4 animate-spin" /> Menonaktifkan...</> : 'Nonaktifkan saja'}
+            </button>
+            <button
+              type="button"
+              onClick={onPermanentDelete}
+              disabled={softLoading || permanentLoading}
+              className="sm:col-span-2 py-2.5 rounded-xl bg-red-500 text-white text-sm font-bold hover:brightness-110 transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-red-500/20"
+            >
+              {permanentLoading ? <><Loader className="w-4 h-4 animate-spin" /> Menghapus permanen...</> : <><Trash2 className="w-4 h-4" /> Hapus permanen</>}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PreviewPdfModal: Preview PDF files inline
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PreviewPdfModal({
+  book, dark, tk, onClose,
+}: {
+  book: AdminBook | null;
+  dark: boolean;
+  tk: Record<string, string>;
+  onClose: () => void;
+}) {
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(true);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    let objectUrl: string | null = null;
+
+    async function loadPreview() {
+      if (!book?.file_url) {
+        if (mounted) {
+          setPreviewError('File PDF belum tersedia.');
+          setLoadingPreview(false);
+        }
+        return;
+      }
+
+      try {
+        setLoadingPreview(true);
+        setPreviewError(null);
+
+        const token = await auth?.currentUser?.getIdToken();
+        const res = await fetch(`${API}/admin/books/${book.id}/file`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+
+        if (!res.ok) {
+          const d = await res.json().catch(() => ({}));
+          throw new Error(d.message || 'Gagal memuat preview PDF');
+        }
+
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (mounted) setPreviewUrl(objectUrl);
+      } catch (error) {
+        if (mounted) {
+          setPreviewError(error instanceof Error ? error.message : 'Gagal memuat preview PDF');
+        }
+      } finally {
+        if (mounted) setLoadingPreview(false);
+      }
+    }
+
+    void loadPreview();
+
+    return () => {
+      mounted = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [book?.file_url, book?.id]);
+
+  if (!book) {
+    return null;
+  }
+  const previewBook = book;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96 }}
+        className={cn(
+          'w-full max-w-4xl rounded-2xl border shadow-2xl flex flex-col overflow-hidden',
+          tk.card
+        )}
+        style={{ height: 'min(90vh, 800px)' }}
+      >
+        {/* Header */}
+        <div
+          className="flex items-center justify-between px-6 py-4 border-b sticky top-0 z-10"
+          style={{ borderColor: 'var(--border)', background: dark ? 'var(--surface)' : 'white' }}
+        >
+          <div className="min-w-0">
+            <h3 className={cn('font-bold text-lg line-clamp-1', tk.text)}>{previewBook.title}</h3>
+            <p className={cn('text-xs mt-0.5', tk.muted)}>
+              {Array.isArray(previewBook.authors) ? previewBook.authors.join(', ') : previewBook.authors}
+            </p>
+          </div>
+          <button onClick={onClose} className={cn('p-1.5 rounded-lg hover:opacity-70 transition flex-shrink-0', tk.muted)}>
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* PDF Viewer */}
+        <div className="flex-1 min-h-0 overflow-hidden bg-black/40">
+          {loadingPreview ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-white/60">
+                <Loader className="w-8 h-8 animate-spin text-gold" />
+                <p className="text-sm">Memuat preview PDF...</p>
+              </div>
+            </div>
+          ) : previewError ? (
+            <div className="flex h-full items-center justify-center px-6 text-center">
+              <div className="max-w-sm rounded-2xl border border-white/10 bg-black/30 px-5 py-6 text-white/70">
+                <FileText className="mx-auto mb-3 w-8 h-8 text-amber-400" />
+                <p className="mb-2 text-sm font-semibold text-white">Preview tidak tersedia</p>
+                <p className="text-xs text-white/50">{previewError}</p>
+              </div>
+            </div>
+          ) : (
+            <iframe
+              src={`${previewUrl ?? ''}#toolbar=0`}
+              className="w-full h-full border-none"
+              allow="fullscreen"
+            />
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PustakrewPickModal
@@ -923,7 +1179,7 @@ function PustakrewPickModal({
  
 function AvailabilityBar({ available, total }: { available: number; total: number }) {
   const pct   = total > 0 ? Math.round((available / total) * 100) : 0;
-  const color = pct === 0 ? 'bg-red-500' : pct < 40 ? 'bg-amber-400' : 'bg-green-500';
+  const color = pct === 0 ? 'bg-red-500' : (pct < 40 || available === 1) ? 'bg-amber-400' : 'bg-green-500';
   return (
     <div className="flex flex-col gap-1">
       <div className="h-1.5 w-20 rounded-full bg-slate-200 dark:bg-white/10 overflow-hidden">
@@ -966,7 +1222,10 @@ export default function AdminBooksPage() {
   const [searchInput, setSearchInput] = useState('');
   const [editingBook, setEditingBook] = useState<AdminBook | null | 'new'>(null);
   const [uploadingBook, setUploadingBook] = useState<AdminBook | null>(null);
+  const [deletingBook, setDeletingBook] = useState<AdminBook | null>(null);
+  const [deletingMode, setDeletingMode] = useState<'soft' | 'permanent' | null>(null);
   const [showPicksModal, setShowPicksModal] = useState(false);
+  const [previewingBook, setPreviewingBook] = useState<AdminBook | null>(null);
   const [pickPreviews, setPickPreviews] = useState<{ id: string; cover_url: string | null; title: string }[]>([]);
 
   useEffect(() => {
@@ -1020,11 +1279,14 @@ export default function AdminBooksPage() {
     setCurrentPage(1);
   };
  
-  const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Hapus "${title}"?\n\nBuku akan dinonaktifkan (soft delete) dan tidak muncul di katalog. Tindakan ini tidak bisa dibatalkan.`)) return;
+  const handleDelete = async (id: string, title: string, mode: 'soft' | 'permanent') => {
+    setDeletingMode(mode);
     try {
       const token = await getToken();
-      const res = await fetch(`${API}/admin/books/${id}`, {
+      const url = mode === 'permanent'
+        ? `${API}/admin/books/${id}/permanent`
+        : `${API}/admin/books/${id}`;
+      const res = await fetch(url, {
         method:  'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -1035,9 +1297,14 @@ export default function AdminBooksPage() {
       const nextPage = books.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage;
       setCurrentPage(nextPage);
       await fetchBooks(nextPage, search, true);
-      flashSuccess(`"${title}" berhasil dihapus.`);
+      flashSuccess(mode === 'permanent'
+        ? `"${title}" berhasil dihapus permanen.`
+        : `"${title}" berhasil dinonaktifkan.`);
+      setDeletingBook(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Hapus gagal');
+    } finally {
+      setDeletingMode(null);
     }
   };
  
@@ -1319,7 +1586,13 @@ export default function AdminBooksPage() {
                                   <Upload className="w-3 h-3" />PDF
                                 </button>
                               )}
-                              <button onClick={() => handleDelete(book.id, book.title)}
+                              {book.file_url && (
+                                <button onClick={() => setPreviewingBook(book)}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-purple-500/15 text-purple-400 hover:bg-purple-500/25 transition text-xs font-semibold">
+                                  <Eye className="w-3 h-3" />Preview
+                                </button>
+                              )}
+                              <button onClick={() => setDeletingBook(book)}
                                 className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-red-500/15 text-red-400 hover:bg-red-500/25 transition text-xs font-semibold">
                                 <Trash2 className="w-3 h-3" />Hapus
                               </button>
@@ -1407,7 +1680,13 @@ export default function AdminBooksPage() {
                               <Upload className="w-3 h-3" />Upload PDF
                             </button>
                           )}
-                          <button onClick={() => handleDelete(book.id, book.title)}
+                          {book.file_url && (
+                            <button onClick={() => setPreviewingBook(book)}
+                              className="flex-1 py-1.5 rounded-lg bg-purple-500/15 text-purple-400 text-xs font-semibold flex items-center justify-center gap-1">
+                              <Eye className="w-3 h-3" />Preview
+                            </button>
+                          )}
+                          <button onClick={() => setDeletingBook(book)}
                             className="flex-1 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-semibold flex items-center justify-center gap-1">
                             <Trash2 className="w-3 h-3" />Hapus
                           </button>
@@ -1531,6 +1810,34 @@ export default function AdminBooksPage() {
                 flashSuccess(`File PDF untuk "${uploadingBook.title}" berhasil diupload!`);
                 await fetchBooks(currentPage, search, true);
               }}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Delete confirmation modal */}
+        <AnimatePresence>
+          {deletingBook && (
+            <DeleteBookModal
+              title={deletingBook.title}
+              dark={dark}
+              tk={tk}
+              onClose={() => setDeletingBook(null)}
+              onSoftDelete={() => handleDelete(deletingBook.id, deletingBook.title, 'soft')}
+              onPermanentDelete={() => handleDelete(deletingBook.id, deletingBook.title, 'permanent')}
+              softLoading={deletingMode === 'soft'}
+              permanentLoading={deletingMode === 'permanent'}
+            />
+          )}
+        </AnimatePresence>
+
+        {/* Preview PDF Modal */}
+        <AnimatePresence>
+          {previewingBook && (
+            <PreviewPdfModal
+              book={previewingBook}
+              dark={dark}
+              tk={tk}
+              onClose={() => setPreviewingBook(null)}
             />
           )}
         </AnimatePresence>

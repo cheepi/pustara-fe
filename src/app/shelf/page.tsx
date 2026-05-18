@@ -1228,7 +1228,7 @@ function TabWishlist({ books, tk, isLight }: { books: WishlistBook[]; tk: any; i
                     'absolute top-2 right-2 px-2 py-0.5 rounded-full text-[10px] font-bold',
                     book.available ? 'bg-emerald-500 text-white' : 'bg-slate-600/80 text-slate-200'
                   )}>
-                    {book.available ? 'Tersedia' : 'Antrean'}
+                    {book.available ? 'Available' : 'Unavailable'}
                   </div>
                 </div>
               </Link>
@@ -1301,64 +1301,63 @@ function TabRiwayat({ books, tk, isLight }: { books: RiwayatBook[]; tk: any; isL
             : null;
         return (
           <motion.div layout key={`${book.key}-${i}`}
-            className={cn('rounded-2xl border p-4 flex gap-4 items-center', tk.surface)}
+            className={cn('rounded-2xl border px-4 py-3 flex items-center gap-3', tk.surface)}
             initial={{ opacity: 0, x: -8, y: 10 }} animate={{ opacity: 1, x: 0, y: 0 }}
             transition={{ delay: i * 0.05 }}>
+
+            {/* Cover */}
             <Link href={`/book/${book.key}`} className="flex-shrink-0">
-              <div className="w-12 h-16 rounded-xl overflow-hidden shadow-md" style={{ background: bg }}>
-                {src
-                  ? <img src={src} alt={book.title} className="w-full h-full object-cover" />
-                  : null}
+              <div className="w-10 h-14 rounded-lg overflow-hidden shadow-md" style={{ background: bg }}>
+                {src && <img src={src} alt={book.title} className="w-full h-full object-cover" />}
               </div>
             </Link>
+
+            {/* Info — grows */}
             <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  {statusBadge && (
-                    <div className={cn('mb-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-[0.18em] border', statusBadge.className)}>
-                      <statusBadge.icon className="w-3 h-3" />
-                      {statusBadge.label}
-                    </div>
-                  )}
-                  <h3 className={cn('font-serif font-bold leading-tight line-clamp-1', tk.text)}>{book.title}</h3>
-                  <p className={cn('text-xs mt-0.5', tk.muted)}>{book.author}</p>
-                </div>
-                {book.userRating && (
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    {[1, 2, 3, 4, 5].map((s) => (
-                      <Star key={s} className={cn('w-3 h-3', s <= book.userRating! ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
-                    ))}
+              <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                {statusBadge && (
+                  <div className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-[0.15em] border flex-shrink-0', statusBadge.className)}>
+                    <statusBadge.icon className="w-2.5 h-2.5" />
+                    {statusBadge.label}
                   </div>
                 )}
+                <h3 className={cn('font-serif font-bold text-sm leading-tight truncate', tk.text)}>{book.title}</h3>
               </div>
-              <div className="flex items-center gap-3 mt-2">
-                <div className="flex items-center gap-1">
+              <div className={cn('flex items-center gap-1.5 text-[11px] flex-wrap', tk.muted)}>
+                <span className="truncate max-w-[100px]">{book.author}</span>
+                <span>·</span>
+                <div className="flex items-center gap-1 flex-shrink-0">
                   {historyStatus === 'finished'
                     ? <CheckCircle className="w-3 h-3 text-emerald-400" />
                     : <AlertTriangle className={cn('w-3 h-3', historyStatus === 'overdue' ? 'text-red-400' : 'text-amber-400')} />
                   }
-                  <span className={cn('text-[11px]', tk.muted)}>
-                    {historyStatus === 'finished'
-                      ? `Selesai ${book.returnedAt}`
-                      : historyStatus === 'overdue'
-                        ? `Terlambat ${book.returnedAt}`
-                        : `Belum selesai ${book.returnedAt}`}
-                  </span>
+                  <span className="whitespace-nowrap">{book.returnedAt}</span>
                 </div>
-                <span className={cn('text-[11px]', tk.muted)}>·</span>
-                <span className={cn('text-[11px]', tk.muted)}>{book.readDays} hari baca</span>
+                <span>·</span>
+                <span className="whitespace-nowrap flex-shrink-0">{book.readDays}h baca</span>
+                {book.userRating && (
+                  <>
+                    <span>·</span>
+                    <div className="flex items-center gap-0.5 flex-shrink-0">
+                      {[1,2,3,4,5].map(s => (
+                        <Star key={s} className={cn('w-2.5 h-2.5', s <= book.userRating! ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             </div>
+
+            {/* Pinjam Lagi */}
             <Link href={`/book/${book.key}`}
               className={cn(
                 'flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
-                isLight
-                  ? 'border-navy-200 text-navy-700 hover:border-gold/50 hover:text-gold'
-                  : 'border-white/10 text-white/60 hover:border-gold/40 hover:text-gold'
+                isLight ? 'border-navy-200 text-navy-700 hover:border-gold/50 hover:text-gold' : 'border-white/10 text-white/60 hover:border-gold/40 hover:text-gold'
               )}>
-              <RotateCcw className="w-3 h-3" /> Pinjam Lagi
+              <RotateCcw className="w-3 h-3" />
+              <span className="hidden sm:inline">Pinjam Lagi</span>
             </Link>
-          </motion.div>
+          </motion.div>        
         );
       })}
     </motion.div>

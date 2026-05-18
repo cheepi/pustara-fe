@@ -19,11 +19,13 @@ import { getMyProfile } from '@/lib/users';
 import { fetchUnreadNotificationCount, NOTIFICATIONS_CHANGED_EVENT } from '@/lib/notifications';
 import type { UserProfile } from '@/types/user';
 
-const MotionLogo = motion(Logo);
+const MotionLogo = motion.create(Logo);
 export default function Navbar() {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [dropOpen,   setDropOpen]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileQuery, setMobileQuery] = useState('');
+  const [isMobileNav, setIsMobileNav] = useState(false); // false = SSR-safe default (desktop)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -67,8 +69,19 @@ export default function Navbar() {
   const dropLogout  = isLight ? 'text-red-500 hover:bg-red-50' : 'text-red-400 hover:bg-red-400/10';
 
   // ── Effects ────────────────────────────────────────────────────────────────
+  // Detect mobile viewport — client-only, default false matches SSR
   useEffect(() => {
-    if (searchOpen) setTimeout(() => searchRef.current?.focus(), 100);
+    const update = () => setIsMobileNav(window.innerWidth < 768);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  useEffect(() => {
+    if (searchOpen) {
+      setMobileQuery('');
+      setTimeout(() => searchRef.current?.focus(), 100);
+    }
   }, [searchOpen]);
 
   useEffect(() => {
@@ -174,6 +187,7 @@ export default function Navbar() {
 
   async function handleConfirmLogout() {
     setLogoutConfirmOpen(false);
+    if (!auth) return;
     await signOut(auth);
   }
 
@@ -200,10 +214,10 @@ export default function Navbar() {
             <MotionLogo
               className="w-auto drop-shadow-lg flex-shrink-0 relative z-10 focus:outline-none"
               style={{
-                height: typeof window !== "undefined" && window.innerWidth < 768 ? "80px" : "86px",
-                marginTop: typeof window !== "undefined" && window.innerWidth < 768 ? "0px" : "-10px",
-                marginBottom: typeof window !== "undefined" && window.innerWidth < 768 ? "0px" : "-10px",
-                marginLeft: typeof window !== "undefined" && window.innerWidth < 768 ? "-18px" : "-36px",
+                height:       isMobileNav ? '80px'  : '86px',
+                marginTop:    isMobileNav ? '0px'   : '-10px',
+                marginBottom: isMobileNav ? '0px'   : '-10px',
+                marginLeft:   isMobileNav ? '-18px' : '-36px',
               }}
               whileHover={{ rotate: -12, scale: 1.1 }}
               whileTap={{ scale: 0.92 }}
@@ -413,16 +427,43 @@ export default function Navbar() {
                 background:  isLight ? 'rgba(252,252,250,0.99)' : 'rgba(17,31,53,0.99)',
                 borderColor: isLight ? 'rgba(232,228,220,0.9)'  : 'rgba(255,255,255,0.15)',
               }}>
-              <form action="/browse" className="flex items-center gap-3 px-4" style={{ height: '56px' }}
-                onSubmit={() => setSearchOpen(false)}>
+              <form
+                className="flex items-center gap-3 px-4"
+                style={{ height: '56px' }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const q = mobileQuery.trim();
+                  setSearchOpen(false);
+                  setMobileQuery('');
+                  router.push(`/browse${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+                }}
+              >
                 <Search className={cn('w-4 h-4 flex-shrink-0', isLight ? 'text-navy-400' : 'text-white/50')} />
-                <input ref={searchRef} type="search" name="q" placeholder="Cari judul, penulis, atau genre..."
+                <input
+                  ref={searchRef}
+                  type="search"
+                  name="q"
+                  value={mobileQuery}
+                  onChange={(e) => setMobileQuery(e.target.value)}
+                  placeholder="Cari judul, penulis, atau genre..."
                   className={cn(
                     'flex-1 text-sm bg-transparent focus:outline-none',
                     isLight ? 'text-navy-800 placeholder-navy-400' : 'text-white placeholder-white/40'
-                  )} />
-                <button type="button" onClick={() => setSearchOpen(false)}
-                  className={cn('p-1.5 rounded-lg transition-colors',
+                  )}
+                />
+                {mobileQuery.trim() && (
+                  <button
+                    type="submit"
+                    className={cn(
+                      'px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors flex-shrink-0',
+                      isLight ? 'bg-navy-800 text-white hover:bg-navy-700' : 'bg-gold text-navy-900 hover:bg-gold-light'
+                    )}
+                  >
+                    Cari
+                  </button>
+                )}
+                <button type="button" onClick={() => { setSearchOpen(false); setMobileQuery(''); }}
+                  className={cn('p-1.5 rounded-lg transition-colors flex-shrink-0',
                     isLight ? 'text-navy-400 hover:text-navy-700 hover:bg-navy-100' : 'text-white/40 hover:text-white hover:bg-white/10')}>
                   <X className="w-4 h-4" />
                 </button>

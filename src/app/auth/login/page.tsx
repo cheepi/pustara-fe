@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -45,11 +45,76 @@ export default function LoginPage() {
   const [error, setError]       = useState('');
   const [focusedField, setFocusedField] = useState<string | null>(null);
   const { token: captchaToken, error: captchaError, captchaRef, reset: resetCaptcha } = useCaptcha();
+  const [stats, setStats] = useState({
+    totalBooks: 10000,
+    readers: 50000,
+    rating: 4.8,
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadStats() {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const base = apiBase.replace(/\/$/, '');
+
+      try {
+        const [booksRes, communityRes, recentRes] = await Promise.all([
+          fetch(`${base}/books?limit=1`),
+          fetch(`${base}/reviews/stats`),
+          fetch(`${base}/books/recent?limit=20`),
+        ]);
+
+        const booksJson = booksRes.ok ? await booksRes.json() : null;
+        const communityJson = communityRes.ok ? await communityRes.json() : null;
+        const recentJson = recentRes.ok ? await recentRes.json() : null;
+
+        if (!active) return;
+
+        const totalBooks = Number(
+          booksJson?.pagination?.total
+          ?? booksJson?.pagination?.total_items
+          ?? booksJson?.data?.length
+          ?? 0
+        );
+        const readers = Number(
+          communityJson?.data?.raw?.total_readers
+          ?? communityJson?.data?.readers
+          ?? 0
+        );
+        const recentBooks = Array.isArray(recentJson?.data) ? recentJson.data : [];
+        const ratingValues = recentBooks
+          .map((book: Record<string, unknown>) => Number(book.avg_rating ?? book.rating ?? 0))
+          .filter((value: number) => Number.isFinite(value) && value > 0);
+        const rating = ratingValues.length > 0
+          ? ratingValues.reduce((sum: number, value: number) => sum + value, 0) / ratingValues.length
+          : 0;
+
+        setStats((current) => ({
+          totalBooks: totalBooks > 0 ? totalBooks : current.totalBooks,
+          readers: readers > 0 ? readers : current.readers,
+          rating: rating > 0 ? Number(rating.toFixed(1)) : current.rating,
+        }));
+      } catch {
+        // Keep fallback values if public stats endpoints are unavailable.
+      }
+    }
+
+    void loadStats();
+
+    return () => {
+      active = false;
+    };
+  }, []);
   
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     if (!captchaToken) {
       setError('Verifikasi CAPTCHA diperlukan sebelum masuk.');
+      return;
+    }
+    if (!auth) {
+      setError('Layanan autentikasi belum siap. Muat ulang halaman.');
       return;
     }
     setError(''); setLoading(true);
@@ -82,6 +147,10 @@ export default function LoginPage() {
   async function handleGoogle() {
     if (!captchaToken) {
       setError('Verifikasi CAPTCHA diperlukan sebelum melanjutkan dengan Google.');
+      return;
+    }
+    if (!auth) {
+      setError('Layanan autentikasi belum siap. Muat ulang halaman.');
       return;
     }
     setError(''); setLoading(true);
@@ -219,10 +288,16 @@ export default function LoginPage() {
 
           <motion.div className="flex gap-8 mb-10"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-            {[['10K+','Judul Buku'],['500+','Penulis'],['50K+','Pembaca']].map(([v,l]) => (
-              <div key={l}>
-                <div className="font-serif text-2xl font-black text-gold">{v}</div>
-                <div className="text-slate-500 text-xs mt-0.5">{l}</div>
+            {[
+              [stats.totalBooks, 'Judul Buku'],
+              [stats.readers, 'Pembaca'],
+              [stats.rating, 'Rating'],
+            ].map(([value, label]) => (
+              <div key={label}>
+                <div className="font-serif text-2xl font-black text-gold">
+                  {typeof value === 'number' && value < 100 ? value.toFixed(label === 'Rating' ? 1 : 0) : Number(value).toLocaleString('id-ID')}{label === 'Rating' ? '' : '+'}
+                </div>
+                <div className="text-slate-500 text-xs mt-0.5">{label}</div>
               </div>
             ))}
           </motion.div>

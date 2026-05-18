@@ -8,6 +8,12 @@ export function useAuth() {
   const { user, loading, setUser, setLoading } = useAuthStore();
 
   useEffect(() => {
+    if (!auth) {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
     const unsub = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setLoading(false);

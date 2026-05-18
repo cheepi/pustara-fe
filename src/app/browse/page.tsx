@@ -47,14 +47,13 @@ type CategoryItem = {
 };
 
 const FALLBACK_CATEGORY_LABELS = [
+  'Coming-of-age',
+  'Misteri',
+  'Drama',
   'Fiksi',
   'Sejarah',
-  'Sains',
-  'Sastra',
-  'Biografi',
-  'Romansa',
-  'Misteri',
-  'Teknologi',
+  'Romance',
+  'Non-fiksi',
 ];
 
 function normalizeCategoryId(value: string): string {
@@ -387,7 +386,7 @@ function BrowseContent() {
     shelves: genreShelves,
     loading: genreShelvesLoading,
     error: genreShelvesError,
-  } = useGenreShelves({ limit: 16, booksLimit: 8 });
+  } = useGenreShelves({ targetGenres: ['Coming-of-age', 'Misteri', 'Drama', 'Fiksi', 'Sejarah', 'Romance', 'Non-fiksi'], booksLimit: 13 });
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const urlTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -930,7 +929,7 @@ function BrowseContent() {
                         <div className="flex md:hidden items-center justify-start mt-8">
                           <Medal className="w-3.5 h-3.5 text-gold" />
                           <span className="text-gold text-xs font-semibold uppercase tracking-wider">
-                            Pustara's Pick — kurasi dari Pustakrew 📚
+                            Pustara's Pick — kurasi dari Pustakrew
                           </span>
                         </div>
                       </>

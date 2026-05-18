@@ -22,7 +22,8 @@ import {
   toggleFollowUser,
   updateMyProfile,
 } from '@/lib/users';
-import { formatRelativeTime, getMyReadingSessions } from '@/lib/reading';
+import { formatRelativeTime } from '@/lib/reading';
+import { fetchShelfData } from '@/lib/shelf';
 import type { RecommendedUser } from '@/types/user';
 import { getMySurvey, saveSurvey } from '@/lib/survey';
 import { GENRE_OPTIONS } from '@/lib/genreOptions';
@@ -73,7 +74,7 @@ function buildGenreStatsFromGenres(genres: string[], limit = 5) {
 }
 
 type ActivityItem = {
-  type: 'selesai' | 'pinjam' | 'wishlist';
+  type: 'selesai' | 'pinjam' | 'wishlist' | 'review' | 'follow';
   book: string;
   author: string;
   coverId?: number;
@@ -81,6 +82,8 @@ type ActivityItem = {
   key: string;
   rating: number | null;
   time: string;
+  // for 'follow' type
+  followName?: string;
 };
 
 type FollowingPreviewItem = {
@@ -158,13 +161,12 @@ export default function ProfilePage() {
     Promise.all([
       getMyProfile(),
       getMySurvey(),
-      getMyReadingSessions('reading', 20),
-      getMyReadingSessions('finished', 20),
+      fetchShelfData({ force: true }),
       getRecommendedUsers(3),
       getMyFollowingUsers(30),
       getMyFollowersUsers(30),
     ])
-      .then(([profile, survey, readingNow, finished, suggestions, following, followers]) => {
+      .then(([profile, survey, shelf, suggestions, following, followers]) => {
         if (!active || !profile) return;
 
         setProfileCache({
@@ -190,15 +192,16 @@ export default function ProfilePage() {
         setProfileUsername(profile.username || '');
         setProfileCreatedAt(profile.created_at || null);
 
-        const finishedCount = Number(profile.stats?.total_read ?? profile.total_read ?? finished.length ?? 0);
+        // "Buku Dibaca" = books currently being read (sedang dibaca tab in /shelf)
+        const currentlyReadingCount = shelf.dibaca.length;
         const streak = Math.max(0, Number(profile.reading_streak ?? 0));
-        const ulasan = Number(profile.stats?.reviews_written ?? finished.filter((s: any) => s.review_text || s.rating).length ?? 0);
+        const ulasan = Number(profile.stats?.reviews_written ?? 0);
         const streakTooltip = profile.streak_is_active
           ? [`Streak aktif: ${streak} hari`, `Mulai: ${formatTooltipDay(profile.streak_last_start_day)}`, `Aktif terakhir: ${formatTooltipDay(profile.streak_last_end_day)}`].join('\n')
           : [`Streak terakhir: ${profile.streak_last_length ?? streak} hari`, `Berakhir: ${formatTooltipDay(profile.streak_last_end_day)}`, `Reset: ${formatTooltipDay(profile.streak_reset_day)}`].join('\n');
 
         setStats([
-          { label: 'Buku Dibaca', value: finishedCount, icon: BookOpen, color: 'text-gold' },
+          { label: 'Buku Dibaca', value: currentlyReadingCount, icon: BookOpen, color: 'text-gold' },
           { label: 'Streak', value: String(streak), suffix: 'hari', icon: Flame, color: 'text-orange-400', tooltip: streakTooltip },
           { label: 'Ulasan', value: ulasan, icon: Star, color: 'text-blue-400' },
           { label: 'Wishlist', value: Number(profile.liked_books?.length ?? 0), icon: Heart, color: 'text-rose-400' },
@@ -238,34 +241,54 @@ export default function ProfilePage() {
           );
         }
 
-        const liveRecent: ActivityItem[] = [
-          ...readingNow.slice(0, 2).map((session) => ({
+        // Aktivitas Terbaru:
+        //   - "Selesai membaca" = buku yang SUDAH dikembalikan (riwayat)
+        //   - "Meminjam"        = buku yang MASIH dipinjam (pinjaman aktif),
+        //                         tidak muncul jika buku tsb sudah ada di riwayat
+        //   - "Wishlist"        = buku yang disimpan ke wishlist
+        // Tidak ada duplikat — setiap buku hanya muncul sekali.
+
+        const riwayatItems: ActivityItem[] = shelf.riwayat.slice(0, 4).map((r) => ({
+          type: 'selesai' as const,
+          book: r.title,
+          author: r.author,
+          key: r.key,
+          coverUrl: r.coverUrl,
+          rating: null,
+          time: r.returnedAt || 'Baru saja',
+        }));
+
+        // Book IDs already covered by riwayat — exclude them from pinjaman
+        const riwayatBookKeys = new Set(shelf.riwayat.map((r) => r.key));
+
+        const pinjamanItems: ActivityItem[] = shelf.pinjaman
+          .filter((p) => !riwayatBookKeys.has(p.key))
+          .slice(0, 2)
+          .map((p) => ({
             type: 'pinjam' as const,
-            book: session.title,
-            author: session.authors,
-            key: session.book_id,
-            coverUrl: session.cover_url,
+            book: p.title,
+            author: p.author,
+            key: p.key,
+            coverUrl: p.coverUrl,
             rating: null,
-            time: formatRelativeTime(session.last_read_at || session.started_at),
-          })),
-          ...finished.slice(0, 3).map((session) => ({
-            type: 'selesai' as const,
-            book: session.title,
-            author: session.authors,
-            key: session.book_id,
-            coverUrl: session.cover_url,
-            rating: null,
-            time: formatRelativeTime(session.finished_at || session.last_read_at),
-          })),
-          ...(profile.liked_books ?? []).slice(0, 2).map((book) => ({
-            type: 'wishlist' as const,
-            book: book.title,
-            author: Array.isArray(book.authors) ? String(book.authors[0] ?? 'Unknown Author') : 'Unknown Author',
-            key: book.id,
-            coverUrl: book.cover_url || undefined,
-            rating: null,
-            time: formatRelativeTime(book.liked_at ?? undefined),
-          })),
+            time: p.borrowedAt || 'Baru saja',
+          }));
+
+        const wishlistItems: ActivityItem[] = (profile.liked_books ?? []).slice(0, 2).map((book) => ({
+          type: 'wishlist' as const,
+          book: book.title,
+          author: Array.isArray(book.authors) ? String(book.authors[0] ?? 'Unknown Author') : 'Unknown Author',
+          key: book.id,
+          coverUrl: book.cover_url || undefined,
+          rating: null,
+          time: formatRelativeTime(book.liked_at ?? undefined),
+        }));
+
+        // Merge: riwayat first (most meaningful), then active borrows, then wishlist
+        const liveRecent: ActivityItem[] = [
+          ...riwayatItems,
+          ...pinjamanItems,
+          ...wishlistItems,
         ].slice(0, 6);
 
         setRecentActivity(liveRecent);
@@ -738,9 +761,24 @@ export default function ProfilePage() {
               <div className="flex flex-col gap-1">
                 {recentActivity.map((a, i) => {
                   const src = coverSrc(a.coverId, a.coverUrl);
-                  const ActIcon = a.type === 'selesai' ? CheckCircle : a.type === 'pinjam' ? BookOpen : Heart;
-                  const actColor = a.type === 'selesai' ? 'text-emerald-400' : a.type === 'pinjam' ? 'text-blue-400' : 'text-rose-400';
-                  const actLabel = a.type === 'selesai' ? 'Selesai membaca' : a.type === 'pinjam' ? 'Meminjam' : 'Menyimpan ke wishlist';
+                  const ActIcon =
+                    a.type === 'selesai' ? CheckCircle
+                    : a.type === 'pinjam' ? BookOpen
+                    : a.type === 'review' ? Star
+                    : a.type === 'follow' ? UserPlus
+                    : Heart;
+                  const actColor =
+                    a.type === 'selesai' ? 'text-emerald-400'
+                    : a.type === 'pinjam' ? 'text-blue-400'
+                    : a.type === 'review' ? 'text-yellow-400'
+                    : a.type === 'follow' ? 'text-purple-400'
+                    : 'text-rose-400';
+                  const actLabel =
+                    a.type === 'selesai' ? 'Selesai membaca'
+                    : a.type === 'pinjam' ? 'Meminjam'
+                    : a.type === 'review' ? 'Menulis ulasan'
+                    : a.type === 'follow' ? 'Mengikuti'
+                    : 'Menyimpan ke wishlist';
                   return (
                     <motion.div key={i}
                       className={cn('flex items-center gap-3 p-3 rounded-2xl transition-colors', tk.hover)}

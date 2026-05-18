@@ -25,6 +25,19 @@ import { fetchFeedSidebarPayload } from '@/lib/feed';
 import type { FeedSidebarPayload } from '@/lib/feed';
 import type { CommunityReview } from "@/types/community";
 
+type RecentBook = {
+  book_id: string;
+  key: string;
+  title: string;
+  author: string;
+  genre: string;
+  rating: number;
+  avg_rating?: number;
+  cover_url: string | null;
+  description: string;
+  status: 'Tersedia' | 'Dipinjam' | string;
+  added_at: string;
+};
 
 const REQUEST_BOOK_SUBJECT = encodeURIComponent('Request Buku Baru Pustara');
 const REQUEST_BOOK_BODY = encodeURIComponent(
@@ -73,6 +86,28 @@ const EMPTY_SIDEBAR: FeedSidebarPayload = {
 };
 
 const COMMUNITY_LIKE_STORAGE_PREFIX = 'pustara:community-liked:';
+
+function normalizeRecentBook(raw: Record<string, unknown>): RecentBook {
+  const ratingValue = Number(raw.rating ?? raw.avg_rating ?? raw.avgRating ?? 0);
+
+  return {
+    book_id: String(raw.book_id ?? raw.id ?? ''),
+    key: String(raw.key ?? raw.book_id ?? raw.id ?? ''),
+    title: String(raw.title ?? 'Tanpa Judul'),
+    author: Array.isArray(raw.authors)
+      ? raw.authors.map(String).filter(Boolean).join(', ')
+      : String(raw.author ?? raw.authors ?? 'Unknown Author'),
+    genre: Array.isArray(raw.genres)
+      ? raw.genres.map(String).filter(Boolean).join(', ')
+      : String(raw.genre ?? raw.genres ?? '-'),
+    rating: Number.isFinite(ratingValue) ? ratingValue : 0,
+    avg_rating: Number.isFinite(ratingValue) ? ratingValue : 0,
+    cover_url: raw.cover_url != null ? String(raw.cover_url) : null,
+    description: String(raw.description ?? ''),
+    status: String(raw.status ?? 'Tersedia'),
+    added_at: String(raw.added_at ?? raw.created_at ?? ''),
+  };
+}
 
 function getCommunityReviewLikeKey(review: CommunityReview): string {
   return review.review_id || review.key;
@@ -168,6 +203,9 @@ export default function HomePage() {
   const borrowedTooltip = sidebar?.profile?.borrowed_tooltip || '';
   const streakTooltip = sidebar?.profile?.streak_tooltip || '';
   const communityLikeStorageKey = user?.uid ? `${COMMUNITY_LIKE_STORAGE_PREFIX}${user.uid}` : null;
+  const [recentBooks, setRecentBooks] = useState<RecentBook[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
+  const [activeRecentIdx, setActiveRecentIdx] = useState(0);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -300,6 +338,26 @@ export default function HomePage() {
     return () => { active = false; };
   }, []);
 
+  useEffect(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+    if (!apiBase) { setRecentLoading(false); return; }
+
+    let active = true;
+    setRecentLoading(true);
+
+    fetch(`${apiBase.replace(/\/$/, '')}/books/recent?limit=5`)
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((json) => {
+        if (!active) return;
+        const raw = Array.isArray(json) ? json : json?.data ?? [];
+        setRecentBooks(raw.map((item: Record<string, unknown>) => normalizeRecentBook(item)));
+      })
+      .catch(() => { if (active) setRecentBooks([]); })
+      .finally(() => { if (active) setRecentLoading(false); });
+
+    return () => { active = false; };
+  }, []);
+
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
       <Navbar />
@@ -385,9 +443,9 @@ export default function HomePage() {
         </div>
         <div className="flex gap-4 px-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
           {aiLoading
-            ? Array(5).fill(0).map((_, i) => <AiRecoCardSkeleton key={i} isLight={isLight} />)
+            ? Array(8).fill(0).map((_, i) => <AiRecoCardSkeleton key={i} isLight={isLight} />)
             : aiReco.length > 0
-              ? aiReco.slice(0, 5).map((reco, i) => {
+              ? aiReco.slice(0, 8).map((reco, i) => {
                   const key = `${reco.title}—${reco.authors}`.toLowerCase();
                   const coverUrl = aiCovers.get(key) || (reco as any).cover_url;
                   return (
@@ -411,6 +469,355 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── BARU DITAMBAHKAN ── */}
+      <section className="mt-8 max-w-7xl mx-auto px-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <BookCopy className="w-4 h-4 text-gold" />
+            <h2 className="font-serif text-lg font-bold" style={{ color: 'var(--text)' }}>
+              Baru Ditambahkan
+            </h2>
+          </div>
+        </div>
+
+        {recentLoading ? (
+          /* ── Skeleton ── */
+          <>
+            {/* Mobile skeleton */}
+            <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+              {Array(4).fill(0).map((_, i) => (
+                <div key={i} className="flex-shrink-0 w-32">
+                  <div className={cn('w-32 h-48 rounded-xl animate-pulse mb-2', isLight ? 'bg-parchment-darker' : 'bg-navy-700/60')} />
+                  <div className={cn('h-3 w-3/4 rounded animate-pulse mb-1.5', isLight ? 'bg-parchment-darker' : 'bg-navy-700/60')} />
+                  <div className={cn('h-2.5 w-1/2 rounded animate-pulse', isLight ? 'bg-parchment-darker' : 'bg-navy-700/60')} />
+                </div>
+              ))}
+            </div>
+            {/* Desktop skeleton */}
+            <div
+              className="hidden lg:block rounded-2xl animate-pulse"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)', minHeight: 360 }}
+            />
+          </>
+        ) : recentBooks.length === 0 ? (
+          <div
+            className="rounded-2xl p-5 text-sm"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--muted)' }}
+          >
+            Belum ada buku yang baru ditambahkan.
+          </div>
+        ) : (
+          <>
+            {/* ══ MOBILE: horizontal card scroll (same pattern as AI reco) ══ */}
+            <div className="lg:hidden flex gap-3 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
+              {recentBooks.map((book, idx) => (
+                <Link key={book.book_id} href={`/book/${book.key}`}>
+                  <motion.div
+                    className="flex-shrink-0 w-32 cursor-pointer"
+                    whileHover={{ y: -3 }}
+                    transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+                  >
+                    {/* Cover */}
+                    <div
+                      className="w-32 h-48 rounded-xl overflow-hidden shadow-md mb-2.5 relative"
+                      style={{ border: '1px solid var(--border)' }}
+                    >
+                      {book.cover_url ? (
+                        <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center" style={{ background: 'var(--surface2)' }}>
+                          <BookCopy className="w-7 h-7 opacity-20 text-gold" />
+                        </div>
+                      )}
+                      {/* Status pill on cover */}
+                      <div
+                        className="absolute bottom-2 left-2 right-2 text-center text-[10px] font-semibold py-0.5 rounded-full"
+                        style={{
+                          background: book.status === 'Tersedia' ? 'rgba(16,185,129,0.9)' : 'rgba(245,158,11,0.9)',
+                          color: '#fff',
+                          backdropFilter: 'blur(4px)',
+                        }}
+                      >
+                        {book.status}
+                      </div>
+                    </div>
+
+                    {/* Info */}
+                    <p
+                      className="font-serif text-sm font-semibold line-clamp-2 leading-snug"
+                      style={{ color: 'var(--text)' }}
+                    >
+                      {book.title}
+                    </p>
+                    <p className="text-[11px] mt-0.5 truncate font-sans" style={{ color: 'var(--muted)' }}>
+                      {book.author}
+                    </p>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Star className="w-3 h-3 text-gold fill-gold" />
+                      <span className="text-[11px] font-bold text-gold">
+                        {Number(book.rating ?? book.avg_rating ?? 0).toFixed(1)}
+                      </span>
+                    </div>
+                  </motion.div>
+                </Link>
+              ))}
+            </div>
+
+            {/* ══ DESKTOP: split panel ══ */}
+            <div
+              className="hidden lg:flex rounded-2xl overflow-hidden"
+              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            >
+              {/* LEFT: list */}
+              <div className="w-[36%] flex flex-col border-r" style={{ borderColor: 'var(--border)' }}>
+                {/* Header */}
+                <div className="px-6 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+                  <p
+                    className="text-[11px] uppercase tracking-widest font-semibold mb-0.5 font-sans"
+                    style={{ color: '#C9A84C' }}
+                  >
+                    Koleksi Terbaru
+                  </p>
+                  <p className="text-xs font-sans" style={{ color: 'var(--muted)' }}>
+                    Pilih untuk pratinjau
+                  </p>
+                </div>
+
+                {/* Rows */}
+                <div className="flex flex-col flex-1">
+                  {recentBooks.map((book, idx) => (
+                    <button
+                      key={book.book_id}
+                      className="flex items-center gap-4 px-6 py-4 text-left border-b border-l-[3px] transition-all duration-300"
+                      style={{
+                        borderBottomColor: 'var(--border)',
+                        borderLeftColor: activeRecentIdx === idx ? '#C9A84C' : 'transparent',
+                        background: activeRecentIdx === idx
+                          ? isLight ? 'rgba(201,168,76,0.06)' : 'rgba(201,168,76,0.04)'
+                          : 'transparent',
+                      }}
+                      onMouseEnter={() => setActiveRecentIdx(idx)}
+                      onClick={() => setActiveRecentIdx(idx)}
+                    >
+                      <span
+                        className="font-sans text-xs font-bold flex-shrink-0 w-4 tabular-nums transition-colors duration-300"
+                        style={{ color: activeRecentIdx === idx ? '#C9A84C' : 'var(--muted)' }}
+                      >
+                        {String(idx + 1).padStart(2, '0')}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className="font-serif text-[15px] font-semibold truncate leading-snug transition-colors duration-300"
+                          style={{ color: activeRecentIdx === idx ? 'var(--text)' : 'var(--muted)' }}
+                        >
+                          {book.title}
+                        </p>
+                        <p
+                          className="text-[10px] uppercase tracking-wider font-sans mt-0.5 truncate"
+                          style={{ color: 'var(--muted)' }}
+                        >
+                          {book.genre.split(',')[0].trim()}
+                        </p>
+                      </div>
+                      <svg
+                        className="w-3.5 h-3.5 text-gold flex-shrink-0 transition-all duration-300"
+                        style={{
+                          opacity: activeRecentIdx === idx ? 1 : 0,
+                          transform: activeRecentIdx === idx ? 'translateX(0)' : 'translateX(-6px)',
+                        }}
+                        fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                    </button>
+                  ))}
+
+                  <div className="mt-auto p-5">
+                    <Link
+                      href="/browse"
+                      className="block w-full text-center text-xs font-semibold font-sans py-3 rounded-xl transition-all duration-200 border"
+                      style={{ borderColor: 'var(--border)', color: 'var(--muted)' }}
+                      onMouseEnter={e => {
+                        const el = e.currentTarget as HTMLElement;
+                        el.style.borderColor = '#C9A84C';
+                        el.style.color = '#C9A84C';
+                        el.style.background = isLight ? 'rgba(201,168,76,0.04)' : 'rgba(201,168,76,0.05)';
+                      }}
+                      onMouseLeave={e => {
+                        const el = e.currentTarget as HTMLElement;
+                        el.style.borderColor = 'var(--border)';
+                        el.style.color = 'var(--muted)';
+                        el.style.background = 'transparent';
+                      }}
+                    >
+                      Eksplor lebih banyak buku →
+                    </Link>
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT: showcase */}
+              <div
+                className="flex-1 relative overflow-hidden flex items-center gap-8 p-8"
+                style={{
+                  background: isLight
+                    ? 'linear-gradient(135deg, rgba(201,168,76,0.05) 0%, transparent 70%)'
+                    : 'linear-gradient(135deg, rgba(201,168,76,0.06) 0%, transparent 70%)',
+                  minHeight: 360,
+                }}
+              >
+                {/* Soft grid */}
+                <div
+                  className="absolute inset-0 pointer-events-none"
+                  style={{
+                    backgroundImage: 'linear-gradient(#C9A84C 1px, transparent 1px), linear-gradient(90deg, #C9A84C 1px, transparent 1px)',
+                    backgroundSize: '48px 48px',
+                    opacity: isLight ? 0.03 : 0.025,
+                  }}
+                />
+                {/* Glow orb */}
+                <div
+                  className="absolute top-1/2 left-1/3 -translate-x-1/2 -translate-y-1/2 w-72 h-72 rounded-full pointer-events-none"
+                  style={{
+                    background: 'radial-gradient(circle, rgba(201,168,76,0.18) 0%, transparent 70%)',
+                    filter: 'blur(50px)',
+                  }}
+                />
+
+                {/* Book cover stack */}
+                <div className="relative flex-shrink-0 w-[155px] aspect-[2/3] z-10">
+                  {recentBooks.map((book, idx) => (
+                    <motion.div
+                      key={book.book_id}
+                      className="absolute inset-0 rounded-2xl overflow-hidden shadow-2xl"
+                      style={{ border: '1px solid var(--border)' }}
+                      initial={false}
+                      animate={{
+                        opacity: activeRecentIdx === idx ? 1 : 0,
+                        scale:   activeRecentIdx === idx ? 1 : 0.93,
+                        filter:  activeRecentIdx === idx ? 'blur(0px)' : 'blur(8px)',
+                        zIndex:  activeRecentIdx === idx ? 10 : 0,
+                      }}
+                      transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      {book.cover_url ? (
+                        <img src={book.cover_url} alt={book.title} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center" style={{ background: 'var(--surface2)' }}>
+                          <BookCopy className="w-8 h-8 opacity-20 text-gold" />
+                        </div>
+                      )}
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Book info */}
+                <div className="flex-1 min-w-0 relative z-10" style={{ minHeight: 260 }}>
+                  {recentBooks.map((book, idx) => (
+                    <motion.div
+                      key={book.book_id}
+                      className="absolute inset-0 flex flex-col justify-center"
+                      initial={false}
+                      animate={{
+                        opacity:       activeRecentIdx === idx ? 1 : 0,
+                        y:             activeRecentIdx === idx ? 0 : 12,
+                        pointerEvents: activeRecentIdx === idx ? 'auto' : 'none',
+                      }}
+                      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      {/* Pills: genre + status */}
+                      <div className="flex items-center gap-2 mb-4 flex-wrap">
+                        <span
+                          className="text-[11px] font-semibold font-sans px-2.5 py-1 rounded-full"
+                          style={{
+                            background: 'rgba(201,168,76,0.12)',
+                            color: '#C9A84C',
+                            border: '1px solid rgba(201,168,76,0.2)',
+                          }}
+                        >
+                          {book.genre.split(',')[0].trim()}
+                        </span>
+                        <span
+                          className="text-[11px] font-semibold font-sans px-2.5 py-1 rounded-full"
+                          style={{
+                            background: book.status === 'Tersedia' ? 'rgba(16,185,129,0.1)' : 'rgba(245,158,11,0.1)',
+                            color: book.status === 'Tersedia' ? '#10b981' : '#f59e0b',
+                            border: book.status === 'Tersedia'
+                              ? '1px solid rgba(16,185,129,0.2)'
+                              : '1px solid rgba(245,158,11,0.2)',
+                          }}
+                        >
+                          {book.status}
+                        </span>
+                      </div>
+
+                      {/* Title */}
+                      <h3
+                        className="font-serif text-3xl font-bold leading-tight mb-1.5"
+                        style={{ color: 'var(--text)' }}
+                      >
+                        {book.title}
+                      </h3>
+
+                      {/* Author + rating */}
+                      <div className="flex items-center gap-2.5 mb-4">
+                        <p
+                          className="font-sans text-sm italic"
+                          style={{ color: 'var(--muted)' }}
+                        >
+                          {book.author}
+                        </p>
+                        <span style={{ color: 'var(--border)' }}>·</span>
+                        <div className="flex items-center gap-1">
+                          <Star className="w-3.5 h-3.5 text-gold fill-gold" />
+                          <span className="text-sm font-bold text-gold">
+                            {Number(book.rating ?? book.avg_rating ?? 0).toFixed(1)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Description */}
+                      <p
+                        className="font-sans text-sm leading-relaxed line-clamp-3 mb-5"
+                        style={{ color: 'var(--muted)' }}
+                      >
+                        {book.description}
+                      </p>
+
+                      {/* CTA */}
+                      <Link
+                        href={`/book/${book.key}`}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold font-sans transition-all hover:opacity-90 hover:-translate-y-0.5 shadow-md w-fit"
+                        style={{ background: '#C9A84C', color: '#1a1000' }}
+                      >
+                        Lihat Detail →
+                      </Link>
+                    </motion.div>
+                  ))}
+                </div>
+
+                {/* Dot indicators */}
+                <div className="absolute bottom-4 right-5 z-20 flex items-center gap-1.5">
+                  {recentBooks.map((_, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => setActiveRecentIdx(idx)}
+                      className="rounded-full transition-all duration-300"
+                      style={{
+                        width:  activeRecentIdx === idx ? 14 : 5,
+                        height: 5,
+                        background: activeRecentIdx === idx
+                          ? '#C9A84C'
+                          : isLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.15)',
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </section>
       {/* ── KOMUNITAS ── */}
       <section className="max-w-7xl mx-auto px-4 mt-8 pb-12">
         <div className="flex items-center justify-between mb-4">

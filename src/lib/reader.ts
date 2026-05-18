@@ -49,11 +49,12 @@ export async function fetchReaderBook(bookId: string): Promise<ReaderBook> {
         author: String(data.author ?? data.authors ?? '-'),
         authors: Array.isArray(data.authors) ? data.authors : [String(data.author ?? data.authors ?? '-')],
         cover_url: data.cover_url ?? null,
-        file_url: String(data.pdfUrl ?? data.fileUrl ?? data.file_url ?? SAMPLE_PDF),
+        // Always use proxy endpoint /books/:id/file instead of exposing storage URL
+        file_url: null,
         file_type: 'pdf',
         dueDate: String(data.dueDate ?? formatDueDate(7).dueDate),
         daysLeft: Number(data.daysLeft ?? 7),
-        pdfUrl: String(data.pdfUrl ?? data.fileUrl ?? data.file_url ?? SAMPLE_PDF),
+        pdfUrl: undefined,
         currentPage: Number(data.currentPage ?? data.current_page ?? 1),
         total_pages: Number(data.total_pages ?? 0),
       };
@@ -72,11 +73,12 @@ export async function fetchReaderBook(bookId: string): Promise<ReaderBook> {
         author: supabaseBook.authors[0] || 'Unknown',
         authors: supabaseBook.authors,
         cover_url: supabaseBook.cover_url ?? null,
-        file_url: supabaseBook.file_url,
+        // Always use proxy endpoint /books/:id/file instead of exposing storage URL
+        file_url: null,
         file_type: 'pdf',
         dueDate: formatDueDate(7).dueDate,
         daysLeft: 7,
-        pdfUrl: supabaseBook.file_url,
+        pdfUrl: undefined,
         currentPage: 1,
         total_pages: supabaseBook.pages || 0,
       };

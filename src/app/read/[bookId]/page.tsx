@@ -10,16 +10,21 @@ import {
   ArrowLeft, BookOpen, Clock, Menu, X, RotateCcw, Minus, Plus,
   Search, RedoDot,
 } from 'lucide-react';
+import { Upload, AlertCircle, Loader as LoaderIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/authStore';
 import { fetchReaderBook } from '@/lib/reader';
+import { uploadPdfFile } from '@/lib/supabase-admin';
 import type { ReaderBook } from '@/types/reader';
 import { auth } from '@/lib/firebase';
 import confetti from 'canvas-confetti';
 import { invalidateShelfCache } from '@/lib/shelf';
 
 const Document = dynamic(
-  () => import('react-pdf').then((mod) => mod.Document),
+  () => import('react-pdf').then((mod) => {
+    mod.pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+    return mod.Document;
+  }),
   { ssr: false, loading: () => <div>Loading PDF...</div> }
 );
 
@@ -28,18 +33,10 @@ const Page = dynamic(
   { ssr: false }
 );
 
-// Worker setup pake https:// biar aman dari blokir browser - DI LUAR CONDITIONAL!
-let pdfjs: any = null;
-if (typeof window !== 'undefined') {
-  const pdfModule = require('react-pdf');
-  pdfjs = pdfModule.pdfjs;
-  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
-}
-
 export default function ReadPage() {
   const params    = useParams();
   const router    = useRouter();
-  const { user }  = useAuthStore();
+  const { user, role }  = useAuthStore();
 
   const bookKey = params?.bookId as string ?? 'd1';
   const [book, setBook] = useState<ReaderBook | null>(null);
@@ -47,13 +44,17 @@ export default function ReadPage() {
   const [accessError, setAccessError] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const userName = user?.displayName || user?.email || 'Pustara User';
+  const isAdmin = role === 'admin';
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
   const resolveToken = useCallback(async (): Promise<string | null> => {
-    const current = auth.currentUser;
+    const current = auth?.currentUser;
     if (!current) return null;
     return current.getIdToken();
   }, []);
+
+  const [isMobile, setIsMobile] = useState(false);
+  const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -136,14 +137,20 @@ export default function ReadPage() {
   const [pageNumber,  setPageNumber]  = useState<number>(1);
   const [isDesktop, setIsDesktop] = useState<boolean>(false);
   const [pageWidth, setPageWidth] = useState<number>(340);
-  const [scale,       setScale]       = useState<number>(1.2);
+  const [scale,       setScale]       = useState<number>(1.4);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showUI,      setShowUI]      = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
   const [loading,     setLoading]     = useState(true);
   const [inputPage,   setInputPage]   = useState('1');
+  const [pdfError, setPdfError] = useState<string | null>(null);
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [showUploadModal, setShowUploadModal] = useState(false);
   const [readingTime, setReadingTime] = useState(0);
   const readingTimeRef = useRef(0);
+  const watermarkLabel = `${userName || 'Pustara User'} · ${new Date().toLocaleDateString('id-ID', {
+    day: 'numeric', month: 'short', year: 'numeric',
+  })}`;
   useEffect(() => { readingTimeRef.current = readingTime; }, [readingTime]);
 
   const [showCompletionModal, setShowCompletionModal] = useState(false);
@@ -151,10 +158,18 @@ export default function ReadPage() {
   const containerRef   = useRef<HTMLDivElement>(null);
   const readerViewportRef = useRef<HTMLDivElement>(null);
   const hideUITimer    = useRef<ReturnType<typeof setTimeout>>();
-  const pageInputRef   = useRef<HTMLInputElement>(null);
   const progressSaveTimer = useRef<ReturnType<typeof setTimeout>>();
-  const latestPageRef = useRef<number>(1);
+  const pageInputRef   = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    setIsMobile(/iPhone|iPad|iPod|Android/i.test(navigator.userAgent));
+  }, []);
+
+  // Ensure mobile uses a smaller default scale for readability
+  useEffect(() => {
+    if (isMobile) setScale(1.0);
+  }, [isMobile]);
   const latestNumPagesRef = useRef<number>(0);
+  const latestPageRef = useRef<number>(1);
   const initialProgressSyncRef = useRef(false);
   const lastSavedPageRef = useRef<number>(1);
   const lastSavedReadingTimeRef = useRef<number>(0);
@@ -241,40 +256,6 @@ export default function ReadPage() {
       }
     }
   }, [book, numPages, getStoredReaderProgress, readingTime]);
-
-  const [blackout, setBlackout] = useState(false);
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        e.key === 'F12' ||
-        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J' || e.key === 'C')) ||
-        (e.ctrlKey && e.key === 'U') ||
-        (e.metaKey && e.altKey && (e.key === 'I' || e.key === 'J' || e.key === 'U'))
-      ) {
-        e.preventDefault();
-        return false;
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-
-    const detectDevTools = setInterval(() => {
-      const threshold = 160;
-      if (
-        window.outerWidth - window.innerWidth > threshold ||
-        window.outerHeight - window.innerHeight > threshold
-      ) {
-        setBlackout(true);
-        setTimeout(() => {
-          void saveCurrentPageAndGoBack();
-        }, 2500);
-      }
-    }, 1000);
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-      clearInterval(detectDevTools);
-    };
-  }, [router]);
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
@@ -498,18 +479,17 @@ export default function ReadPage() {
 
     const computeWidth = () => {
       const rect = el.getBoundingClientRect();
-      const horizontalPadding = 32; // corresponds to px-4 on reader viewport
-      const verticalPadding = 48; // corresponds to py-6 on reader viewport
-      const gap = isDesktop ? 24 : 0; // corresponds to gap-6
-      const availableWidth = Math.max(240, rect.width - horizontalPadding - gap);
-      const availableHeight = Math.max(280, rect.height - verticalPadding);
+      const gap = isDesktop ? 24 : 0;
+      const availableWidth = Math.max(240, rect.width - 32 - gap);
+      const availableHeight = Math.max(280, rect.height - 48); 
 
-      const perPageByWidth = isDesktop ? Math.floor(availableWidth / 2) : Math.floor(availableWidth);
-      // 3/4 aspect ratio => width = height * 3 / 4
-      const perPageByHeight = Math.floor((availableHeight * 3) / 4);
-      const fitWidth = Math.min(perPageByWidth, perPageByHeight);
-
-      setPageWidth(Math.max(220, fitWidth));
+      if (isDesktop) {
+        const byHeight = Math.floor((availableHeight * 3) / 4);
+        const byWidth  = Math.floor(availableWidth / 2);
+        setPageWidth(Math.max(220, Math.min(byHeight, byWidth)));
+      } else {
+        setPageWidth(Math.max(220, Math.floor(availableWidth)));
+      }
     };
 
     computeWidth();
@@ -525,21 +505,45 @@ export default function ReadPage() {
 
   useEffect(() => { setInputPage(String(pageNumber)); }, [pageNumber]);
 
-  if (blackout) {
-    return (
-      <div className="flex h-screen w-full flex-col items-center justify-center bg-black text-red-500 z-[9999] fixed inset-0">
-        <h1 className="text-4xl font-black mb-4">AKSES DITOLAK</h1>
-        <p className="text-lg font-medium text-white">Aktivitas DevTools terdeteksi. Keamanan diutamakan.</p>
-        <p className="text-sm mt-2 text-gray-400">Anda akan dialihkan...</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    let cancelled = false;
+    setPdfData(null);
+    if (!pdfFile) return;
+
+    const fetchPdf = async () => {
+      try {
+        const { url, httpHeaders } = pdfFile as { url: string; httpHeaders: Record<string, string> };
+        const res = await fetch(url, { headers: httpHeaders });
+        if (!res.ok) throw new Error('Fetch failed');
+        const buffer = await res.arrayBuffer();
+        if (cancelled) return;
+        setPdfData(new Uint8Array(buffer));
+      } catch (err) {
+        if (cancelled) return;
+        console.error('[Reader] PDF fetch error', err);
+        setPdfError('Gagal memuat PDF');
+      }
+    };
+
+    void fetchPdf();
+    return () => { cancelled = true; };
+  }, [pdfFile]);
+
+  // Create a memoized `file` prop that copies the bytes so transferring to worker
+  // doesn't detach the original ArrayBuffer we keep in state.
+  const memoizedFileProp = useMemo(() => {
+    if (!pdfData) return undefined;
+    // make a fresh copy of the bytes each time so pdfjs can transfer safely
+    const copy = new Uint8Array(pdfData.length);
+    copy.set(pdfData);
+    return { data: copy };
+  }, [pdfData]);
 
   if (loadingBook) {
     return <div className="flex h-screen items-center justify-center bg-[#1a1a1a] text-white/60">Memuat buku...</div>;
   }
 
-  if (accessError || !book || !token || !pdfFile) {
+  if (accessError || !book || !token) {
     return (
       <div className="flex h-screen flex-col items-center justify-center bg-[#1a1a1a] text-white px-6 text-center">
         <h2 className="text-xl font-bold mb-2">Akses Reader Dibatasi</h2>
@@ -572,13 +576,56 @@ export default function ReadPage() {
   function prevPage() { setPageNumber(p => Math.max(p - step, 1)); }
   function zoomIn()   { setScale(s => Math.min(s + 0.2, 3.0)); }
   function zoomOut()  { setScale(s => Math.max(s - 0.2, 0.5)); }
-  function resetZoom(){ setScale(1.2); }
+  function resetZoom(){ setScale(1.0); }
 
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
     setLoading(false);
+    setPdfError(null);
   }
 
+  async function handlePdfUpload(file: File) {
+    if (!file || file.type !== 'application/pdf') {
+      setPdfError('Hanya file PDF yang didukung');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setPdfError('Maksimal ukuran file 50MB');
+      return;
+    }
+
+    setUploadingPdf(true);
+    setPdfError(null);
+
+    try {
+      const fileUrlToSend = await uploadPdfFile(file, bookKey);
+
+      const updateRes = await fetch(`${API_URL}/admin/books/${bookKey}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ file_url: fileUrlToSend }),
+      });
+
+      if (!updateRes.ok) {
+        const errorData = await updateRes.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Gagal menyimpan file PDF ke buku');
+      }
+
+      setBook((prev) => prev ? { ...prev, file_url: fileUrlToSend, pdfUrl: undefined } : prev);
+      setLoading(true);
+      setShowUploadModal(false);
+      setPdfError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Gagal upload PDF';
+      setPdfError(message);
+    } finally {
+      setUploadingPdf(false);
+    }
+  }
   function handlePageInput(e: React.KeyboardEvent) {
     if (e.key === 'Enter') {
       const n = parseInt(inputPage);
@@ -643,66 +690,137 @@ export default function ReadPage() {
                 {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
               </button>
             </div>
+              {isAdmin && !numPages && (
+                <button onClick={() => setShowUploadModal(true)}
+                  className="ml-2 px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors flex items-center gap-1.5 text-sm font-medium flex-shrink-0">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Upload PDF</span>
+                </button>
+              )}
           </motion.header>
         )}
       </AnimatePresence>
 
       <div className="flex flex-1 overflow-hidden relative">
-          <div ref={readerViewportRef} className="flex-1 overflow-auto flex items-center justify-center py-6 px-4 relative"
+          <div ref={readerViewportRef} className="flex-1 overflow-hidden flex items-center justify-center py-6 px-4 relative"
           style={{ background: 'radial-gradient(ellipse at center, #2a2a2a 0%, #1a1a1a 100%)' }}>
 
-          {loading && (
+          {loading && pdfFile && (
             <div className="w-full max-w-2xl aspect-[3/4] rounded-xl bg-white/5 animate-pulse flex items-center justify-center">
               <BookOpen className="w-12 h-12 text-white/10" />
             </div>
           )}
 
-          <Document
-            file={pdfFile as any}
-            onLoadSuccess={onDocumentLoadSuccess}
-            onLoadError={(error) => {
-              console.error("React-PDF Load Error:", error);
-              setLoading(false);
-            }}
-            loading=""
-            className="flex flex-col items-center">
-            <div className="relative shadow-[0_20px_60px_rgba(0,0,0,0.5)] rounded-sm pointer-events-none">
-              <div className={cn('grid gap-6', isDesktop ? 'grid-cols-2 justify-center' : 'grid-cols-1')}> 
-                {[...Array(isDesktop ? 2 : 1)].map((_, idx) => {
-                  const p = pageNumber + idx;
-                  if (p > numPages) return null;
-                  return (
-                    <div
-                      key={p}
-                      className="relative bg-white overflow-hidden"
-                      style={{
-                        width: Math.floor(pageWidth * scale),
-                        height: Math.floor((pageWidth * 4 * scale) / 3),
-                      }}
-                    >
-                      <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-                        <Page
-                          pageNumber={p}
-                          width={Math.max(220, Math.floor(pageWidth * scale))}
-                          renderMode="canvas"
-                          renderTextLayer={false}
-                          renderAnnotationLayer={false}
-                          className="block"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+          {!pdfFile ? (
+            <div className="flex max-w-md flex-col items-center gap-4 rounded-3xl border border-dashed border-white/10 bg-black/20 px-6 py-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+              <BookOpen className="w-14 h-14 text-white/15" />
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-2">PDF belum diunggah</h3>
+                <p className="text-sm text-white/50">Buku ini ada di katalog, tapi file PDF-nya masih kosong.</p>
+              </div>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  onClick={() => setShowUploadModal(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-600 transition-colors"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload PDF Sekarang
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => router.push('/browse')}
+                  className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/15 transition-colors"
+                >
+                  Kembali ke Browse
+                </button>
+              )}
+            </div>
+          ) : pdfError ? (
+            <div className="flex max-w-md flex-col items-center gap-4 rounded-3xl border border-white/10 bg-black/20 px-6 py-8 text-center shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+              <AlertCircle className="w-14 h-14 text-red-400/80" />
+              <div>
+                <h3 className="text-lg font-semibold text-white mb-2">Gagal Memuat PDF</h3>
+                <p className="text-sm text-white/50">{pdfError}</p>
+              </div>
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setShowUploadModal(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-indigo-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-600 transition-colors"
+                >
+                  <Upload className="w-4 h-4" />
+                  Upload PDF Baru
+                </button>
+              )}
+            </div>
+          ) : (!pdfData) ? (
+            <div className="flex flex-col items-center gap-3 text-white/50">
+              <div className="w-8 h-8 rounded-full border-2 border-white/20 border-t-white/70 animate-spin" />
+              <p className="text-sm">Memuat buku...</p>
+            </div>
+          ) : (
+            <Document
+              file={memoizedFileProp}
+              onLoadSuccess={onDocumentLoadSuccess}
+              onLoadError={(error) => {
+                console.error('React-PDF Load Error:', error);
+                setLoading(false);
+                const msg = error?.message || String(error) || '';
+                setPdfError(`Gagal membuka file PDF. ${msg ? `(${msg})` : 'Coba refresh halaman atau unggah ulang file.'}`);
+              }}
+              loading=""
+              className="flex flex-col items-center"
+            >
+              <div className="relative rounded-sm shadow-[0_20px_60px_rgba(0,0,0,0.5)] pointer-events-none">
+                <div className={cn('grid gap-6', isDesktop ? 'grid-cols-2 justify-center' : 'grid-cols-1')}>
+                  {[...Array(isDesktop ? 2 : 1)].map((_, idx) => {
+                    const p = pageNumber + idx;
+                    if (p > numPages) return null;
+                    return (
+                      <div
+                        key={p}
+                        className="relative overflow-hidden bg-white"
+                        style={{
+                          width: Math.floor(pageWidth * scale),
+                          height: Math.floor((pageWidth * 4 * scale) / 3),
+                        }}
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <Page
+                            pageNumber={p}
+                            width={Math.max(220, Math.floor(pageWidth * scale))}
+                            renderMode="canvas"
+                            renderTextLayer={false}
+                            renderAnnotationLayer={false}
+                            className="block"
+                          />
+                        </div>
 
-                <div className="absolute inset-0 pointer-events-none flex items-center justify-center"
-                  style={{ transform: 'rotate(-30deg)' }}>
-                  <p className="text-white/[0.04] font-bold text-2xl tracking-widest whitespace-nowrap select-none">
-                    {userName.toUpperCase()} · PUSTARA
-                  </p>
+                        {/* Watermark per halaman */}
+                        <div className="absolute inset-0 pointer-events-none overflow-hidden select-none flex items-center justify-center" aria-hidden>
+                          <div
+                            className="font-black text-black"
+                            style={{
+                              fontFamily: "'Outfit', Inter, Arial, sans-serif",
+                              fontSize: isMobile ? 24 : 40,
+                              letterSpacing: '0.05em',
+                              opacity: 0.03,
+                              transform: 'rotate(-28deg)',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {watermarkLabel}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
-          </Document>
+            </Document>
+          )}
 
           {/* canvas sizing handled via wrapper classes to avoid styled-jsx */}
 
@@ -888,7 +1006,7 @@ export default function ReadPage() {
             exit={{ opacity: 0 }}
           >
             <motion.div
-              className="bg-gradient-to-b from-[#111] to-[#0a0a0a] border border-indigo-500/30 rounded-2xl p-8 text-center max-w-md shadow-2xl"
+              className="max-w-md rounded-3xl border border-white/10 bg-[#111]/95 p-6 text-center shadow-2xl"
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.9, y: 20 }}
@@ -903,33 +1021,115 @@ export default function ReadPage() {
 
               <div className="flex flex-col gap-3">
                 <button
+                  type="button"
                   onClick={() => {
-                    setPageNumber(1);
+                    clearStoredReaderProgress();
+                    setBook(prev => {
+                      if (!prev) return prev;
+                      return {
+                        ...prev,
+                        currentPage: 1,
+                        reading_session: prev.reading_session
+                          ? { ...prev.reading_session, current_page: 1, progress_percentage: 0 }
+                          : prev.reading_session,
+                      };
+                    });
+                    lastSavedPageRef.current = 1;
                     setShowCompletionModal(false);
+                    setPageNumber(1);
+                    void saveProgress(1, true);
                   }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-indigo-500/20 border border-indigo-500/50 text-indigo-300 font-semibold hover:bg-indigo-500/30 transition-all"
+                  className="w-full rounded-xl border border-indigo-500/50 bg-indigo-500/20 px-4 py-3 font-semibold text-indigo-300 transition-all hover:bg-indigo-500/30"
                 >
-                  <RedoDot className="text-white" /> Baca Ulang
+                  Baca Ulang
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setShowCompletionModal(false);
                     router.push('/browse');
                   }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-indigo-500 text-white font-semibold hover:bg-indigo-600 transition-all"
+                  className="w-full rounded-xl bg-indigo-500 px-4 py-3 font-semibold text-white transition-all hover:bg-indigo-600"
                 >
-                  <Search className="text-white w-4 h-4" /> Telusuri Buku Lain
+                  Telusuri Buku Lain
                 </button>
                 <button
+                  type="button"
                   onClick={() => {
                     setShowCompletionModal(false);
                     void saveCurrentPageAndGoBack();
                   }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-white/20 text-white/80 font-semibold hover:bg-white/10 transition-all"
+                  className="w-full rounded-xl border border-white/20 px-4 py-3 font-semibold text-white/80 transition-all hover:bg-white/10"
                 >
-                  <ArrowLeft className="text-white" /> Kembali
+                  Kembali
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showUploadModal && isAdmin && (
+          <motion.div
+            className="fixed inset-0 z-[101] flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              className="relative max-w-sm rounded-3xl border border-indigo-500/30 bg-gradient-to-b from-[#111] to-[#0a0a0a] p-6 text-center shadow-2xl"
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              transition={{ type: 'spring', stiffness: 280, damping: 30 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => setShowUploadModal(false)}
+                className="absolute right-4 top-4 rounded-lg p-1.5 text-white/50 transition hover:bg-white/10 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <Upload className="mx-auto mb-4 w-12 h-12 text-indigo-400" />
+              <h3 className="mb-2 text-xl font-bold text-white">Upload PDF</h3>
+              <p className="mb-6 text-sm text-white/50">Pilih file PDF untuk buku ini, maksimal 50MB.</p>
+
+              {uploadingPdf ? (
+                <div className="flex flex-col items-center gap-3 py-6">
+                  <LoaderIcon className="w-8 h-8 animate-spin text-indigo-400" />
+                  <p className="text-sm text-white/70">Mengupload...</p>
+                </div>
+              ) : (
+                <label className="block cursor-pointer">
+                  <div className="relative rounded-xl border-2 border-dashed border-indigo-500/30 bg-indigo-500/5 p-8 transition hover:border-indigo-500/50">
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="w-6 h-6 text-indigo-400" />
+                      <span className="text-sm font-medium text-white">Klik untuk pilih file PDF</span>
+                      <span className="text-xs text-white/40">PDF hingga 50MB</span>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".pdf"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          void handlePdfUpload(file);
+                        }
+                      }}
+                      className="absolute inset-0 cursor-pointer opacity-0"
+                    />
+                  </div>
+                </label>
+              )}
+
+              {pdfError && !uploadingPdf && (
+                <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/20 p-3">
+                  <p className="text-sm text-red-300">{pdfError}</p>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

@@ -73,6 +73,8 @@ interface BackendRiwayat extends BackendBook {
 interface BackendWishlist extends BackendBook {
   wishlist_id: string;
   added_at: string | null;
+  available?: number;
+  total_stock?: number;
 }
 
 interface BackendShelfResponse {
@@ -92,6 +94,9 @@ interface BackendShelfResponse {
 interface ShelfBookStatusResponse {
   borrowed: boolean;
   wishlisted: boolean;
+  queued?: boolean;
+  queue_position?: number | null;
+  queue_count?: number;
   loan_id?: string | null;
   wishlist_id?: string | null;
 }
@@ -99,6 +104,9 @@ interface ShelfBookStatusResponse {
 interface ShelfActionResponse {
   borrowed?: boolean;
   wishlisted?: boolean;
+  queued?: boolean;
+  queue_position?: number | null;
+  queue_count?: number;
 }
 
 async function tryApiGetWithFallback<T>(paths: string[]): Promise<T> {
@@ -193,7 +201,14 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
 
       const dibaca = response.dibaca
         .map((session) => {
-          const progress = Math.max(0, Math.min(100, Math.round(Number(session.progress_percentage ?? 0))));
+          const rawProgress = Number(session.progress_percentage ?? 0);
+          const currentPage = Number(session.current_page ?? 0);
+          const totalPages = Number(session.total_pages ?? 0);
+          // Fallback: if backend stored 0% but we have page data, compute it ourselves
+          const computedProgress = rawProgress === 0 && currentPage > 0 && totalPages > 0
+            ? Math.round((currentPage / totalPages) * 100)
+            : rawProgress;
+          const progress = Math.max(0, Math.min(100, Math.round(computedProgress)));
           return {
             key: session.id,
             title: session.title,
@@ -202,8 +217,8 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
             genre: 'Sedang dibaca',
             progress,
             lastRead: formatRelativeTime(session.last_read_at || session.started_at || undefined),
-            totalPages: Number(session.total_pages ?? 0),
-            currentPage: Number(session.current_page ?? 0),
+            totalPages,
+            currentPage,
           };
         })
         .filter((session) => session.currentPage > 1 || session.progress > 0);
@@ -245,7 +260,8 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
         coverUrl: book.cover_url || undefined,
         genre: normalizeGenre(book.genres),
         addedAt: formatDateID(book.added_at ?? undefined),
-        available: true,
+        available: Number(book.available ?? 0) > 0,
+        total_stock: Number(book.total_stock ?? 0),
         rating: Number(book.avg_rating ?? 0),
       }));
 
@@ -276,7 +292,7 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
 }
 
 export async function fetchMyBookShelfStatus(bookId: string): Promise<ShelfBookStatusResponse> {
-  if (!bookId) return { borrowed: false, wishlisted: false };
+  if (!bookId) return { borrowed: false, wishlisted: false, queued: false, queue_position: null, queue_count: 0 };
 
   const paths = [
     `/shelf/me/status/${bookId}`,
@@ -288,11 +304,14 @@ export async function fetchMyBookShelfStatus(bookId: string): Promise<ShelfBookS
     return {
       borrowed: Boolean(data?.borrowed),
       wishlisted: Boolean(data?.wishlisted),
+      queued: Boolean(data?.queued),
+      queue_position: data?.queue_position ?? null,
+      queue_count: Number(data?.queue_count ?? 0),
       loan_id: data?.loan_id ?? null,
       wishlist_id: data?.wishlist_id ?? null,
     };
   } catch {
-    return { borrowed: false, wishlisted: false };
+    return { borrowed: false, wishlisted: false, queued: false, queue_position: null, queue_count: 0 };
   }
 }
 
@@ -301,7 +320,7 @@ export async function fetchMyBookShelfStatus(bookId: string): Promise<ShelfBookS
  * Throws on auth/backend errors so caller can show the correct UI state.
  */
 export async function borrowBookForMe(bookId: string): Promise<ShelfActionResponse> {
-  const token = await auth.currentUser?.getIdToken();
+  const token = await auth?.currentUser?.getIdToken();
   if (!token) {
     throw new Error('HTTP 401: Missing auth token');
   }
@@ -342,6 +361,19 @@ export async function returnBorrowedBookForMe(bookId: string): Promise<ShelfActi
   ];
   const data = await tryApiPostWithFallback<ShelfActionResponse>(paths);
   return { borrowed: Boolean(data?.borrowed ?? false) };
+}
+
+export async function joinQueueForMe(bookId: string): Promise<ShelfActionResponse> {
+  const paths = [
+    `/shelf/me/queue/${bookId}`,
+    `/api/shelf/me/queue/${bookId}`,
+  ];
+  const data = await tryApiPostWithFallback<ShelfActionResponse>(paths);
+  return {
+    queued: Boolean(data?.queued ?? true),
+    queue_position: data?.queue_position ?? null,
+    queue_count: Number(data?.queue_count ?? 0),
+  };
 }
 
 export async function saveBookForMe(bookId: string): Promise<ShelfActionResponse> {

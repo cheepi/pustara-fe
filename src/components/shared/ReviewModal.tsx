@@ -6,6 +6,8 @@ import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { auth } from '@/lib/firebase';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
 interface Props {
   bookTitle: string;
   bookKey:   string;
@@ -47,9 +49,17 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
 
       try {
         setLoading(true);
+        if (!auth) {
+          alert('Layanan autentikasi belum siap. Muat ulang halaman.');
+          return;
+        }
         const token = await auth.currentUser?.getIdToken();
+        if (!token) {
+          alert('Silakan login terlebih dahulu.');
+          return;
+        }
 
-        const response = await fetch('http://localhost:3000/reviews', {
+        const response = await fetch(`${API_URL}/reviews`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import Script from 'next/script';
 import './globals.css';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
@@ -30,18 +29,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="id" suppressHydrationWarning>
       <head />
       <body className="min-h-screen overflow-x-hidden overflow-y-auto">
-        <Script
-          id="theme-script"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var t = localStorage.getItem('pustara_theme');
-                if (t === 'light') document.documentElement.classList.add('light');
-              } catch(e) {}
-            `,
-          }}
-        />
         <ThemeProvider>
           <ToastProvider>
             <div className="min-h-screen w-full flex flex-col">

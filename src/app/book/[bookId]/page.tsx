@@ -18,7 +18,7 @@ import ReviewModal from '@/components/shared/ReviewModal';
 import AvatarImage from '@/components/shared/AvatarImage';
 import { useSimilarBooks } from '@/hooks/useSimilarBooks';
 import { getBookById, getSimilarBooks } from '@/lib/books';
-import { borrowBookForMe, fetchMyBookShelfStatus, removeSavedBookForMe, saveBookForMe } from '@/lib/shelf';
+import { borrowBookForMe, fetchMyBookShelfStatus, joinQueueForMe, removeSavedBookForMe, saveBookForMe } from '@/lib/shelf';
 import { BookDetail } from '@/types/book';
 import ReviewCard from '@/components/shared/ReviewCard';
 import type { ModalState } from '@/types/bookPage';
@@ -109,7 +109,9 @@ export default function BookDetailPage() {
 
   const [wishlisted, setWishlisted] = useState(false);
   const [borrowed,   setBorrowed]   = useState(false);
-  const [actionLoading, setActionLoading] = useState<'borrow' | 'wishlist' | null>(null);
+  const [queued, setQueued] = useState(false);
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [actionLoading, setActionLoading] = useState<'borrow' | 'wishlist' | 'queue' | null>(null);
 
   async function refreshBookSnapshot() {
     if (!bookKey) return;
@@ -145,6 +147,8 @@ export default function BookDetailPage() {
     if (!user) {
       setWishlisted(false);
       setBorrowed(false);
+      setQueued(false);
+      setQueuePosition(null);
       return;
     }
 
@@ -154,11 +158,15 @@ export default function BookDetailPage() {
         if (!active) return;
         setWishlisted(Boolean(status.wishlisted));
         setBorrowed(Boolean(status.borrowed));
+        setQueued(Boolean(status.queued));
+        setQueuePosition(status.queue_position ?? null);
       })
       .catch(() => {
         if (!active) return;
         setWishlisted(false);
         setBorrowed(false);
+        setQueued(false);
+        setQueuePosition(null);
       });
 
     return () => {
@@ -229,6 +237,8 @@ export default function BookDetailPage() {
     try {
       await borrowBookForMe(book.id);
       setBorrowed(true);
+      setQueued(false);
+      setQueuePosition(null);
       setBook((prev) => {
         if (!prev) return prev;
         return {
@@ -243,18 +253,70 @@ export default function BookDetailPage() {
       const message = error instanceof Error ? error.message : 'Gagal meminjam buku.';
       if (message.includes('409')) {
         showToast('Buku sedang tidak tersedia. Silakan masuk antrean.', 'error');
+        setModal('queue');
       } else if (message.includes('401')) {
         showToast('Sesi login berakhir. Silakan login kembali.', 'error');
+        setModal('none');
       } else {
         showToast('Gagal meminjam buku. Coba lagi sebentar.', 'error');
+        setModal('none');
       }
-      setModal('none');
     } finally {
       setActionLoading(null);
     }
   }
 
-  function handleQueue() { setModal('queue'); }
+  function handleQueue() {
+    if (!user) {
+      router.push('/auth/login');
+      return;
+    }
+    setModal('queue');
+  }
+
+  async function handleJoinQueue() {
+    if (!book) return;
+    if (!user) {
+      router.push('/auth/login');
+      return;
+    }
+
+    setActionLoading('queue');
+    try {
+      const result = await joinQueueForMe(book.id);
+      const nextQueueCount = Number(result.queue_count ?? book.queue ?? 0);
+
+      setQueued(Boolean(result.queued ?? true));
+      setQueuePosition(result.queue_position ?? null);
+      setBook((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          queue: nextQueueCount,
+        };
+      });
+
+      showToast(
+        result.queue_position
+          ? `Berhasil masuk antrean. Posisimu #${result.queue_position}.`
+          : 'Berhasil masuk antrean.',
+        'success'
+      );
+      setModal('none');
+      refreshBookSnapshot();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gagal masuk antrean.';
+      if (message.includes('409')) {
+        showToast('Buku sudah tersedia. Kamu bisa pinjam langsung.', 'error');
+      } else if (message.includes('401')) {
+        showToast('Sesi login berakhir. Silakan login kembali.', 'error');
+      } else {
+        showToast('Gagal masuk antrean. Coba lagi sebentar.', 'error');
+      }
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   if (authLoading || loadingBook || !book) return <PageSkeleton />;
 
@@ -394,6 +456,14 @@ export default function BookDetailPage() {
                   whileTap={{ scale: 0.98 }}>
                   <BookOpen className="w-4 h-4" />
                   {actionLoading === 'borrow' ? 'Memproses...' : 'Pinjam Buku'}
+                </motion.button>
+              ) : queued ? (
+                <motion.button
+                  disabled
+                  className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-500 text-white/95 cursor-not-allowed shadow-lg"
+                  whileTap={{ scale: 0.98 }}>
+                  <Clock className="w-4 h-4" />
+                  Dalam Antrean{queuePosition ? ` #${queuePosition}` : ''}
                 </motion.button>
               ) : (
                 <motion.button
@@ -699,17 +769,26 @@ export default function BookDetailPage() {
                   <h3 className="font-serif text-xl font-black mb-1">Buku Sedang Dipinjam</h3>
                   <p className={cn('text-sm leading-relaxed mb-4', tk.modalMuted)}>
                     Saat ini ada <strong>{book.queue || 0} orang</strong> dalam antrean.
-                    Kamu akan mendapat notifikasi ketika buku tersedia.
+                    {queued ? ' Kamu sudah masuk antrean dan akan mendapat notifikasi ketika buku tersedia.' : ' Kamu akan mendapat notifikasi ketika buku tersedia.'}
                   </p>
                   <div className={cn('rounded-2xl p-4 mb-5 text-left', tk.modalSub)}>
                     <p className={cn('text-xs font-semibold mb-1', tk.modalMuted)}>Estimasi Waktu Tunggu</p>
-                    <p className="text-lg font-black text-amber-400">~{(book.queue || 0) * 7} Hari</p>
+                    <p className="text-lg font-black text-amber-400">~{Math.max((queued ? ((queuePosition || 1) - 1) : (book.queue || 0)) * 7, 0)} Hari</p>
                     <p className={cn('text-xs mt-0.5', tk.modalMuted)}>berdasarkan rata-rata peminjaman 7 hari</p>
+                    {queued && queuePosition && (
+                      <p className={cn('text-xs mt-2 font-semibold', tk.modalMuted)}>Posisimu saat ini: #{queuePosition}</p>
+                    )}
                   </div>
-                  <motion.button onClick={() => setModal('none')}
-                    className="w-full py-3.5 rounded-2xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+                  <motion.button onClick={queued ? () => setModal('none') : handleJoinQueue}
+                    disabled={actionLoading === 'queue'}
+                    className={cn(
+                      'w-full py-3.5 rounded-2xl text-sm font-bold transition-colors',
+                      queued
+                        ? 'bg-slate-400 text-white/95 hover:bg-slate-400'
+                        : 'bg-amber-500 text-white hover:bg-amber-600'
+                    )}
                     whileTap={{ scale: 0.97 }}>
-                    Masuk Antrean
+                    {queued ? 'Sudah Dalam Antrean' : actionLoading === 'queue' ? 'Memproses...' : 'Masuk Antrean'}
                   </motion.button>
                 </div>
               </motion.div>

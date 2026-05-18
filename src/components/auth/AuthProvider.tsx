@@ -49,6 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { setUser, resolveAuth } = useAuthStore();
 
   useEffect(() => {
+    if (!auth) {
+      resolveAuth(null);
+      return;
+    }
+
     const unsub = onAuthStateChanged(auth, async (user) => {
       setUser(user);
 
