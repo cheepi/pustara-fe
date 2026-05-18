@@ -5,14 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Shield, Lock, Eye, EyeOff, Smartphone, LogOut,
   ChevronRight, AlertTriangle, CheckCircle, X, Loader2,
-  KeyRound, Trash2, Download, Bell, Globe,
+  KeyRound, Trash2, Download, Bell, Globe, Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useToast } from '@/components/feedback/ToastProvider';
 import { useAuthStore } from '@/store/authStore';
-import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { usePasswordManagement } from '@/hooks/usePasswordManagement';
 import Navbar from '@/components/layout/Navbar';
 
 // ── Toggle Switch ──────────────────────────────────────────────────────────────
@@ -166,8 +167,22 @@ export default function PrivacySecurityPage() {
 
   // ── Modal state ──
   const [modal, setModal] = useState<
-    'change-password' | 'sessions' | 'delete-account' | 'download-data' | null
+    'change-password' | 'forgot-password' | 'sessions' | 'delete-account' | 'download-data' | null
   >(null);
+
+  // ── Password management hook ──
+  const {
+    changePassword,
+    changePasswordLoading,
+    changePasswordError,
+    clearChangePasswordError,
+    sendResetEmail,
+    resetEmailLoading,
+    resetEmailError,
+    resetEmailSent,
+    clearResetEmailError,
+    validatePassword,
+  } = usePasswordManagement();
 
   // ── Change password form ──
   const [oldPw,     setOldPw]     = useState('');
@@ -175,8 +190,10 @@ export default function PrivacySecurityPage() {
   const [confirmPw, setConfirmPw] = useState('');
   const [showOld,   setShowOld]   = useState(false);
   const [showNew,   setShowNew]   = useState(false);
-  const [pwLoading, setPwLoading] = useState(false);
-  const [pwError,   setPwError]   = useState('');
+
+  // ── Forgot password form ──
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetShownMessage, setResetShownMessage] = useState(false);
 
   // ── Delete confirm ──
   const [deleteInput, setDeleteInput] = useState('');
@@ -187,28 +204,53 @@ export default function PrivacySecurityPage() {
 
   // ── Change password handler ──
   async function handleChangePassword() {
-    setPwError('');
-    if (!newPw || newPw.length < 6) { setPwError('Kata sandi minimal 6 karakter.'); return; }
-    if (newPw !== confirmPw)         { setPwError('Konfirmasi kata sandi tidak cocok.'); return; }
-    if (!user?.email)                { setPwError('Akun tidak valid.'); return; }
+    clearChangePasswordError();
+    if (!newPw || newPw.length < 6) return;
+    if (newPw !== confirmPw) {
+      // Error is handled in the validation
+      return;
+    }
+    if (!user?.email) return;
 
-    setPwLoading(true);
     try {
-      const cred = EmailAuthProvider.credential(user.email, oldPw);
-      await reauthenticateWithCredential(user, cred);
-      await updatePassword(user, newPw);
+      await changePassword(user.email, oldPw, newPw);
+      
+      // Success - reset form and close modal
       setModal(null);
-      setOldPw(''); setNewPw(''); setConfirmPw('');
-      showToast('Kata sandi berhasil diperbarui!', 'success');
-    } catch (e: any) {
-      const msg =
-        e.code === 'auth/wrong-password'    ? 'Kata sandi lama salah.' :
-        e.code === 'auth/too-many-requests'  ? 'Terlalu banyak percobaan. Coba lagi nanti.' :
-        e.code === 'auth/requires-recent-login' ? 'Sesi kadaluarsa. Silakan login ulang.' :
-        'Gagal memperbarui kata sandi.';
-      setPwError(msg);
-    } finally {
-      setPwLoading(false);
+      setOldPw('');
+      setNewPw('');
+      setConfirmPw('');
+      showToast('Kata sandi berhasil diperbarui! 🔒', 'success');
+    } catch (error) {
+      // Error is already in changePasswordError state
+      console.error('[ChangePassword] Error:', error);
+    }
+  }
+
+  // ── Forgot password handler ──
+  async function handleForgotPassword() {
+    clearResetEmailError();
+    
+    if (!resetEmail) {
+      return;
+    }
+
+    try {
+      await sendResetEmail(resetEmail);
+      
+      // Success - show message
+      showToast('Email reset kata sandi telah dikirim! Periksa inbox Anda.', 'success');
+      setResetShownMessage(true);
+      
+      // Auto-close after 3 seconds
+      setTimeout(() => {
+        setModal(null);
+        setResetEmail('');
+        setResetShownMessage(false);
+      }, 2000);
+    } catch (error) {
+      // Error is already in resetEmailError state
+      console.error('[ForgotPassword] Error:', error);
     }
   }
 
@@ -236,10 +278,6 @@ export default function PrivacySecurityPage() {
     { device: 'Firefox · macOS',     loc: 'Depok, ID',   time: '3 hari lalu',    current: false },
   ];
   const [activeSessions, setActiveSessions] = useState(sessions);
-
-  function addToast(arg0: string, arg1: string) {
-    throw new Error('Function not implemented.');
-  }
 
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
@@ -276,7 +314,13 @@ export default function PrivacySecurityPage() {
               icon={KeyRound}
               label="Ubah Kata Sandi"
               sub="Perbarui kata sandi secara berkala"
-              onClick={() => { setPwError(''); setModal('change-password'); }}
+              onClick={() => {
+                clearChangePasswordError();
+                setOldPw('');
+                setNewPw('');
+                setConfirmPw('');
+                setModal('change-password');
+              }}
             />
             <ToggleRow
               icon={Smartphone}
@@ -285,7 +329,7 @@ export default function PrivacySecurityPage() {
               on={twoFactor}
               onToggle={() => {
                 setTwoFactor(v => !v);
-                addToast(!twoFactor ? '2FA diaktifkan ✓' : '2FA dinonaktifkan', !twoFactor ? 'success' : 'info');
+                showToast(!twoFactor ? '2FA diaktifkan ✓' : '2FA dinonaktifkan', !twoFactor ? 'success' : 'info');
               }}
             />
             <ToggleRow
@@ -295,7 +339,7 @@ export default function PrivacySecurityPage() {
               on={loginAlerts}
               onToggle={() => {
                 setLoginAlerts(v => !v);
-                addToast(!loginAlerts ? 'Notifikasi login diaktifkan' : 'Notifikasi login dimatikan', 'info');
+                showToast(!loginAlerts ? 'Notifikasi login diaktifkan' : 'Notifikasi login dimatikan', 'info');
               }}
               iconColor="text-blue-400"
             />
@@ -315,28 +359,28 @@ export default function PrivacySecurityPage() {
               label="Aktivitas Terlihat"
               sub="Pengguna lain dapat melihat aktivitas bacamu"
               on={activityVisible}
-              onToggle={() => { setActivityVisible(v => !v); addToast('Preferensi disimpan', 'info'); }}
+              onToggle={() => { setActivityVisible(v => !v); showToast('Preferensi disimpan', 'info'); }}
             />
             <ToggleRow
               icon={Eye}
               label="Daftar Bacaan Publik"
               sub="Rak bukumu terlihat oleh semua pengguna"
               on={readingPublic}
-              onToggle={() => { setReadingPublic(v => !v); addToast('Preferensi disimpan', 'info'); }}
+              onToggle={() => { setReadingPublic(v => !v); showToast('Preferensi disimpan', 'info'); }}
             />
             <ToggleRow
               icon={Eye}
               label="Ulasan Publik"
               sub="Ulasanmu muncul di halaman komunitas"
               on={reviewsPublic}
-              onToggle={() => { setReviewsPublic(v => !v); addToast('Preferensi disimpan', 'info'); }}
+              onToggle={() => { setReviewsPublic(v => !v); showToast('Preferensi disimpan', 'info'); }}
             />
             <ToggleRow
               icon={Eye}
               label="Daftar Pengikut Publik"
               sub="Siapa saja bisa melihat daftar mengikuti & pengikutmu"
               on={followersVisible}
-              onToggle={() => { setFollowersVisible(v => !v); addToast('Preferensi disimpan', 'info'); }}
+              onToggle={() => { setFollowersVisible(v => !v); showToast('Preferensi disimpan', 'info'); }}
               iconColor="text-purple-400"
             />
           </Section>
@@ -348,14 +392,14 @@ export default function PrivacySecurityPage() {
               label="Personalisasi AI"
               sub="Izinkan PustarAI menggunakan riwayat baca untuk rekomendasi"
               on={dataUsage}
-              onToggle={() => { setDataUsage(v => !v); addToast('Preferensi disimpan', 'info'); }}
+              onToggle={() => { setDataUsage(v => !v); showToast('Preferensi disimpan', 'info'); }}
             />
             <ToggleRow
               icon={Shield}
               label="Iklan Dipersonalisasi"
               sub="Tampilkan iklan berdasarkan minat dan aktivitasmu"
               on={personalizedAds}
-              onToggle={() => { setPersonalizedAds(v => !v); addToast('Preferensi disimpan', 'info'); }}
+              onToggle={() => { setPersonalizedAds(v => !v); showToast('Preferensi disimpan', 'info'); }}
               iconColor="text-orange-400"
             />
             <ActionRow
@@ -433,23 +477,26 @@ export default function PrivacySecurityPage() {
             </div>
 
             {/* Strength bar */}
-            {newPw.length > 0 && (
-              <div className="mt-2">
-                <div className="flex gap-1 mb-1">
-                  {[1,2,3,4].map(i => (
-                    <div key={i} className={cn(
-                      'h-1 flex-1 rounded-full transition-all duration-300',
-                      newPw.length >= i * 3
-                        ? newPw.length < 6 ? 'bg-red-400' : newPw.length < 9 ? 'bg-amber-400' : 'bg-emerald-400'
-                        : 'bg-slate-200 dark:bg-slate-700'
-                    )} style={newPw.length < i * 3 ? { background: 'var(--border)' } : undefined} />
-                  ))}
+            {newPw.length > 0 && (() => {
+              const validation = validatePassword(newPw);
+              const strength = newPw.length < 6 ? 0 : newPw.length < 8 ? 1 : newPw.length < 12 ? 2 : 3;
+              const colors = ['bg-red-400', 'bg-amber-400', 'bg-blue-400', 'bg-emerald-400'];
+              return (
+                <div className="mt-2">
+                  <div className="flex gap-1 mb-1">
+                    {[0,1,2,3].map(i => (
+                      <div key={i} className={cn(
+                        'h-1 flex-1 rounded-full transition-all duration-300',
+                        i <= strength ? colors[strength] : 'bg-slate-200 dark:bg-slate-700'
+                      )} style={i <= strength ? undefined : { background: 'var(--border)' }} />
+                    ))}
+                  </div>
+                  <p className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                    {validation.message}
+                  </p>
                 </div>
-                <p className="text-[10px]" style={{ color: 'var(--muted)' }}>
-                  {newPw.length < 6 ? 'Terlalu pendek' : newPw.length < 9 ? 'Cukup' : 'Kuat'}
-                </p>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Confirm */}
@@ -466,24 +513,121 @@ export default function PrivacySecurityPage() {
 
           {/* Error */}
           <AnimatePresence>
-            {pwError && (
+            {changePasswordError && (
               <motion.div
                 className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20"
                 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                 <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                <p className="text-xs text-red-400">{pwError}</p>
+                <p className="text-xs text-red-400">{changePasswordError.message}</p>
               </motion.div>
             )}
           </AnimatePresence>
 
           <button
             onClick={handleChangePassword}
-            disabled={pwLoading || !oldPw || !newPw || !confirmPw}
+            disabled={changePasswordLoading || !oldPw || !newPw || !confirmPw || newPw !== confirmPw}
             className="w-full py-3 rounded-xl bg-navy-800 text-white text-sm font-semibold
                        hover:bg-navy-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-1">
-            {pwLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Memperbarui...</> : 'Perbarui Kata Sandi'}
+            {changePasswordLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Memperbarui...</> : 'Perbarui Kata Sandi'}
+          </button>
+
+          {/* Forgot password link */}
+          <button
+            onClick={() => {
+              clearResetEmailError();
+              setResetEmail(user?.email || '');
+              setResetShownMessage(false);
+              setModal('forgot-password');
+            }}
+            className="w-full py-2 text-xs font-medium text-gold/80 hover:text-gold transition-colors text-center">
+            Lupa kata sandi?
           </button>
         </div>
+      </Modal>
+
+      {/* ══════════════════════════════════════════
+          MODAL — LUPA KATA SANDI
+      ══════════════════════════════════════════ */}
+      <Modal open={modal === 'forgot-password'} onClose={() => setModal(null)} title="Lupa Kata Sandi?">
+        {resetEmailSent && resetShownMessage ? (
+          <motion.div
+            className="flex flex-col gap-4 items-center text-center py-4"
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Email Reset Terkirim!</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                Kami telah mengirimkan tautan reset kata sandi ke <strong>{resetEmail}</strong>.
+              </p>
+            </div>
+            <div className="w-full p-3 rounded-xl border" style={{ background: 'var(--surface2)', borderColor: 'var(--border)' }}>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+                Klik tautan dalam email untuk membuat kata sandi baru. Tautan berlaku selama 24 jam.
+              </p>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>Jendela ini akan ditutup dalam beberapa detik...</p>
+          </motion.div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Masukkan email akun Anda dan kami akan mengirimkan tautan untuk mengatur ulang kata sandi.
+            </p>
+
+            <div>
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--muted)' }}>
+                Alamat Email
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={e => setResetEmail(e.target.value)}
+                  placeholder="nama@example.com"
+                  className={cn(inputCls, 'pl-10')} />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--muted)' }} />
+              </div>
+            </div>
+
+            {/* Error */}
+            <AnimatePresence>
+              {resetEmailError && (
+                <motion.div
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20"
+                  initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                  <p className="text-xs text-red-400">{resetEmailError.message}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <button
+              onClick={handleForgotPassword}
+              disabled={resetEmailLoading || !resetEmail}
+              className="w-full py-3 rounded-xl bg-gold/90 text-slate-900 text-sm font-semibold
+                         hover:bg-gold transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              {resetEmailLoading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Mengirim...</>
+              ) : (
+                <><Mail className="w-4 h-4" /> Kirim Tautan Reset</>
+              )}
+            </button>
+
+            <div className="text-center">
+              <button
+                onClick={() => {
+                  setResetEmail('');
+                  clearResetEmailError();
+                  setModal('change-password');
+                }}
+                className="text-xs font-medium transition-colors hover:text-gold"
+                style={{ color: 'var(--muted)' }}>
+                Ingat kata sandi? Kembali ke ubah kata sandi
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* ══════════════════════════════════════════
@@ -515,7 +659,7 @@ export default function PrivacySecurityPage() {
                 <button
                   onClick={() => {
                     setActiveSessions(prev => prev.filter((_, j) => j !== i));
-                    addToast('Sesi diakhiri', 'info');
+                    showToast('Sesi diakhiri', 'info');
                   }}
                   className="text-red-400 hover:text-red-300 transition-colors flex-shrink-0 p-1">
                   <X className="w-4 h-4" />
@@ -528,7 +672,7 @@ export default function PrivacySecurityPage() {
             <button
               onClick={() => {
                 setActiveSessions(prev => prev.filter(s => s.current));
-                addToast('Semua sesi lain diakhiri', 'success');
+                showToast('Semua sesi lain diakhiri', 'success');
               }}
               className="w-full py-2.5 rounded-xl border border-red-400/20 text-red-400 text-sm font-semibold
                          hover:bg-red-400/10 transition-all">
