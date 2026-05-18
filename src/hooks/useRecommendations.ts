@@ -84,16 +84,31 @@ export function useRecommendations(forceRefresh = false) {
         // so AI can switch to personalized mode based on interaction count.
         if (user?.uid) {
           const GENRE_MOOD: Record<string, string> = {
-            'Romance': 'cinta romantis sedih perasaan',
-            'Thriller': 'tegang menegangkan seru misteri',
+            'Fiksi': 'cerita naratif imajinatif karakter',
+            'Fiksi Ilmiah': 'masa depan teknologi imajinasi sains',
             'Fantasi': 'ajaib petualangan magical seru',
-            'Self-help': 'motivasi produktif berkembang positif',
-            'Humor': 'lucu santai ringan menghibur',
-            'Drama': 'sedih haru emosional menyentuh',
             'Misteri': 'penasaran teka-teki gelap detective',
+            'Horor': 'mencekam menyeramkan gelap',
+            'Thriller': 'tegang menegangkan seru misteri',
+            'Petualangan': 'jelajah aksi seru perjalanan',
+            'Sejarah': 'masa lalu peristiwa fakta',
             'Sains': 'ilmiah fakta pengetahuan informatif',
-            'Filsafat': 'mendalam pemikiran renungan berat',
+            'Sastra': 'bahasa indah klasik literer',
             'Biografi': 'nyata kisah hidup inspirasi',
+            'Romansa': 'cinta romantis sedih perasaan',
+            'Romance': 'cinta romantis sedih perasaan',
+            'Nonfiksi': 'faktual informatif pengetahuan nyata',
+            'Self-Help': 'motivasi produktif berkembang positif',
+            'Self-help': 'motivasi produktif berkembang positif',
+            'Psikologi': 'pikiran perilaku emosi manusia',
+            'Filsafat': 'mendalam pemikiran renungan berat',
+            'Anak': 'ceria ringan imajinatif edukatif',
+            'Teenlit': 'remaja perasaan tumbuh dewasa',
+            'Pendidikan': 'belajar pengetahuan sekolah edukatif',
+            'Humor': 'lucu santai ringan menghibur',
+            'Klasik': 'klasik abadi sastra mendalam',
+            'Fiksi pendek': 'cerita singkat padat berkesan',
+            'Drama': 'sedih haru emosional menyentuh',
           };
           const enrichedGenres = genres.map(g =>
             GENRE_MOOD[g] ? `${g} ${GENRE_MOOD[g]}` : g

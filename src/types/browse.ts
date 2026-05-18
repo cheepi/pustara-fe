@@ -12,6 +12,14 @@ export interface BrowseBook {
   pages?: number;
   desc?: string;
   coverId?: number;
+  ratingCount?: number;
+  reviewCount?: number;
+  readerCount?: number;
+  borrowCount?: number;
+  readingSessionCount?: number;
+  totalReadingMinutes?: number;
+  popularityScore?: number;
+  lastActivityAt?: string;
 }
 
 export interface FriendActivityItem {

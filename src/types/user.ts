@@ -48,7 +48,6 @@ export interface UserProfile {
   stats?: {
     total_read: number;
     reading_streak: number;
-    borrowed_books: number;
     reviews_written: number;
     favorite_genres?: GenreStat[];
   };

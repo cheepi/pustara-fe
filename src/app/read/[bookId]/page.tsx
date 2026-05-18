@@ -148,7 +148,7 @@ export default function ReadPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [readingTime, setReadingTime] = useState(0);
   const readingTimeRef = useRef(0);
-  const watermarkLabel = `${userName || 'Pustara User'} · ${new Date().toLocaleDateString('id-ID', {
+  const watermarkLabel = `@${userName || 'Pustara User'} · ${new Date().toLocaleDateString('id-ID', {
     day: 'numeric', month: 'short', year: 'numeric',
   })}`;
   useEffect(() => { readingTimeRef.current = readingTime; }, [readingTime]);
@@ -806,7 +806,7 @@ export default function ReadPage() {
                               fontFamily: "'Outfit', Inter, Arial, sans-serif",
                               fontSize: isMobile ? 24 : 40,
                               letterSpacing: '0.05em',
-                              opacity: 0.03,
+                              opacity: 0.04,
                               transform: 'rotate(-28deg)',
                               whiteSpace: 'nowrap',
                             }}
