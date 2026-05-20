@@ -422,3 +422,79 @@ export async function checkUsernameAvailability(input: string): Promise<Username
     };
   }
 }
+
+/**
+ * Privacy Settings Types
+ */
+export interface PrivacySettings {
+  activity_visible: boolean;
+  public_reading_list: boolean;
+  public_reviews: boolean;
+}
+
+export interface PrivacySettingsUpdate {
+  activity_visible?: boolean;
+  public_reading_list?: boolean;
+  public_reviews?: boolean;
+}
+
+/**
+ * Fetch current privacy settings for authenticated user
+ */
+export async function getPrivacySettings(): Promise<PrivacySettings | null> {
+  try {
+    const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return null;
+
+    const res = await fetch(`${API_URL}/users/privacy-settings`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+    });
+
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const json = await res.json();
+    const data = json?.data as PrivacySettings | null;
+    return data;
+  } catch (err) {
+    console.warn('[users] getPrivacySettings gagal:', err);
+    return null;
+  }
+}
+
+/**
+ * Update privacy settings for authenticated user
+ */
+export async function updatePrivacySettings(
+  updates: PrivacySettingsUpdate
+): Promise<PrivacySettings | null> {
+  try {
+    const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return null;
+
+    const res = await fetch(`${API_URL}/users/privacy-settings`, {
+      method: 'PUT',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const json = await res.json();
+    const data = json?.data as PrivacySettings | null;
+    return data;
+  } catch (err) {
+    console.warn('[users] updatePrivacySettings gagal:', err);
+    return null;
+  }
+}
