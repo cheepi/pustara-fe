@@ -45,7 +45,7 @@ const TAB_ACCENTS: Record<ShelfTabId, string> = {
 type ShelfChaosMode = 'rapi' | 'natural' | 'berantakan';
 const SHELF_CHAOS_STORAGE_KEY = 'pustara:shelf-chaos-mode';
 const SHELF_TAB_STORAGE_KEY = 'pustara:shelf-active-tab';
-const SHELF_DATA_STORAGE_KEY = 'pustara:shelf-data-cache-v2';
+const SHELF_DATA_STORAGE_KEY = 'pustara:shelf-data-cache-v3';
 const SHELF_DATA_STORAGE_TTL_MS = 5 * 60 * 1000;
 
 const CHAOS_OPTIONS: Array<{ id: ShelfChaosMode; label: string }> = [

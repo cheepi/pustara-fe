@@ -12,6 +12,7 @@ import ComboLogo from '@/components/icons/ComboLogo';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useCaptcha, CaptchaWidget } from '@/hooks/useCaptcha';
+import { getOrCreateDeviceId } from '@/lib/deviceDetection';
 
 const ORBS = [
   { w: 160, h: 160, x: '5%',  y: '20%', delay: 0.3, dur: 8  },
@@ -192,7 +193,7 @@ export default function RegisterPage() {
       await fetch('/api/auth/verify-token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token }),
+        body: JSON.stringify({ token, device_id: getOrCreateDeviceId() }),
       }).catch(() => {
         // Ignore sync failures here; profile update below may still succeed.
       });
@@ -221,7 +222,16 @@ export default function RegisterPage() {
     }
     setError(''); setLoading(true);
     try {
-      await signInWithPopup(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      const token = await result.user.getIdToken();
+
+      // Sync user + device info to backend so shelf/sessions are created
+      await fetch('/api/auth/verify-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, device_id: getOrCreateDeviceId() }),
+      }).catch(() => {});
+
       router.replace('/auth/personalization');
     } catch (err: any) {
       setError(friendlyError(err.code));

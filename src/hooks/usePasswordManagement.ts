@@ -120,7 +120,7 @@ export function usePasswordManagement(): UsePasswordManagementReturn {
 
     setChangePasswordLoading(true);
     try {
-      const user = auth.currentUser;
+      const user = auth?.currentUser;
       if (!user) {
         throw new Error('Pengguna tidak ditemukan.');
       }
@@ -151,6 +151,14 @@ export function usePasswordManagement(): UsePasswordManagementReturn {
       setResetEmailError({
         code: 'invalid-email',
         message: 'Email tidak boleh kosong.',
+      });
+      return;
+    }
+
+    if (!auth) {
+      setResetEmailError({
+        code: 'unknown',
+        message: 'Layanan autentikasi belum siap. Muat ulang halaman dan coba lagi.',
       });
       return;
     }

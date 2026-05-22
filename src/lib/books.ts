@@ -56,8 +56,8 @@ function normalizeBook(raw: Record<string, unknown>): BookDetail {
                     : typeof raw.genres === 'string'
                       ? [raw.genres]
                       : [],
-    avg_rating:   Number(raw.avg_rating ?? raw.avgRating ?? 0),
-    rating_count: Number(raw.rating_count ?? raw.ratingCount ?? 0),
+    avg_rating:   Number(raw.review_avg_rating ?? raw.avg_rating ?? raw.avgRating ?? 0),
+    rating_count: Number(raw.review_count ?? raw.review_rating_count ?? raw.rating_count ?? raw.ratingCount ?? 0),
     year:         raw.year != null ? Number(raw.year) : null,             // number | null
     pages:        raw.pages != null ? Number(raw.pages) : null,           // number | null
     available:    Number(raw.available ?? raw.availableStock ?? 0),
@@ -168,24 +168,20 @@ export async function getBooks(params: GetBooksParams = {}): Promise<GetBooksRes
 export async function getBookById(bookId: string): Promise<BookDetail | null> {
   if (!bookId) return null;
 
-  if (DUMMY_BOOKS[bookId]) {
-    return DUMMY_BOOKS[bookId];
-  }
-
   try {
     const headers = await getOptionalAuthHeader();
     const res = await fetch(`${API_URL}/books/${bookId}`, {
       cache: 'no-store',
       headers,
     });
-    if (res.status === 404) return DUMMY_BOOKS[bookId] ?? null;
+    if (res.status === 404) return null;
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const raw: Record<string, unknown> = json?.data ?? json;
     return normalizeBook(raw);
   } catch (err) {
-    console.warn(`[books] getBookById(${bookId}) gagal, cek dummy:`, err);
-    return DUMMY_BOOKS[bookId] ?? null;
+    console.warn(`[books] getBookById(${bookId}) gagal:`, err);
+    return null;
   }
 }
 

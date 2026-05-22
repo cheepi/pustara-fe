@@ -13,6 +13,7 @@ import ComboLogo from '@/components/icons/ComboLogo';
 import { useCaptcha, CaptchaWidget } from '@/hooks/useCaptcha';
 import { shouldGoToPersonalization } from '@/lib/survey';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import { getOrCreateDeviceId } from '@/lib/deviceDetection';
 
 // Floating orb particles — purely CSS/motion, no external images needed
 const ORBS = [
@@ -135,6 +136,14 @@ export default function LoginPage() {
 
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const token = await cred.user.getIdToken();
+
+      const deviceId = getOrCreateDeviceId();
+      await fetch('/api/auth/verify-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, device_id: deviceId }),
+      }).catch(() => {}); 
+
       const needPersonalization = await shouldGoToPersonalization(token);
       router.replace(needPersonalization ? '/auth/personalization' : '/');
     } catch (err: any) {
@@ -158,6 +167,14 @@ export default function LoginPage() {
       const result = await signInWithPopup(auth, googleProvider);
       const isNew = getAdditionalUserInfo(result)?.isNewUser;
       const token = await result.user.getIdToken();
+
+      const deviceId = getOrCreateDeviceId();
+      await fetch('/api/auth/verify-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, device_id: deviceId }),
+      }).catch(() => {});
+
       const needPersonalization = await shouldGoToPersonalization(token);
       router.replace(isNew || needPersonalization ? '/auth/personalization' : '/');
     } catch (err: any) {
@@ -458,6 +475,10 @@ function resolveFriendlyAuthError(input: unknown): string {
     'auth/invalid-email': 'Format email tidak valid.',
     'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi nanti.',
     'auth/invalid-credential': 'Email atau kata sandi salah.',
+    'captcha verification failed': 'CAPTCHA gagal diverifikasi. Muat ulang lalu coba lagi.',
+    'captcha service is unavailable': 'Layanan CAPTCHA sedang bermasalah. Coba lagi sebentar.',
+    'captcha token is missing': 'Verifikasi CAPTCHA diperlukan sebelum masuk.',
+    'captcha token kedaluwarsa atau sudah digunakan. silakan verifikasi ulang.': 'CAPTCHA kedaluwarsa. Muat ulang lalu verifikasi lagi.',
     'invalid_login_credentials': 'Email atau kata sandi salah.',
     'invalid_login_credential': 'Email atau kata sandi salah.',
     'invalid_login_cred': 'Email atau kata sandi salah.',

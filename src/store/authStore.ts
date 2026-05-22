@@ -41,7 +41,14 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'pustara-auth-cache',
+      // Only persist profileCache — never persist loading/user/role so they always
+      // start fresh and get resolved by onAuthStateChanged in AuthProvider.
       partialize: (state) => ({ profileCache: state.profileCache }),
+      onRehydrateStorage: () => () => {
+        // After rehydration, force loading back to true so AuthProvider resolves it
+        // correctly via onAuthStateChanged instead of using stale persisted value.
+        useAuthStore.setState({ loading: true });
+      },
     }
   )
 );

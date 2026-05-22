@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -14,19 +14,30 @@ interface Props {
   open:      boolean;
   onClose:   () => void;
   onSubmit?: (rating: number, text: string) => void;
+  initialRating?: number;
+  initialText?: string;
 }
 
 const RATING_LABELS = ['', 'Kurang', 'Biasa', 'Bagus', 'Sangat Bagus', 'Luar Biasa!'];
 
-export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmit }: Props) {
+export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmit, initialRating, initialText }: Props) {
   const { theme } = useTheme();
   const isLight = theme === 'light';
 
-  const [rating,    setRating]    = useState(0);
+  const [rating,    setRating]    = useState(initialRating || 0);
   const [hovered,   setHovered]   = useState(0);
-  const [text,      setText]      = useState('');
+  const [text,      setText]      = useState(initialText || '');
   const [submitted, setSubmitted] = useState(false);
   const [loading,   setLoading]   = useState(false);
+
+
+  useEffect(() => {
+    if (open) {
+      setRating(initialRating || 0);
+      setText(initialText || '');
+      setHovered(0);
+    }
+  }, [open, initialRating, initialText]);
 
   const REVIEW_KEY = `pustara_review_${bookKey}`;
 
@@ -59,6 +70,15 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
           return;
         }
 
+        // Ensure user exists/synced in backend before review write.
+        await fetch('/api/auth/verify-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        }).catch(() => {
+          // Best effort sync only.
+        });
+
         const response = await fetch(`${API_URL}/reviews`, {
           method: 'POST',
           headers: {
@@ -72,7 +92,7 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
           }),
         });
 
-        const result = await response.json();
+        const result = await response.json().catch(() => ({}));
 
         if (!response.ok) {
           throw new Error(result?.message || 'Failed to submit review');
@@ -93,8 +113,8 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
 
       } catch (error) {
         console.error('Submit review error:', error);
-
-        alert('Gagal mengirim ulasan');
+        const message = error instanceof Error ? error.message : 'Gagal mengirim ulasan';
+        alert(message);
       } finally {
         setLoading(false);
       }
@@ -252,7 +272,7 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
                             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                             Mengirim...
                           </span>
-                        ) : 'Kirim Ulasan'}
+                        ) : (initialRating ? 'Simpan Perubahan' : 'Kirim Ulasan')}
                       </motion.button>
                     </div>
                   </div>

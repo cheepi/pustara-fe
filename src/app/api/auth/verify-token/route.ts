@@ -6,7 +6,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const token = body?.token;
+    const device_id = body?.device_id;
     const device_name = body?.device_name; // Client-side will provide this
+    const browser = body?.browser;
+    const os = body?.os;
 
     if (!token) {
       return NextResponse.json(
@@ -15,14 +18,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const forwardedFor = request.headers.get('x-forwarded-for');
+    const realIp = request.headers.get('x-real-ip');
+    const userAgent = request.headers.get('user-agent');
+
     const response = await fetch(`${BACKEND_URL}/auth/verify-token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(userAgent ? { 'User-Agent': userAgent } : {}),
+        ...(forwardedFor ? { 'x-forwarded-for': forwardedFor } : {}),
+        ...(realIp ? { 'x-real-ip': realIp } : {}),
       },
       body: JSON.stringify({
         token,
+        ...(device_id && { device_id }),
         ...(device_name && { device_name }), // Include if provided
+        ...(browser && { browser }),
+        ...(os && { os }),
       }),
     });
 

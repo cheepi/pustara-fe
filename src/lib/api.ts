@@ -116,10 +116,41 @@ function writeTrendingStorage(cacheKey: string, data: TrendingBook[]) {
   }
 }
 
+function getDeviceHeader(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const key = 'pustara_device_id';
+    let deviceId = window.localStorage.getItem(key);
+    if (!deviceId && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      deviceId = crypto.randomUUID();
+      window.localStorage.setItem(key, deviceId);
+    }
+    return deviceId ? { 'x-device-id': deviceId } : {};
+  } catch {
+    return {};
+  }
+}
+
 export async function apiGet<T>(path: string): Promise<T> {
   const headers = await getAuthHeader();
-  const res = await fetch(`${API_URL}${path}`, { headers });
-  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { ...headers, ...getDeviceHeader() },
+  });
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
+    if (res.status === 401) {
+      if (errJson?.error === 'SESSION_REVOKED') {
+        // Import lazy biar ga circular, lalu force logout
+        const { signOut } = await import('firebase/auth');
+        if (auth) await signOut(auth).catch(() => {});
+        window.location.href = '/auth/login';
+        throw new Error('SESSION_REVOKED');
+      }
+    }
+    throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
+  }
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -128,10 +159,23 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const headers = await getAuthHeader();
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json', ...headers, ...getDeviceHeader() },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
+    if (res.status === 401) {
+      if (errJson?.error === 'SESSION_REVOKED') {
+        // Import lazy biar ga circular, lalu force logout
+        const { signOut } = await import('firebase/auth');
+        if (auth) await signOut(auth).catch(() => {});
+        window.location.href = '/auth/login';
+        throw new Error('SESSION_REVOKED');
+      }
+    }
+    throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
+  }  
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -140,10 +184,23 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   const headers = await getAuthHeader();
   const res = await fetch(`${API_URL}${path}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json', ...headers, ...getDeviceHeader() },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
+    if (res.status === 401) {
+      if (errJson?.error === 'SESSION_REVOKED') {
+        // Import lazy biar ga circular, lalu force logout
+        const { signOut } = await import('firebase/auth');
+        if (auth) await signOut(auth).catch(() => {});
+        window.location.href = '/auth/login';
+        throw new Error('SESSION_REVOKED');
+      }
+    }
+    throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
+  }  
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -152,10 +209,23 @@ export async function apiPostAllowAnonymous<T>(path: string, body: unknown): Pro
   const headers = await getOptionalAuthHeader();
   const res = await fetch(`${API_URL}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json', ...headers, ...getDeviceHeader() },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
+    if (res.status === 401) {
+      if (errJson?.error === 'SESSION_REVOKED') {
+        // Import lazy biar ga circular, lalu force logout
+        const { signOut } = await import('firebase/auth');
+        if (auth) await signOut(auth).catch(() => {});
+        window.location.href = '/auth/login';
+        throw new Error('SESSION_REVOKED');
+      }
+    }
+    throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
+  }  
   const json = await res.json();
   return unwrapData<T>(json);
 }
@@ -164,9 +234,22 @@ export async function apiDelete<T>(path: string): Promise<T> {
   const headers = await getAuthHeader();
   const res = await fetch(`${API_URL}${path}`, {
     method: 'DELETE',
-    headers,
+    headers: { ...headers, ...getDeviceHeader() },
   });
-  if (!res.ok) throw new Error(`API error: ${res.status} (${path})`);
+  if (!res.ok) {
+    const errJson = await res.json().catch(() => ({}));
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
+    if (res.status === 401) {
+      if (errJson?.error === 'SESSION_REVOKED') {
+        // Import lazy biar ga circular, lalu force logout
+        const { signOut } = await import('firebase/auth');
+        if (auth) await signOut(auth).catch(() => {});
+        window.location.href = '/auth/login';
+        throw new Error('SESSION_REVOKED');
+      }
+    }
+    throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
+  }  
   const json = await res.json();
   return unwrapData<T>(json);
 }

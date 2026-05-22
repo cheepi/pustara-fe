@@ -758,7 +758,7 @@ export default function HomePage() {
                         className="font-serif text-3xl font-bold leading-tight mb-1.5"
                         style={{ color: 'var(--text)' }}
                       >
-                        {book.title}
+                        {book.title?.substring(0, 25) + (book.title?.length > 25 ? '...' : '')}
                       </h3>
 
                       {/* Author + rating */}
@@ -894,6 +894,7 @@ function CommunitySection({
               bookAuthor={r.author}
               bookCoverUrl={r.cover_url}
               bookId={r.key}
+              firebaseUid={r.firebase_uid}
               index={i}
             />
           ))}
@@ -913,6 +914,7 @@ function CommunitySection({
                 bookAuthor={r.author}
                 bookCoverUrl={r.cover_url}
                 bookId={r.key}
+                firebaseUid={r.firebase_uid}
                 index={i}
               />
             ))}

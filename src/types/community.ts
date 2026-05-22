@@ -12,4 +12,5 @@ export interface CommunityReview {
   likes: number;
   comments: number;
   time: string;
+  firebase_uid?: string; // Firebase UID of the review author — used for ownership checks
 }

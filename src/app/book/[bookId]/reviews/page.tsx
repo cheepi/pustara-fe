@@ -12,6 +12,7 @@ import type { Review } from '@/types/book';
 import type { BookDetail } from '@/types/book';
 import AvatarImage from '@/components/shared/AvatarImage';
 import ReviewCard from '@/components/shared/ReviewCard';
+import ReviewModal from '@/components/shared/ReviewModal';
 const RATING_FILTERS = ['Semua', '5 ★', '4 ★', '3 ★', '2 ★', '1 ★'];
 const PAGE_SIZE = 3;
 
@@ -28,6 +29,9 @@ export default function ReviewsPage() {
   const [filter,  setFilter]  = useState('Semua');
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
+
+  const [editingReview, setEditingReview] = useState<{id: string, rating: number, text: string} | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   useEffect(() => {
     fetchBookReviewData(bookKey)
@@ -188,7 +192,15 @@ export default function ReviewsPage() {
                 initialLikes={r.likes}
                 time={r.time || ''}
                 loc={r.loc || ''}
+                firebaseUid={r.firebase_uid}
                 index={i}
+                onEdit={(id, rating, text) => {
+                  setEditingReview({ id, rating, text });
+                  setReviewOpen(true);
+                }}
+                onDeleted={(id) => {
+                  setReviews(prev => prev.filter(rev => rev.id !== id));
+                }}
               />
             ))}
           </AnimatePresence>
@@ -222,6 +234,24 @@ export default function ReviewsPage() {
         )}
 
       </main>
+
+      <ReviewModal
+        bookTitle={meta?.title || ''}
+        bookKey={bookKey}
+        open={reviewOpen}
+        initialRating={editingReview?.rating}
+        initialText={editingReview?.text}
+        onClose={() => { setReviewOpen(false); setEditingReview(null); }}
+        onSubmit={() => {
+          setReviewOpen(false);
+          setEditingReview(null);
+          // Refetch data
+          fetchBookReviewData(bookKey).then(({ meta: newMeta, reviews: newReviews }) => {
+            setMeta(newMeta);
+            setReviews(newReviews);
+          });
+        }}
+      />
     </div>
   );
 }

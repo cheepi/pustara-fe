@@ -236,7 +236,8 @@ export async function fetchShelfData(options?: { force?: boolean }): Promise<She
       }));
 
       const riwayat = response.riwayat.map((session, index) => {
-        const historyKey = session.loan_id || session.session_id || `${session.id}-${index}`;
+        // IMPORTANT: history links must point to /book/:bookId, not loan/session ids.
+        const historyKey = String(session.id || '').trim() || `${session.id}-${index}`;
         const historyStatus = session.status || 'finished';
         const returnedAt = session.returned_at || session.finished_at || undefined;
 

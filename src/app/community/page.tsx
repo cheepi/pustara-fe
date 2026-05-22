@@ -155,6 +155,7 @@ export default function CommunityPage() {
                   bookAuthor={r.author}
                   bookCoverUrl={r.cover_url}
                   bookId={r.key}
+                  firebaseUid={r.firebase_uid}
                   index={i}
                 />
               ))}

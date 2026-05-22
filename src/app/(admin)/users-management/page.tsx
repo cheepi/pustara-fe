@@ -15,6 +15,7 @@ import {
   UserRound,
   Users,
   X,
+  Trash2,
 } from 'lucide-react';
 import { auth } from '@/lib/firebase';
 import { useTheme } from '@/components/theme/ThemeProvider';
@@ -448,7 +449,20 @@ export default function UsersManagementPage() {
   };
 
   const handleDelete = async (user: AdminUser) => {
-    void user;
+    if (!confirm(`Hapus pengguna "${user.displayName}" (@${user.username})? Tindakan ini tidak dapat dibatalkan.`)) return;
+
+    try {
+      const response = await authedRequest(`${API_BASE}/admin/users/${user.uid}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.error || payload.message || 'Gagal menghapus pengguna');
+      }
+      await loadData(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal menghapus pengguna');
+    }
   };
 
   const totalUsers = users.length;
@@ -623,6 +637,14 @@ export default function UsersManagementPage() {
                               title="Edit pengguna"
                             >
                               <Pencil className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void handleDelete(user)}
+                              className={cn('p-2 rounded-lg border transition', tk.btnGhost, 'hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20')}
+                              title="Hapus pengguna"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           </div>
                         </td>

@@ -14,7 +14,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Star, Heart, BookOpen } from 'lucide-react';
+import { Star, Heart, BookOpen, Edit, Trash } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import AvatarImage from '@/components/shared/AvatarImage';
@@ -41,6 +41,8 @@ export interface ReviewCardProps {
   time?: string;
   /** Location shown in book-page variant */
   loc?: string;
+  /** Firebase UID of the review author for ownership checks */
+  firebaseUid?: string;
 
   // ── Book context (optional — shown on community & homepage) ──────────────────
   bookTitle?: string;
@@ -58,6 +60,9 @@ export interface ReviewCardProps {
   variant?: 'default' | 'compact';
   /** Stagger animation index */
   index?: number;
+
+  onEdit?: (reviewId: string, rating: number, text: string) => void;
+  onDeleted?: (reviewId: string) => void;
 }
 
 function formatRelativeTime(t: string | null | undefined): string {
@@ -94,8 +99,11 @@ export default function ReviewCard({
   bookAuthor,
   bookCoverUrl,
   bookId,
+  firebaseUid,
   variant = 'default',
   index = 0,
+  onEdit,
+  onDeleted,
 }: ReviewCardProps) {
   const { theme } = useTheme();
   const { user }  = useAuth();
@@ -146,6 +154,27 @@ export default function ReviewCard({
       setLikeCount(prevCount);
     } finally {
       setLiking(false);
+    }
+  }
+
+  const [deleting, setDeleting] = useState(false);
+  async function handleDelete() {
+    if (!reviewId || !user) return;
+    if (!confirm('Apakah Anda yakin ingin menghapus ulasan ini?')) return;
+    setDeleting(true);
+    try {
+      const token = await user.getIdToken();
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const res = await fetch(`${API_URL}/reviews/${reviewId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Gagal menghapus');
+      onDeleted?.(reviewId);
+    } catch (e) {
+      alert('Gagal menghapus ulasan');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -292,12 +321,34 @@ export default function ReviewCard({
           <p className={cn('text-xs', tk.muted)}>
             {timeStr && <span>{timeStr}</span>}
           </p>
-        </div>
-        <div className="flex gap-0.5">
-          {[1,2,3,4,5].map(s => (
-            <Star key={s} className={cn('w-3 h-3',
-              s <= rating ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
-          ))}
+          <div className="flex items-center gap-1 mt-0.5">
+            <div className="flex gap-0.5">
+              {[1,2,3,4,5].map(s => (
+                <Star key={s} className={cn('w-3 h-3', s <= rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+              ))}
+            </div>
+            {/* Ownership actions */}
+            {user && firebaseUid && user.uid === firebaseUid && (
+              <div className="flex gap-2 ml-2 text-gray-500">
+                <button
+                  onClick={() => onEdit?.(reviewId!, rating, text)}
+                  disabled={deleting}
+                  className="cursor-pointer hover:text-gold transition-colors disabled:opacity-50"
+                  aria-label="Edit review"
+                >
+                  <Edit size={16} />
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="cursor-pointer hover:text-red-500 transition-colors disabled:opacity-50"
+                  aria-label="Delete review"
+                >
+                  <Trash size={16} />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

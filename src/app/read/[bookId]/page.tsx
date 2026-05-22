@@ -806,7 +806,7 @@ export default function ReadPage() {
                               fontFamily: "'Outfit', Inter, Arial, sans-serif",
                               fontSize: isMobile ? 24 : 40,
                               letterSpacing: '0.05em',
-                              opacity: 0.03,
+                              opacity: 0.05,
                               transform: 'rotate(-28deg)',
                               whiteSpace: 'nowrap',
                             }}

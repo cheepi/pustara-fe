@@ -19,6 +19,8 @@ export interface Review {
   text?: string;
   time?: string;
   loc?: string;
+  /** Firebase UID of the review author — used for ownership checks in ReviewCard */
+  firebase_uid?: string;
 }
 
 /**

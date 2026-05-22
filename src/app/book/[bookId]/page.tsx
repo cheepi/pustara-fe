@@ -18,6 +18,7 @@ import ReviewModal from '@/components/shared/ReviewModal';
 import AvatarImage from '@/components/shared/AvatarImage';
 import { useSimilarBooks } from '@/hooks/useSimilarBooks';
 import { getBookById, getSimilarBooks } from '@/lib/books';
+import { apiGet } from '@/lib/api';
 import { borrowBookForMe, fetchMyBookShelfStatus, joinQueueForMe, removeSavedBookForMe, saveBookForMe } from '@/lib/shelf';
 import { BookDetail } from '@/types/book';
 import ReviewCard from '@/components/shared/ReviewCard';
@@ -106,6 +107,7 @@ export default function BookDetailPage() {
   const [modal,    setModal]    = useState<ModalState>('none');
   const [shared,   setShared]   = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
+  const [editingReview, setEditingReview] = useState<{id: string, rating: number, text: string} | null>(null);
 
   const [wishlisted, setWishlisted] = useState(false);
   const [borrowed,   setBorrowed]   = useState(false);
@@ -123,52 +125,33 @@ export default function BookDetailPage() {
     }
   }
 
-  useEffect(() => {
-    async function fetchReviews() {
-      try {
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-        console.log('[BOOK DETAIL] book object:', { id: book?.id, title: book?.title, idType: typeof book?.id });
-        
-        if (!book?.id) {
-          console.warn('[BOOK DETAIL] ABORT: book.id is empty or undefined');
-          setReviews([]);
-          return;
-        }
-        
-        const endpoint = `${apiBase.replace(/\/$/, '')}/books/${book.id}/reviews?limit=5`;
-        console.log('[BOOK DETAIL] Fetching reviews from:', endpoint);
-        const response = await fetch(endpoint);
-        const data = await response.json();
-        console.log('[BOOK DETAIL] FULL RESPONSE:', data);
-        console.log('[BOOK DETAIL] response.ok:', response.ok, 'status:', response.status);
-        console.log('[BOOK DETAIL] data.success:', data.success);
-        console.log('[BOOK DETAIL] data.data:', data.data);
-        console.log('[BOOK DETAIL] Array.isArray(data.data):', Array.isArray(data.data));
-        console.log('[BOOK DETAIL] data.data?.length:', data.data?.length);
-        
-        if (data.success && Array.isArray(data.data)) {
-          console.log('[BOOK DETAIL] SUCCESS - Setting reviews with count:', data.data.length);
-          if (data.data.length === 0) {
-            console.warn('[BOOK DETAIL] WARNING: Empty array received from API!');
-          }
-          data.data.forEach((r: any, idx: number) => {
-            console.log(`[BOOK DETAIL] REVIEW ${idx}:`, { id: r.id, rating: r.rating, textLen: String(r.text || '').length, hasAvatar: !!r.avatar_url });
-          });
-          setReviews(data.data);
-        } else {
-          console.warn('[BOOK DETAIL] FAILED - Invalid response format:', { success: data.success, isArray: Array.isArray(data.data), data });
-          setReviews([]);
-        }
-      } catch (error) {
-        console.error('[BOOK DETAIL] EXCEPTION - Failed to fetch reviews:', error);
-        setReviews([]);
+  const fetchReviews = async () => {
+    if (!book?.id) {
+      setReviews([]);
+      return;
+    }
+    
+    try {
+      const res = await apiGet<any>(`/books/${book.id}/reviews?limit=5`);
+      if (res) {
+        const actualReviews = Array.isArray(res) 
+          ? res 
+          : (Array.isArray(res?.reviews) 
+              ? res.reviews 
+              : (Array.isArray(res?.data?.reviews) 
+                  ? res.data.reviews 
+                  : (Array.isArray(res?.data) ? res.data : [])));
+                  
+        setReviews(actualReviews);
       }
+    } catch (error) {
+      console.error('[BOOK DETAIL] EXCEPTION - Failed to fetch reviews:', error);
+      setReviews([]);
     }
+  };
 
-    if (book?.id) {
-      console.log('[BOOK DETAIL] useEffect triggered for book:', book.id);
-      fetchReviews();
-    }
+  useEffect(() => {
+    fetchReviews();
   }, [book?.id]);
 
   useEffect(() => {
@@ -592,7 +575,7 @@ export default function BookDetailPage() {
 
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setReviewOpen(true)}
+                    onClick={() => { setEditingReview(null); setReviewOpen(true); }}
                     className={cn(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
                       isLight
@@ -632,9 +615,18 @@ export default function BookDetailPage() {
                         rating={r.rating || 0}
                         text={r.text || r.body || r.review_text || ''}
                         initialLikes={r.likes || 0}
+                        initialLiked={Boolean(r.liked ?? r.is_liked ?? false)}
                         time={r.time}
                         loc={r.loc || '-'}
+                        firebaseUid={r.firebase_uid}
                         index={i}
+                        onEdit={(id, rating, text) => {
+                          setEditingReview({ id, rating, text });
+                          setReviewOpen(true);
+                        }}
+                        onDeleted={(id) => {
+                          setReviews(prev => prev.filter(rev => rev.id !== id));
+                        }}
                       />
                     );
                   })
@@ -876,7 +868,15 @@ export default function BookDetailPage() {
         bookTitle={book.title}
         bookKey={book.id}
         open={reviewOpen}
-        onClose={() => setReviewOpen(false)}
+        initialRating={editingReview?.rating}
+        initialText={editingReview?.text}
+        onClose={() => { setReviewOpen(false); setEditingReview(null); }}
+        onSubmit={() => {
+          setReviewOpen(false);
+          setEditingReview(null);
+          fetchReviews();
+          refreshBookSnapshot();
+        }}
       />
     </div>
   );

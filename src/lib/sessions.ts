@@ -6,11 +6,13 @@
 import { signOut } from 'firebase/auth';
 import { auth } from './firebase';
 import type { GlobalToastType } from '@/components/feedback/ToastProvider';
+import { getOrCreateDeviceId } from './deviceDetection';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export interface Session {
   id: string;
+  device_id?: string;
   device_name: string;
   browser: string;
   os: string;
@@ -28,7 +30,9 @@ async function handleSessionRevoked(showToast?: (msg: string, type?: GlobalToast
   
   try {
     // Sign out dari Firebase
-    await signOut(auth);
+    if (auth) {
+      await signOut(auth);
+    }
   } catch (err) {
     console.error('[sessions] Signout error:', err);
   }
@@ -57,11 +61,14 @@ export async function fetchWithSessionCheck(
   showToast?: (msg: string, type?: GlobalToastType) => void
 ) {
   try {
+    const deviceId = typeof window !== 'undefined' ? getOrCreateDeviceId() : null;
+
     const res = await fetch(url, {
       ...options,
       cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
+        ...(deviceId ? { 'x-device-id': deviceId } : {}),
         ...options.headers,
       },
     });
@@ -88,7 +95,7 @@ export async function fetchWithSessionCheck(
 export async function getSessions(showToast?: (msg: string, type?: GlobalToastType) => void): Promise<Session[]> {
   try {
     // Get Firebase ID token dari current user
-    const token = await auth.currentUser?.getIdToken();
+    const token = await auth?.currentUser?.getIdToken();
     
     if (!token) {
       console.warn('[sessions] No auth token available');
@@ -116,15 +123,32 @@ export async function getSessions(showToast?: (msg: string, type?: GlobalToastTy
 
     const sessions = Array.isArray(result?.data) ? result.data : [];
 
-    return sessions.map((s: any) => ({
-      id: s.id || s.session_id || '',
-      device_name: s.device_name || 'Perangkat',
-      browser: s.browser || '-',
-      os: s.os || '-',
-      ip_address: s.ip_address || '-',
-      created_at: s.created_at || '',
-      last_active: s.last_active || '',
-    }));
+    return sessions.map((s: any) => {
+      const browser = s.browser || '-';
+      const os = s.os || '-';
+      const rawDeviceName = String(s.device_name || '').trim();
+      const normalized = rawDeviceName.toLowerCase();
+      const needsFallback =
+        !rawDeviceName ||
+        normalized === 'unknown on unknown' ||
+        normalized === 'unknown';
+
+      const fallbackDeviceName =
+        browser !== '-' && os !== '-' && browser.toLowerCase() !== 'unknown' && os.toLowerCase() !== 'unknown'
+          ? `${browser} on ${os}`
+          : 'Perangkat Web';
+
+      return {
+        id: s.id || s.session_id || '',
+        device_id: s.device_id ? String(s.device_id) : undefined,
+        device_name: needsFallback ? fallbackDeviceName : rawDeviceName,
+        browser,
+        os,
+        ip_address: s.ip_address || '-',
+        created_at: s.created_at || '',
+        last_active: s.last_active || '',
+      };
+    });
   } catch (err) {
     console.error('[sessions] getSessions error:', err);
     return [];

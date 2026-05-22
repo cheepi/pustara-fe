@@ -124,6 +124,49 @@ export function useSmartLending() {
     const result = await request('/reading/finish', 'POST', { bookId });
     if (result) {
       setSuccess('🎉 Selamat! Buku sudah selesai dibaca!');
+
+      // Keep shelf cache consistent when user navigates back immediately.
+      try {
+        if (typeof window !== 'undefined') {
+          const cacheKeys = ['pustara:shelf-data-cache-v3', 'pustara:shelf-data-cache-v2'];
+          for (const cacheKey of cacheKeys) {
+            const raw = window.localStorage.getItem(cacheKey);
+            if (!raw) continue;
+
+            const parsed = JSON.parse(raw) as { savedAt?: number; data?: any };
+            const data = parsed?.data;
+            if (!data || typeof data !== 'object') continue;
+
+            if (Array.isArray(data.dibaca)) {
+              data.dibaca = data.dibaca.map((item: any) =>
+                item?.key === bookId
+                  ? {
+                      ...item,
+                      progress: 100,
+                      currentPage: Number(result?.total_pages ?? item.currentPage ?? item.totalPages ?? 0),
+                      totalPages: Number(result?.total_pages ?? item.totalPages ?? 0),
+                    }
+                  : item
+              );
+            }
+
+            if (Array.isArray(data.pinjaman)) {
+              data.pinjaman = data.pinjaman.map((item: any) =>
+                item?.key === bookId
+                  ? {
+                      ...item,
+                      progress: Math.max(100, Number(item.progress ?? 0)),
+                    }
+                  : item
+              );
+            }
+
+            window.localStorage.setItem(cacheKey, JSON.stringify({ savedAt: Date.now(), data }));
+          }
+        }
+      } catch (error) {
+        console.warn('[useSmartLending] failed to sync shelf cache on finish:', error);
+      }
       return result;
     }
     return null;

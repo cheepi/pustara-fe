@@ -16,6 +16,7 @@ import { auth } from '@/lib/firebase';
 import { usePasswordManagement } from '@/hooks/usePasswordManagement';
 import { usePrivacySettings } from '@/hooks/usePrivacySettings';
 import { getSessions, fetchWithSessionCheck, type Session } from '@/lib/sessions';
+import { getOrCreateDeviceId } from '@/lib/deviceDetection';
 import Navbar from '@/components/layout/Navbar';
 
 // ── Coming Soon Badge ─────────────────────────────────────────────────────────
@@ -220,7 +221,7 @@ export default function PrivacySecurityPage() {
 
   // ── Modal state ──
   const [modal, setModal] = useState<
-    'change-password' | 'forgot-password' | 'sessions' | 'delete-account' | null
+    'change-password' | 'forgot-password' | 'sessions' | 'delete-account' | 'logout-all' | null
   >(null);
 
   // ── Password management hook ──
@@ -255,16 +256,24 @@ export default function PrivacySecurityPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [logoutAllLoading, setLogoutAllLoading] = useState(false);
+  const currentDeviceId = useMemo(() => getOrCreateDeviceId(), []);
 
-  // ── Determine current device (session with latest last_active) ──
+  // ── Determine current device by persistent device_id ──
   const currentSessionId = useMemo(() => {
     if (sessions.length === 0) return null;
+
+    const exactMatch = sessions.find(
+      (session) => session.device_id && session.device_id === currentDeviceId
+    );
+    if (exactMatch) return exactMatch.id;
+
+    // Fallback for legacy sessions without device_id.
     return sessions.reduce((latest, session) => {
       const latestTime = new Date(latest.last_active).getTime();
       const currentTime = new Date(session.last_active).getTime();
       return currentTime > latestTime ? session : latest;
     }).id;
-  }, [sessions]);
+  }, [currentDeviceId, sessions]);
 
   // ── Change password handler ──
   async function handleChangePassword() {
@@ -495,7 +504,7 @@ export default function PrivacySecurityPage() {
               icon={LogOut}
               label="Keluar dari Semua Perangkat"
               sub="Mengakhiri semua sesi aktif"
-              onClick={handleLogoutAll}
+              onClick={() => setModal('logout-all')}
               disabled={logoutAllLoading}
               danger
             />
@@ -503,9 +512,8 @@ export default function PrivacySecurityPage() {
               icon={Trash2}
               label="Hapus Akun"
               sub="Tindakan ini tidak dapat dibatalkan"
-              onClick={() => {}}
+              onClick={() => setModal('delete-account')}
               danger
-              comingSoon
             />
           </Section>
         </div>
@@ -782,7 +790,7 @@ export default function PrivacySecurityPage() {
 
 
       {/* ══════════════════════════════════════════
-          MODAL — HAPUS AKUN (Coming Soon)
+          MODAL — HAPUS AKUN
       ══════════════════════════════════════════ */}
       <Modal open={modal === 'delete-account'} onClose={() => setModal(null)} title="Hapus Akun">
         <motion.div
@@ -796,33 +804,34 @@ export default function PrivacySecurityPage() {
           </div>
           <div>
             <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text)' }}>
-              Penghapusan Akun Segera Hadir
+              Yakin Ingin Menghapus Akun?
             </p>
             <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Untuk melindungi data Anda, fitur penghapusan akun sedang dalam proses implementasi dengan protokol keamanan terkini.
+              Tindakan ini akan menghapus semua data Anda secara permanen. Anda tidak dapat mengurungkan tindakan ini.
             </p>
           </div>
           <div className="w-full p-3 rounded-xl border border-red-500/20 bg-red-500/10 mt-2 text-left">
             <p className="text-xs leading-relaxed text-red-400">
-              Konfirmasi: ketik <strong>DELETE</strong> di bawah lalu tekan tombol "Hapus Akun".
+              Konfirmasi: ketik <strong>hapus {user?.email || 'akun'}</strong> di bawah lalu tekan tombol "Hapus Akun".
             </p>
             <input
               value={deleteInput}
               onChange={e => setDeleteInput(e.target.value)}
-              placeholder="Ketik DELETE untuk konfirmasi"
+              placeholder={`Ketik hapus ${user?.email || 'akun'}`}
               className={cn(inputCls, 'mt-2')}
             />
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex w-full gap-3 mt-4">
             <button
               onClick={() => setModal(null)}
-              className="flex-1 py-2 rounded-xl border hover:opacity-80"
+              className="flex-1 py-3 rounded-xl border text-sm font-semibold transition hover:opacity-80"
             >Batal</button>
             <button
               onClick={async () => {
-                if (deleteInput !== 'DELETE') {
-                  showToast('Ketik DELETE sebagai konfirmasi', 'error');
+                const requiredText = `hapus ${user?.email || 'akun'}`;
+                if (deleteInput !== requiredText) {
+                  showToast(`Ketik "${requiredText}" sebagai konfirmasi`, 'error');
                   return;
                 }
 
@@ -842,9 +851,9 @@ export default function PrivacySecurityPage() {
                     },
                     body: JSON.stringify({ confirm: true }),
                   });
-                  const json = await res.json();
-                  if (!res.ok || !json.success) {
-                    showToast(json.error || 'Gagal menghapus akun', 'error');
+                  const json = await res.json().catch(() => ({}));
+                  if (!res.ok || json.success === false) {
+                    showToast(json.error || json.message || 'Gagal menghapus akun', 'error');
                     return;
                   }
 
@@ -857,8 +866,47 @@ export default function PrivacySecurityPage() {
                   showToast('Terjadi kesalahan saat menghapus akun', 'error');
                 }
               }}
-              className="flex-1 py-2 rounded-xl bg-red-500 text-white hover:opacity-90"
+              className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-semibold transition hover:opacity-90"
             >Hapus Akun</button>
+          </div>
+        </motion.div>
+      </Modal>
+
+      {/* ══════════════════════════════════════════
+          MODAL — KELUAR SEMUA PERANGKAT
+      ══════════════════════════════════════════ */}
+      <Modal open={modal === 'logout-all'} onClose={() => setModal(null)} title="Konfirmasi Keluar">
+        <motion.div
+          className="flex flex-col gap-4 items-center text-center py-4"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+            <LogOut className="w-6 h-6 text-red-400" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text)' }}>
+              Akhiri Semua Sesi?
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Anda akan dikeluarkan dari semua perangkat yang terhubung ke akun ini, termasuk perangkat yang sedang Anda gunakan sekarang.
+            </p>
+          </div>
+          <div className="flex w-full gap-3 mt-4">
+            <button
+              onClick={() => setModal(null)}
+              className="flex-1 py-3 rounded-xl border text-sm font-semibold transition hover:opacity-80"
+              disabled={logoutAllLoading}
+            >
+              Batal
+            </button>
+            <button
+              onClick={handleLogoutAll}
+              disabled={logoutAllLoading}
+              className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-semibold transition hover:opacity-90 flex items-center justify-center gap-2"
+            >
+              {logoutAllLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ya, Keluar'}
+            </button>
           </div>
         </motion.div>
       </Modal>

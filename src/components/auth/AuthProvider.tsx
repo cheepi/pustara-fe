@@ -20,9 +20,10 @@ const AUTH_ONLY    = ['/auth/login', '/auth/register'];
  */
 async function syncAndGetRole(token: string): Promise<'reader' | 'admin'> {
   try {
-    // Get persistent device_id from localStorage (creates one if missing)
-    const { getOrCreateDeviceId } = await import('@/lib/deviceDetection');
+    // Get stable device_id and client-side device info for reliable session labeling.
+    const { getOrCreateDeviceId, getDeviceInfo } = await import('@/lib/deviceDetection');
     const deviceId = getOrCreateDeviceId();
+    const deviceInfo = getDeviceInfo();
     console.log('[AuthProvider] Using persistent device_id:', deviceId);
 
     const res = await fetch('/api/auth/verify-token', {
@@ -31,6 +32,9 @@ async function syncAndGetRole(token: string): Promise<'reader' | 'admin'> {
       body: JSON.stringify({
         token,
         device_id: deviceId,  // NEW: persistent device identifier for session matching
+        device_name: deviceInfo.deviceName,
+        browser: deviceInfo.browser,
+        os: deviceInfo.os,
       }),
     });
     const ct = res.headers.get('content-type') || '';

@@ -80,46 +80,48 @@ export function useRecommendations(forceRefresh = false) {
         // Chat endpoint hanya dipakai saat user klik kirim di halaman chat.
         let recommendations: AiRecommendation[] = [];
 
-        // Authenticated users should always go through backend cold-start proxy
-        // so AI can switch to personalized mode based on interaction count.
+        // Authenticated users: try personalized cold-start first, then fallback to trending.
         if (user?.uid) {
-          const GENRE_MOOD: Record<string, string> = {
-            'Fiksi': 'cerita naratif imajinatif karakter',
-            'Fiksi Ilmiah': 'masa depan teknologi imajinasi sains',
-            'Fantasi': 'ajaib petualangan magical seru',
-            'Misteri': 'penasaran teka-teki gelap detective',
-            'Horor': 'mencekam menyeramkan gelap',
-            'Thriller': 'tegang menegangkan seru misteri',
-            'Petualangan': 'jelajah aksi seru perjalanan',
-            'Sejarah': 'masa lalu peristiwa fakta',
-            'Sains': 'ilmiah fakta pengetahuan informatif',
-            'Sastra': 'bahasa indah klasik literer',
-            'Biografi': 'nyata kisah hidup inspirasi',
-            'Romansa': 'cinta romantis sedih perasaan',
-            'Romance': 'cinta romantis sedih perasaan',
-            'Nonfiksi': 'faktual informatif pengetahuan nyata',
-            'Self-Help': 'motivasi produktif berkembang positif',
-            'Self-help': 'motivasi produktif berkembang positif',
-            'Psikologi': 'pikiran perilaku emosi manusia',
-            'Filsafat': 'mendalam pemikiran renungan berat',
-            'Anak': 'ceria ringan imajinatif edukatif',
-            'Teenlit': 'remaja perasaan tumbuh dewasa',
-            'Pendidikan': 'belajar pengetahuan sekolah edukatif',
-            'Humor': 'lucu santai ringan menghibur',
-            'Klasik': 'klasik abadi sastra mendalam',
-            'Fiksi pendek': 'cerita singkat padat berkesan',
-            'Drama': 'sedih haru emosional menyentuh',
-          };
-          const enrichedGenres = genres.map(g =>
-            GENRE_MOOD[g] ? `${g} ${GENRE_MOOD[g]}` : g
-          );
-          const res = await fetchColdStartRecommendations(enrichedGenres, 10);
-          recommendations = res.recommendations ?? [];
+          try {
+            const GENRE_MOOD: Record<string, string> = {
+              'Fiksi': 'cerita naratif imajinatif karakter',
+              'Fiksi Ilmiah': 'masa depan teknologi imajinasi sains',
+              'Fantasi': 'ajaib petualangan magical seru',
+              'Misteri': 'penasaran teka-teki gelap detective',
+              'Horor': 'mencekam menyeramkan gelap',
+              'Thriller': 'tegang menegangkan seru misteri',
+              'Petualangan': 'jelajah aksi seru perjalanan',
+              'Sejarah': 'masa lalu peristiwa fakta',
+              'Sains': 'ilmiah fakta pengetahuan informatif',
+              'Sastra': 'bahasa indah klasik literer',
+              'Biografi': 'nyata kisah hidup inspirasi',
+              'Romansa': 'cinta romantis sedih perasaan',
+              'Romance': 'cinta romantis sedih perasaan',
+              'Nonfiksi': 'faktual informatif pengetahuan nyata',
+              'Self-Help': 'motivasi produktif berkembang positif',
+              'Self-help': 'motivasi produktif berkembang positif',
+              'Psikologi': 'pikiran perilaku emosi manusia',
+              'Filsafat': 'mendalam pemikiran renungan berat',
+              'Anak': 'ceria ringan imajinatif edukatif',
+              'Teenlit': 'remaja perasaan tumbuh dewasa',
+              'Pendidikan': 'belajar pengetahuan sekolah edukatif',
+              'Humor': 'lucu santai ringan menghibur',
+              'Klasik': 'klasik abadi sastra mendalam',
+              'Fiksi pendek': 'cerita singkat padat berkesan',
+              'Drama': 'sedih haru emosional menyentuh',
+            };
+            const enrichedGenres = genres.map(g =>
+              GENRE_MOOD[g] ? `${g} ${GENRE_MOOD[g]}` : g
+            );
+            const res = await fetchColdStartRecommendations(enrichedGenres, 10);
+            recommendations = res.recommendations ?? [];
+          } catch {
+            // cold-start failed — will fall through to trending fallback below
+          }
         }
 
-        // Guest mode only: use trending fallback.
-        // For authenticated users, phase must stay personalized per-user.
-        if (!user?.uid && recommendations.length === 0) {
+        // Fallback to trending for both guest and authenticated users with empty results.
+        if (recommendations.length === 0) {
           const trending = await fetchTrending(10);
           recommendations = trending.map(toAiRecommendationFallback);
         }
