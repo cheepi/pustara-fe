@@ -190,9 +190,7 @@ export default function ProfilePage() {
         setProfileCreatedAt(profile.created_at || null);
 
         // "Buku Dibaca" = books currently being read (sedang dibaca tab in /shelf)
-        const currentlyReadingCount = shelf?.dibaca?.length ?? 0;
-        const borrowedCountValue = Number(shelf?.stats?.total_borrowed ?? shelf?.pinjaman?.length ?? 0);
-        setBorrowedCount(borrowedCountValue);
+        const currentlyReadingCount = shelf.dibaca.length;
         const streak = Math.max(0, Number(profile.reading_streak ?? 0));
         const ulasan = Number(profile.stats?.reviews_written ?? 0);
         const streakTooltip = profile.streak_is_active
@@ -247,7 +245,7 @@ export default function ProfilePage() {
         //   - "Wishlist"        = buku yang disimpan ke wishlist
         // Tidak ada duplikat — setiap buku hanya muncul sekali.
 
-        const riwayatItems: ActivityItem[] = (shelf?.riwayat ?? []).slice(0, 4).map((r: any) => ({
+        const riwayatItems: ActivityItem[] = shelf.riwayat.slice(0, 4).map((r) => ({
           type: 'selesai' as const,
           book: r.title,
           author: r.author,
@@ -260,10 +258,10 @@ export default function ProfilePage() {
         // Book IDs already covered by riwayat — exclude them from pinjaman
         const riwayatBookKeys = new Set(shelf.riwayat.map((r) => r.key));
 
-        const pinjamanItems: ActivityItem[] = (shelf?.pinjaman ?? [])
-          .filter((p: any) => !riwayatBookKeys.has(p.key))
+        const pinjamanItems: ActivityItem[] = shelf.pinjaman
+          .filter((p) => !riwayatBookKeys.has(p.key))
           .slice(0, 2)
-          .map((p: any) => ({
+          .map((p) => ({
             type: 'pinjam' as const,
             book: p.title,
             author: p.author,
@@ -273,7 +271,7 @@ export default function ProfilePage() {
             time: p.borrowedAt || 'Baru saja',
           }));
 
-        const wishlistItems: ActivityItem[] = (profile.liked_books ?? []).slice(0, 2).map((book: any) => ({
+        const wishlistItems: ActivityItem[] = (profile.liked_books ?? []).slice(0, 2).map((book) => ({
           type: 'wishlist' as const,
           book: book.title,
           author: Array.isArray(book.authors) ? String(book.authors[0] ?? 'Unknown Author') : 'Unknown Author',
@@ -293,7 +291,7 @@ export default function ProfilePage() {
         setRecentActivity(liveRecent);
 
         setFollowingPreview(
-          following.slice(0, 4).map((item: any) => {
+          following.slice(0, 4).map((item) => {
             const displayName = item.display_name?.trim() || item.name?.trim() || item.username?.trim() || 'Pustara User';
             return {
               id: item.id,
@@ -351,7 +349,7 @@ export default function ProfilePage() {
 
       const finalName = updated?.name || draftName;
 
-      if (auth && auth.currentUser && finalName) {
+      if (auth?.currentUser && finalName) {
         try {
           await updateFirebaseProfile(auth.currentUser, { displayName: finalName });
         } catch (error) {

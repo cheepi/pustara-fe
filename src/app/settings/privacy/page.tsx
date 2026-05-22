@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Shield, Lock, Eye, EyeOff, Smartphone, LogOut,
   ChevronRight, AlertTriangle, CheckCircle, X, Loader2,
-  KeyRound, Trash2, Bell, Globe, Mail,
+  KeyRound, Trash2, Download, Bell, Globe, Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
@@ -442,7 +442,10 @@ export default function PrivacySecurityPage() {
               label="Notifikasi Login"
               sub="Kirim email saat ada login dari perangkat baru"
               on={loginAlerts}
-              onToggle={() => {}}
+              onToggle={() => {
+                setLoginAlerts(v => !v);
+                showToast(!loginAlerts ? 'Notifikasi login diaktifkan' : 'Notifikasi login dimatikan', 'info');
+              }}
               iconColor="text-blue-400"
               comingSoon
             />

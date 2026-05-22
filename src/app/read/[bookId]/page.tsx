@@ -148,7 +148,7 @@ export default function ReadPage() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [readingTime, setReadingTime] = useState(0);
   const readingTimeRef = useRef(0);
-  const watermarkLabel = `${userName || 'Pustara User'} · ${new Date().toLocaleDateString('id-ID', {
+  const watermarkLabel = `@${userName || 'Pustara User'} · ${new Date().toLocaleDateString('id-ID', {
     day: 'numeric', month: 'short', year: 'numeric',
   })}`;
   useEffect(() => { readingTimeRef.current = readingTime; }, [readingTime]);

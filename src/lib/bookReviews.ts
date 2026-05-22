@@ -84,6 +84,8 @@ export async function fetchBookReviewData(bookId: string): Promise<{ meta: BookD
     fallbackCount: fallbackReviews.length,
   });
 
+  console.log('[BookReviews] Using fallback:', { hasApiReviews: !!apiReviews, hasEmbedded: !!meta?.reviews?.length, fallbackCount: fallbackReviews.length });
+
   return {
     meta: fallbackMeta,
     reviews: fallbackReviews,
