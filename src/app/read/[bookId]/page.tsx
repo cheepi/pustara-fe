@@ -640,7 +640,7 @@ export default function ReadPage() {
 
   return (
     <div ref={containerRef}
-      className="flex flex-col h-screen bg-[#1a1a1a] text-white overflow-hidden select-none"
+      className="flex flex-col h-[100dvh] bg-[#1a1a1a] text-white overflow-hidden select-none"
       onMouseMove={resetHideTimer}
       onClick={(e) => { resetHideTimer(); closeMenu(); }}
       onContextMenu={handleContextMenu}>
