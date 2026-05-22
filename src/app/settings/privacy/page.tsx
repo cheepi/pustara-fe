@@ -216,7 +216,6 @@ export default function PrivacySecurityPage() {
   const reviewsPublic    = privacySettings?.public_reviews ?? true;
 
   // ── Security toggles ──
-  const [twoFactor,   setTwoFactor]   = useState(false);
   const [loginAlerts, setLoginAlerts] = useState(true);
 
   // ── Modal state ──
@@ -425,14 +424,6 @@ export default function PrivacySecurityPage() {
                 setConfirmPw('');
                 setModal('change-password');
               }}
-            />
-            <ToggleRow
-              icon={Smartphone}
-              label="Verifikasi Dua Langkah"
-              sub="Tambahkan lapisan keamanan ekstra saat login"
-              on={twoFactor}
-              onToggle={() => {}}
-              comingSoon
             />
             <ToggleRow
               icon={Bell}

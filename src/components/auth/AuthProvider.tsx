@@ -16,13 +16,22 @@ const AUTH_ONLY    = ['/auth/login', '/auth/register'];
 /**
  * Sync user to backend AND get role in one call.
  * verify-token now returns { data: { role: 'admin' | 'reader' } }
+ * Also sends persistent device_id for reliable session matching
  */
 async function syncAndGetRole(token: string): Promise<'reader' | 'admin'> {
   try {
+    // Get persistent device_id from localStorage (creates one if missing)
+    const { getOrCreateDeviceId } = await import('@/lib/deviceDetection');
+    const deviceId = getOrCreateDeviceId();
+    console.log('[AuthProvider] Using persistent device_id:', deviceId);
+
     const res = await fetch('/api/auth/verify-token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({
+        token,
+        device_id: deviceId,  // NEW: persistent device identifier for session matching
+      }),
     });
     const ct = res.headers.get('content-type') || '';
     if (!ct.includes('application/json')) {

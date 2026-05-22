@@ -6,6 +6,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const token = body?.token;
+    const device_name = body?.device_name; // Client-side will provide this
 
     if (!token) {
       return NextResponse.json(
@@ -19,7 +20,10 @@ export async function POST(request: NextRequest) {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ token }),
+      body: JSON.stringify({
+        token,
+        ...(device_name && { device_name }), // Include if provided
+      }),
     });
 
     const contentType = response.headers.get('content-type') || '';
