@@ -256,11 +256,12 @@ export default function ReviewCard({
         )}
 
         {/* Review text */}
-        <p className={cn('text-xs leading-relaxed line-clamp-2 mb-3 flex-1', tk.muted)}>
+        <p className={cn('text-xs leading-relaxed line-clamp-2 mb-3', tk.muted)}>
           {text || '—'}
         </p>
 
         {/* Like */}
+        <div className="flex-1" />
         <LikeButton />
       </motion.div>
     );

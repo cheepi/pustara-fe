@@ -16,9 +16,12 @@ export interface PopularBook {
   year?: string;
   pages?: number;
   avgRating?: number;
+  ratingCount?: number;
+  reviewCount?: number;
+  readerCount?: number;
+  borrowCount?: number;
+  readingSessionCount?: number;
 }
-
-const RATINGS = [4.7, 4.9, 4.6, 4.8, 4.5, 4.7];
 
 const coverUrl = (id?: number, s = 'L') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
@@ -85,9 +88,9 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
   const arrowBg     = isLight ? 'bg-navy-100 hover:bg-navy-200 text-navy-600' : 'bg-white/10 hover:bg-white/20 text-white/70 hover:text-white';
   const dotInactive = isLight ? 'bg-navy-800/25' : 'bg-white/25';
   const activeBook  = books[activeIndex];
-  const activeRating = Number.isFinite(activeBook?.avgRating)
+  const activeRating = Number.isFinite(activeBook?.avgRating) && Number(activeBook?.avgRating) > 0
     ? Number(activeBook.avgRating)
-    : RATINGS[activeIndex % RATINGS.length];
+    : null;
 
   if (total === 0) {
     return (
@@ -131,14 +134,16 @@ export default function PopularCarousel({ books, isLight }: PopularCarouselProps
                 {activeBook.author}
               </p>
 
-              <div className="flex items-center gap-1.5 mb-4">
-                {[1,2,3,4,5].map(s => (
-                  <Star key={s} className={cn('w-3.5 h-3.5',
-                    s <= Math.round(activeRating) ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700'
-                  )} />
-                ))}
-                <span className="text-sm font-bold text-gold ml-1">{activeRating}</span>
-              </div>
+              {activeRating !== null && (
+                <div className="flex items-center gap-1.5 mb-4">
+                  {[1,2,3,4,5].map(s => (
+                    <Star key={s} className={cn('w-3.5 h-3.5',
+                      s <= Math.round(activeRating) ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700'
+                    )} />
+                  ))}
+                  <span className="text-sm font-bold text-gold ml-1">{activeRating.toFixed(1)}</span>
+                </div>
+              )}
 
               {activeBook.genre && (
                 <div className="flex flex-wrap gap-1.5">

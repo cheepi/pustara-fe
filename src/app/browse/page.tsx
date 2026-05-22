@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { useChatAI } from '@/hooks/useChatAI';
 import { useRecommendations } from '@/hooks/useRecommendations';
 import { fetchOpenLibraryCoverId } from '@/lib/api';
+import { GENRE_OPTIONS } from '@/lib/genreOptions';
 import type { AiRecommendation } from '@/types/ai';
 import AiRecoCard from '@/components/ai/AiRecoCard';
 import { AiRecoCardSkeleton, } from '@/components/ai/AiRecoCard';
@@ -46,15 +47,7 @@ type CategoryItem = {
   icon: ComponentType<{ className?: string }>;
 };
 
-const FALLBACK_CATEGORY_LABELS = [
-  'Coming-of-age',
-  'Misteri',
-  'Drama',
-  'Fiksi',
-  'Sejarah',
-  'Romance',
-  'Non-fiksi',
-];
+const FALLBACK_CATEGORY_LABELS = GENRE_OPTIONS.map((genre) => genre.label);
 
 function normalizeCategoryId(value: string): string {
   return value
@@ -368,6 +361,7 @@ function BrowseContent() {
   const [searched,   setSearched]   = useState(false);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const { books: trendingPopularBooks, loading: popularLoading } = useTrendingBooks(12);
+  const totalCategoryCount = GENRE_OPTIONS.length;
   const popularBooks = useMemo<BrowseBook[]>(() => {
     return trendingPopularBooks.map((book) => ({
       key: String(book.key ?? ''),
@@ -380,6 +374,11 @@ function BrowseContent() {
       year: book.year ? Number(book.year) || undefined : undefined,
       pages: Number(book.pages ?? 0) || undefined,
       desc: String(book.desc ?? ''),
+      ratingCount: Number(book.ratingCount ?? book.reviewCount ?? 0) || undefined,
+      reviewCount: Number(book.reviewCount ?? book.ratingCount ?? 0) || undefined,
+      readerCount: Number(book.readerCount ?? 0) || undefined,
+      borrowCount: Number(book.borrowCount ?? 0) || undefined,
+      readingSessionCount: Number(book.readingSessionCount ?? 0) || undefined,
     }));
   }, [trendingPopularBooks]);
   const {
@@ -949,8 +948,10 @@ function BrowseContent() {
                       const activeIdx = hoveredIdx ?? 0;
                       const b    = books[activeIdx];
                       const rs   = RANK_STYLE[activeIdx] || RANK_STYLE[2];
-                      const rating = b?.rating?.toFixed(1) || "4.5";
-                      const rn   = Number(rating);
+                      const rating = (Number.isFinite(b?.rating) && Number(b?.rating) > 0)
+                        ? Number(b?.rating).toFixed(1)
+                        : '-';
+                      const rn   = Number.isFinite(b?.rating) ? Number(b?.rating) : 0;
                       if (!b) return null;
                       return (
                         <AnimatePresence mode="wait">
@@ -1126,7 +1127,7 @@ function BrowseContent() {
                             </div>
                             <div className="absolute bottom-2 right-2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur-sm">
                               <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                              <span className="text-white text-[10px] font-bold">{b.rating?.toFixed(1) || "4.5"}</span>
+                              <span className="text-white text-[10px] font-bold">{Number.isFinite(b.rating) && Number(b.rating) > 0 ? Number(b.rating).toFixed(1) : '-'}</span>
                             </div>
                           </div>
                         </motion.div>
@@ -1161,9 +1162,9 @@ function BrowseContent() {
                             <p className={cn('text-xs mb-2.5', tk.muted)}>{b.author}</p>
                             <div className="flex items-center gap-1 mb-2.5">
                               {[1,2,3,4,5].map(s => (
-                                <Star key={s} className={cn('w-3 h-3', s <= Math.round(b.rating || 4) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
+                                <Star key={s} className={cn('w-3 h-3', s <= Math.round(b.rating || 0) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
                               ))}
-                              <span className="text-gold text-xs font-bold ml-1">{b.rating?.toFixed(1) || "4.5"}</span>
+                              <span className="text-gold text-xs font-bold ml-1">{Number.isFinite(b.rating) && Number(b.rating) > 0 ? Number(b.rating).toFixed(1) : '-'}</span>
                             </div>
                             <div className="flex flex-wrap gap-1 mb-2.5">
                               {b.genres?.map(g => (
@@ -1213,7 +1214,7 @@ function BrowseContent() {
                               </div>
                               <div className="absolute bottom-2 right-2 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/70 backdrop-blur-sm">
                                 <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                                <span className="text-white text-[10px] font-bold">{b.rating?.toFixed(1) || "4.5"}</span>
+                                <span className="text-white text-[10px] font-bold">{Number.isFinite(b.rating) && Number(b.rating) > 0 ? Number(b.rating).toFixed(1) : '-'}</span>
                               </div>
                             </div>
                             <motion.div className="w-1.5 h-1.5 rounded-full mx-auto mt-2" animate={{ backgroundColor: isActive ? '#c9a84c' : 'transparent' }} />
@@ -1254,9 +1255,9 @@ function BrowseContent() {
                                 <p className={cn('text-xs mb-2', tk.muted)}>{b.author}</p>
                                 <div className="flex items-center gap-1 mb-2">
                                   {[1,2,3,4,5].map(s => (
-                                    <Star key={s} className={cn('w-3 h-3', s <= Math.round(b.rating || 4) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
+                                    <Star key={s} className={cn('w-3 h-3', s <= Math.round(b.rating || 0) ? 'text-gold fill-gold' : dark ? 'text-slate-700' : 'text-slate-200')} />
                                   ))}
-                                  <span className="text-gold text-xs font-bold ml-1">{b.rating?.toFixed(1) || "4.5"}</span>
+                                  <span className="text-gold text-xs font-bold ml-1">{Number.isFinite(b.rating) && Number(b.rating) > 0 ? Number(b.rating).toFixed(1) : '-'}</span>
                                 </div>
                                 <div className="flex flex-wrap gap-1 mb-2">
                                   {b.genres?.map(g => (
@@ -1299,10 +1300,15 @@ function BrowseContent() {
           <motion.section key="cats"
             className="max-w-7xl mx-auto px-4 mt-8 pb-12"
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }}>
-            <h2 className={cn('font-serif text-lg font-bold mb-3', tk.text)}>Telusuri Kategori</h2>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <h2 className={cn('font-serif text-lg font-bold', tk.text)}>Telusuri Kategori</h2>
+              <Link href="/popular" className={cn('text-xs font-semibold text-gold hover:underline')}>
+                Lihat semua →
+              </Link>
+            </div>
             <div className="flex items-center justify-between mb-2 min-h-[18px]">
               <span className={cn('text-xs', tk.muted)}>
-                {categoriesLoading ? 'Memuat kategori...' : `${categories.length} kategori tersedia`}
+                {categoriesLoading ? 'Memuat kategori...' : `${totalCategoryCount} kategori tersedia`}
               </span>
               {categoriesError && (
                 <span className="text-[11px] text-amber-500">{categoriesError}</span>
@@ -1484,8 +1490,10 @@ function GridBookCard({
   sourceLabel?: string;
 }) {
   const src       = book.coverUrl;
-  const rating    = book.rating?.toFixed(1) || "4.5";
-  const ratingNum = Number(rating);
+  const rating    = (Number.isFinite(book.rating) && Number(book.rating) > 0)
+    ? Number(book.rating).toFixed(1)
+    : '-';
+  const ratingNum = Number.isFinite(book.rating) ? Number(book.rating) : 0;
   const isAvailable = book.available !== false;
 
   return (
@@ -1561,8 +1569,8 @@ function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; 
       {items.map((b, i) => {
         const rating = Number.isFinite(b.rating) && Number(b.rating) > 0
           ? Number(b.rating).toFixed(1)
-          : (pseudo2(i + 8, 38, 50) / 10).toFixed(1);
-        const reads  = Math.floor(pseudo2(i + 2, 1200, 28000));
+          : null;
+        const readerCount = Number(b.readerCount ?? 0) || 0;
         
         const RANK_BADGE = [
           'bg-yellow-400 text-yellow-900', 
@@ -1629,13 +1637,17 @@ function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; 
                 
                 {/* Rating & Stats */}
                 <div className="flex items-center gap-1.5 mt-auto">
-                  <div className="flex items-center gap-0.5 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded text-[10px]">
-                    <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                    <span className="text-gold font-bold">{rating}</span>
-                  </div>
-                  <span className={cn('text-[9px] font-medium uppercase tracking-wider', tk.muted)}>
-                    {reads.toLocaleString()}x dibaca
-                  </span>
+                  {rating ? (
+                    <div className="flex items-center gap-0.5 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded text-[10px]">
+                      <Star className="w-2.5 h-2.5 text-gold fill-gold" />
+                      <span className="text-gold font-bold">{rating}</span>
+                    </div>
+                  ) : null}
+                  {readerCount > 0 && (
+                    <span className={cn('text-[9px] font-medium uppercase tracking-wider', tk.muted)}>
+                      {readerCount.toLocaleString()}x dibaca
+                    </span>
+                  )}
                 </div>
               </div>
             </motion.div>

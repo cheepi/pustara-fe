@@ -32,6 +32,14 @@ export default function ReviewsPage() {
   useEffect(() => {
     fetchBookReviewData(bookKey)
       .then(({ meta, reviews }) => {
+        console.log('[REVIEWS PAGE] Data loaded:', { bookKey, reviewCount: reviews.length });
+        reviews.slice(0, 3).forEach((r: any, idx: number) => {
+          console.log(`[REVIEWS PAGE] Review ${idx}:`, { 
+            id: r.id, 
+            rating: r.rating, 
+            textLength: r.text?.length || r.body?.length || 0 
+          });
+        });
         setMeta(meta);
         setReviews(reviews);
       })
@@ -49,6 +57,11 @@ export default function ReviewsPage() {
   const filtered  = filter === 'Semua' ? reviews : reviews.filter(r => r.rating === parseInt(filter, 10));
   const displayed = filtered.slice(0, visible);
   const hasMore   = visible < filtered.length;
+  const ratingReviews = reviews.filter((r) => Number(r.rating) > 0);
+  const liveRatingCount = ratingReviews.length;
+  const liveAvgRating = liveRatingCount > 0
+    ? ratingReviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / liveRatingCount
+    : 0;
 
   if (loadingData || !meta) {
     return (
@@ -113,11 +126,11 @@ export default function ReviewsPage() {
               <div className="flex gap-0.5">
                 {[1,2,3,4,5].map(s => (
                   <Star key={s} className={cn('w-4 h-4',
-                    s <= Math.round(meta.avg_rating) ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
+                    s <= Math.round(liveAvgRating) ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
                 ))}
               </div>
-              <span className="text-gold font-bold">{meta.avg_rating}</span>
-              <span className={cn('text-xs', tk.muted)}>({meta.rating_count.toLocaleString()} ulasan)</span>
+              <span className="text-gold font-bold">{liveAvgRating.toFixed(1)}</span>
+              <span className={cn('text-xs', tk.muted)}>({liveRatingCount.toLocaleString()} ulasan)</span>
             </div>
           </div>
         </motion.div>

@@ -40,6 +40,10 @@ function bookColor(index: number) {
   return BOOK_PALETTE[index % BOOK_PALETTE.length];
 }
 
+function resolveBookCover(book: { cover_url?: string | null; coverUrl?: string | null }) {
+  return book.cover_url || book.coverUrl || null;
+}
+
 function formatTooltipDay(dayKey?: string | null): string {
   if (!dayKey) return '-';
   const date = new Date(`${dayKey}T00:00:00Z`);
@@ -203,10 +207,25 @@ function BookPosterCard({
         className="relative rounded-xl overflow-hidden cursor-pointer group"
         style={{ aspectRatio: '2/3' }}
       >
-        <div className={cn('absolute inset-0 bg-gradient-to-br', gradient)} />
-        <div className="absolute inset-0 opacity-20"
-          style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: 'cover' }}
-        />
+        {/* If book has cover URL, render it; otherwise fallback to gradient poster */}
+        {(() => {
+          const anyBook = book as any;
+          const imgSrc = String(anyBook.cover_url ?? anyBook.coverUrl ?? '') || '';
+          if (imgSrc) {
+            return (
+              <img src={imgSrc} alt={book.title} className="absolute inset-0 w-full h-full object-cover" />
+            );
+          }
+
+          return (
+            <>
+              <div className={cn('absolute inset-0 bg-gradient-to-br', gradient)} />
+              <div className="absolute inset-0 opacity-20"
+                style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 200 200\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")', backgroundSize: 'cover' }}
+              />
+            </>
+          );
+        })()}
         <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
           <p className="text-white text-[10px] font-bold leading-tight line-clamp-2">{shortTitle}</p>
           <p className="text-white/60 text-[9px] mt-0.5 line-clamp-1">
@@ -224,11 +243,12 @@ function ReadingCard({
   index,
   isLight,
 }: {
-  book: { id: string; title: string; authors: string[]; progress_percentage?: number };
+  book: { id: string; title: string; authors: string[]; progress_percentage?: number; cover_url?: string | null; coverUrl?: string | null };
   index: number;
   isLight: boolean;
 }) {
   const pct = Math.round(book.progress_percentage || 0);
+  const cover = resolveBookCover(book);
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -243,9 +263,13 @@ function ReadingCard({
             : 'bg-white/5 border-white/8 hover:border-gold/30'
         )}>
           <div className="flex items-start gap-3">
-            <div className={cn('w-8 flex-shrink-0 rounded-md bg-gradient-to-br', bookColor(index))}
-              style={{ aspectRatio: '2/3', minHeight: 48 }}
-            />
+            <div className="w-8 flex-shrink-0 rounded-md overflow-hidden" style={{ aspectRatio: '2/3', minHeight: 48 }}>
+              {cover ? (
+                <img src={cover} alt={book.title} className="w-full h-full object-cover" />
+              ) : (
+                <div className={cn('w-full h-full bg-gradient-to-br', bookColor(index))} />
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <p className={cn('text-sm font-bold leading-snug line-clamp-1 group-hover:text-gold transition-colors', isLight ? 'text-navy-900' : 'text-white')}>
                 {book.title}

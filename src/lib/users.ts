@@ -107,6 +107,25 @@ function normalizePublicIdentity(raw: Record<string, unknown>): { displayName: s
 
 function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
   const identity = normalizePublicIdentity(raw);
+  function toCoverUrlFromId(id: unknown, size = 'M') {
+    const n = Number(id);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return `https://covers.openlibrary.org/b/id/${n}-${size}.jpg`;
+  }
+
+  function normalizeBookList(list: unknown) {
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => {
+      const rec = item as Record<string, unknown>;
+      const coverUrl = rec.cover_url ? String(rec.cover_url) : null;
+      const coverId = rec.cover_id ?? rec.coverId ?? rec.coverId;
+      return {
+        ...(rec as Record<string, unknown>),
+        cover_url: coverUrl || (coverId ? toCoverUrlFromId(coverId) : null),
+      } as unknown;
+    });
+  }
+
   return {
     id: String(raw.id ?? ''),
     username: identity.username,
@@ -129,13 +148,12 @@ function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
     followers_count: Number(raw.followers_count ?? 0),
     following_count: Number(raw.following_count ?? 0),
     is_following: Boolean(raw.is_following),
-    currently_reading: Array.isArray(raw.currently_reading) ? raw.currently_reading as UserProfile['currently_reading'] : [],
-    liked_books: Array.isArray(raw.liked_books) ? raw.liked_books as UserProfile['liked_books'] : [],
+    currently_reading: normalizeBookList(raw.currently_reading) as UserProfile['currently_reading'],
+    liked_books: normalizeBookList(raw.liked_books) as UserProfile['liked_books'],
     stats: raw.stats && typeof raw.stats === 'object'
       ? {
           total_read: Number((raw.stats as Record<string, unknown>).total_read ?? 0),
           reading_streak: Number((raw.stats as Record<string, unknown>).reading_streak ?? 0),
-          borrowed_books: Number((raw.stats as Record<string, unknown>).borrowed_books ?? 0),
           reviews_written: Number((raw.stats as Record<string, unknown>).reviews_written ?? 0),
           favorite_genres: normalizeGenreStats((raw.stats as Record<string, unknown>).favorite_genres),
         }
@@ -403,5 +421,81 @@ export async function checkUsernameAvailability(input: string): Promise<Username
       normalizedUsername,
       message: 'Koneksi bermasalah. Coba lagi.',
     };
+  }
+}
+
+/**
+ * Privacy Settings Types
+ */
+export interface PrivacySettings {
+  activity_visible: boolean;
+  public_reading_list: boolean;
+  public_reviews: boolean;
+}
+
+export interface PrivacySettingsUpdate {
+  activity_visible?: boolean;
+  public_reading_list?: boolean;
+  public_reviews?: boolean;
+}
+
+/**
+ * Fetch current privacy settings for authenticated user
+ */
+export async function getPrivacySettings(): Promise<PrivacySettings | null> {
+  try {
+    const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return null;
+
+    const res = await fetch(`${API_URL}/users/privacy-settings`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+    });
+
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const json = await res.json();
+    const data = json?.data as PrivacySettings | null;
+    return data;
+  } catch (err) {
+    console.warn('[users] getPrivacySettings gagal:', err);
+    return null;
+  }
+}
+
+/**
+ * Update privacy settings for authenticated user
+ */
+export async function updatePrivacySettings(
+  updates: PrivacySettingsUpdate
+): Promise<PrivacySettings | null> {
+  try {
+    const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return null;
+
+    const res = await fetch(`${API_URL}/users/privacy-settings`, {
+      method: 'PUT',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const json = await res.json();
+    const data = json?.data as PrivacySettings | null;
+    return data;
+  } catch (err) {
+    console.warn('[users] updatePrivacySettings gagal:', err);
+    return null;
   }
 }

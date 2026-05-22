@@ -58,6 +58,10 @@ interface BackendActivity {
   actor_name: string;
   actor_avatar: string | null;
   timestamp: string | null;
+  review_text?: string | null;
+  review_id?: string | null;
+  review_rating?: number;
+  review_likes?: number;
 }
 
 interface BackendActivityResponse {
@@ -234,38 +238,54 @@ export async function fetchTrendingFeedItems(topN = 5): Promise<FeedItem[]> {
   }
 }
 
-export async function fetchFeedActivities(limit = 8): Promise<FeedItem[]> {
+export async function fetchFeedActivities(limit = 8, includeNetwork = true): Promise<FeedItem[]> {
   try {
-    const response = await apiGet<BackendActivityResponse>(`/feed/me/activity?limit=${limit}&include_network=1`);
+    const scope = includeNetwork ? '1' : '0';
+    const response = await apiGet<BackendActivityResponse>(`/feed/me/activity?limit=${limit}&include_network=${scope}`);
+    console.log('[Feed Frontend] Activities received:', response.activities.length, 'scope:', scope);
 
-    return response.activities.map((activity, idx) => ({
-      id: `activity_${activity.session_id}_${idx}`,
-      type: 'activity',
-      actorId: activity.actor_id ? String(activity.actor_id) : undefined,
-      time: formatRelativeTime(activity.timestamp || undefined),
-      user: activity.actor_name,
-      avatar_url: activity.actor_avatar,
-      loc: 'Komunitas Pustara',
-      action:
-        activity.status === 'finished'
-          ? 'selesai membaca'
-          : activity.status === 'wishlist'
-            ? 'menyimpan ke wishlist'
-            : 'sedang membaca',
-      rating: undefined,
-      bookKey: activity.book.id,
-      bookTitle: stripCoverLeakText(activity.book.title || 'Tanpa Judul'),
-      bookAuthor: stripCoverLeakText(Array.isArray(activity.book.authors) ? activity.book.authors.join(', ') : String(activity.book.authors || '')),
-      bookCoverUrl: normalizeCoverUrl(activity.book.cover_url),
-      reviewText:
-        activity.status === 'finished'
-          ? 'Menyelesaikan bacaan terbaru di Pustara.'
-          : activity.status === 'wishlist'
-            ? 'Menambahkan buku ini ke wishlist.'
-            : `Progress membaca ${Math.round(activity.progress_percentage)}%.`,
-    } as FeedItem));
+    return response.activities.map((activity, idx) => {
+      console.log('[Feed Frontend] Processing activity:', { status: activity.status, type: activity.type, hasReview: !!activity.review_text });
+      console.log('[Feed Frontend] Review data:', { review_id: activity.review_id, review_text_len: String(activity.review_text || '').length, review_rating: activity.review_rating });
+      console.log('[Feed Frontend] Book data:', { id: activity.book?.id, title: activity.book?.title, cover_url: activity.book?.cover_url });
+
+      const bookCoverUrl = normalizeCoverUrl(activity.book.cover_url);
+      console.log('[Feed Frontend] Cover URL after normalize:', { before: activity.book?.cover_url, after: bookCoverUrl });
+
+      return {
+        id: `activity_${activity.session_id}_${idx}`,
+        type: 'activity',
+        actorId: activity.actor_id ? String(activity.actor_id) : undefined,
+        time: formatRelativeTime(activity.timestamp || undefined),
+        user: activity.actor_name,
+        avatar_url: activity.actor_avatar,
+        loc: 'Komunitas Pustara',
+        action:
+          activity.status === 'finished'
+            ? 'selesai membaca'
+            : activity.status === 'wishlist'
+              ? 'menyimpan ke wishlist'
+              : activity.status === 'review'
+                ? 'memberikan ulasan'
+                : 'sedang membaca',
+        rating: activity.status === 'review' ? activity.review_rating : undefined,
+        reviewId: activity.status === 'review' ? activity.review_id : undefined,
+        bookKey: activity.book.id,
+        bookTitle: stripCoverLeakText(activity.book.title || 'Tanpa Judul'),
+        bookAuthor: stripCoverLeakText(Array.isArray(activity.book.authors) ? activity.book.authors.join(', ') : String(activity.book.authors || '')),
+        bookCoverUrl: bookCoverUrl,
+        reviewText:
+          activity.status === 'finished'
+            ? 'Menyelesaikan bacaan terbaru di Pustara.'
+            : activity.status === 'wishlist'
+              ? 'Menambahkan buku ini ke wishlist.'
+              : activity.status === 'review'
+                ? (activity.review_text || '')
+                : `Progress membaca ${Math.round(activity.progress_percentage)}%.`,
+      } as FeedItem;
+    });
   } catch (error) {
-    console.error('Error fetching feed activities:', error);
+    console.error('[Feed Frontend] Error fetching feed activities:', error);
     return [];
   }
 }

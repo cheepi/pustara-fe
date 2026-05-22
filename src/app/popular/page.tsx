@@ -7,18 +7,32 @@ import Navbar from '@/components/layout/Navbar';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { fetchPopularBooks } from '@/lib/browse';
+import { GENRE_OPTIONS } from '@/lib/genreOptions';
 import type { BrowseBook } from '@/types/browse';
 
 const coverUrl = (id?: number, s = 'M') =>
   id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
 
-const GENRES = ['Semua', 'Fiksi', 'Sastra', 'Romance', 'Sejarah', 'Sains', 'Filsafat', 'Biografi'];
+const GENRES = ['Semua', ...GENRE_OPTIONS.map((genre) => genre.label)];
 
-const pseudo = (n: number, mn: number, mx: number) =>
-  mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
+function getReaderCount(book: BrowseBook): number {
+  return Number(book.readerCount ?? 0) || 0;
+}
 
-const getRating  = (coverId?: number, i = 0) => (pseudo((coverId ?? i) + 7, 38, 50) / 10).toFixed(1);
-const getReads   = (coverId?: number, i = 0) => Math.floor(pseudo((coverId ?? i) + 1, 1200, 28000));
+function getMetricText(book: BrowseBook): string[] {
+  const parts: string[] = [];
+  const readerCount = getReaderCount(book);
+
+  if ((book.rating ?? 0) > 0) {
+    parts.push(`${Number(book.rating).toFixed(1)}`);
+  }
+
+  if (readerCount > 0) {
+    parts.push(`${readerCount.toLocaleString()}x dibaca`);
+  }
+
+  return parts;
+}
 
 // Rank badge styles
 const RANK = [
@@ -99,7 +113,7 @@ export default function PopularPage() {
             <span className="text-gold text-xs font-semibold uppercase tracking-widest">Peringkat</span>
           </div>
           <h1 className={cn('font-serif text-3xl lg:text-4xl font-black', tk.text)}>Bacaan Populer</h1>
-          <p className={cn('text-sm mt-1', tk.muted)}>Buku paling banyak dibaca di Pustara minggu ini</p>
+          <p className={cn('text-sm mt-1', tk.muted)}>Buku paling populer di Pustara berdasarkan rating dan aktivitas baca</p>
         </motion.div>
 
         {/* Search */}
@@ -172,8 +186,7 @@ export default function PopularPage() {
                     {[1, 0, 2].map((rankIdx, col) => {
                       const b      = top3[rankIdx];
                       const rk     = RANK[rankIdx];
-                      const rating = getRating(b.coverId, rankIdx);
-                      const reads  = getReads(b.coverId, rankIdx);
+                      const metricText = getMetricText(b);
                       const isFirst = rankIdx === 0;
                       const src = b.coverUrl || coverUrl(b.coverId, 'M');
 
@@ -213,11 +226,19 @@ export default function PopularPage() {
                               {b.title}
                             </p>
                             <p className={cn('text-[10px] mt-0.5 truncate', tk.muted)}>{b.author}</p>
-                            <div className="flex items-center justify-center gap-1 mt-1">
-                              <Star className="w-2.5 h-2.5 text-gold fill-gold" />
-                              <span className="text-gold text-[10px] font-bold">{rating}</span>
-                              <span className={cn('text-[10px]', tk.muted)}>· {reads.toLocaleString()}x</span>
-                            </div>
+                            {metricText.length > 0 && (
+                              <div className="flex flex-wrap items-center justify-center gap-x-1 gap-y-0.5 mt-1">
+                                {(b.rating ?? 0) > 0 && (
+                                  <span className="inline-flex items-center gap-0.5">
+                                    <Star className="w-2.5 h-2.5 text-gold fill-gold" />
+                                    <span className="text-gold text-[10px] font-bold">{Number(b.rating).toFixed(1)}</span>
+                                  </span>
+                                )}
+                                {getReaderCount(b) > 0 && (
+                                  <span className={cn('text-[10px] font-medium', tk.muted)}>{getReaderCount(b).toLocaleString()}x dibaca</span>
+                                )}
+                              </div>
+                            )}
                           </div>
 
                           {/* Podium base */}
@@ -244,8 +265,7 @@ export default function PopularPage() {
                   <div className="flex flex-col gap-1">
                     {rest.map((b, i) => {
                       const rank   = i + 4;
-                      const rating = getRating(b.coverId, i + 3);
-                      const reads  = getReads(b.coverId, i + 3);
+                      const readerCount = getReaderCount(b);
                       const src    = b.coverUrl || coverUrl(b.coverId);
 
                       return (
@@ -278,11 +298,15 @@ export default function PopularPage() {
 
                               {/* Stats */}
                               <div className="flex-shrink-0 text-right">
-                                <div className="flex items-center gap-1 justify-end">
-                                  <Star className="w-3 h-3 text-gold fill-gold" />
-                                  <span className="text-gold text-xs font-bold">{rating}</span>
-                                </div>
-                                <span className={cn('text-[10px]', tk.muted)}>{reads.toLocaleString()}x</span>
+                                {(b.rating ?? 0) > 0 && (
+                                  <div className="flex items-center gap-1 justify-end">
+                                    <Star className="w-3 h-3 text-gold fill-gold" />
+                                    <span className="text-gold text-xs font-bold">{Number(b.rating).toFixed(1)}</span>
+                                  </div>
+                                )}
+                                {readerCount > 0 && (
+                                  <span className={cn('block text-[10px]', tk.muted)}>{readerCount.toLocaleString()}x dibaca</span>
+                                )}
                               </div>
                             </div>
                           </Link>
