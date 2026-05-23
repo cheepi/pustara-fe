@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="min-h-screen overflow-x-hidden overflow-y-auto no-scrollbar">
         <ThemeProvider>
           <ToastProvider>
-            <div className="min-h-screen w-full flex flex-col">
+            <div className="min-h-screen w-full max-w-full overflow-x-hidden flex flex-col">
               <AuthProvider>{children}</AuthProvider>
               <FABGuard />
             </div>

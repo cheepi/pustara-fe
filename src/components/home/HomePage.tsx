@@ -361,7 +361,7 @@ export default function HomePage() {
   }, []);
 
   return (
-    <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden transition-colors duration-300" style={{ background: 'var(--bg)' }}>
       <Navbar />
 
       {/* ── HERO GREETING ── */}
@@ -472,8 +472,8 @@ export default function HomePage() {
       </section>
 
       {/* ── BARU DITAMBAHKAN ── */}
-      <section className="mt-8 max-w-7xl mx-auto px-4">
-        <div className="flex items-center justify-between mb-4">
+      <section className="mt-8 w-full max-w-7xl mx-auto overflow-hidden">
+        <div className="flex items-center justify-between px-4 mb-4">
           <div className="flex items-center gap-2">
             <BookCopy className="w-4 h-4 text-gold" />
             <h2 className="font-serif text-lg font-bold" style={{ color: 'var(--text)' }}>
@@ -486,7 +486,7 @@ export default function HomePage() {
           /* ── Skeleton ── */
           <>
             {/* Mobile skeleton */}
-            <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
               {Array(4).fill(0).map((_, i) => (
                 <div key={i} className="flex-shrink-0 w-32">
                   <div className={cn('w-32 h-48 rounded-xl animate-pulse mb-2', isLight ? 'bg-parchment-darker' : 'bg-navy-700/60')} />
@@ -497,13 +497,13 @@ export default function HomePage() {
             </div>
             {/* Desktop skeleton */}
             <div
-              className="hidden lg:block rounded-2xl animate-pulse"
+              className="hidden lg:block rounded-2xl animate-pulse mx-4"
               style={{ background: 'var(--surface)', border: '1px solid var(--border)', minHeight: 360 }}
             />
           </>
         ) : recentBooks.length === 0 ? (
           <div
-            className="rounded-2xl p-5 text-sm"
+            className="rounded-2xl p-5 text-sm mx-4"
             style={{ background: 'var(--surface)', border: '1px solid var(--border)', color: 'var(--muted)' }}
           >
             Belum ada buku yang baru ditambahkan.
@@ -511,7 +511,7 @@ export default function HomePage() {
         ) : (
           <>
             {/* ══ MOBILE: horizontal card scroll (same pattern as AI reco) ══ */}
-            <div className="lg:hidden flex gap-3 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
+            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
               {recentBooks.map((book, idx) => (
                 <Link key={book.book_id} href={`/book/${book.key}`}>
                   <motion.div
@@ -567,7 +567,7 @@ export default function HomePage() {
 
             {/* ══ DESKTOP: split panel ══ */}
             <div
-              className="hidden lg:flex rounded-2xl overflow-hidden"
+              className="hidden lg:flex rounded-2xl overflow-hidden mx-4"
               style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
             >
               {/* LEFT: list */}
@@ -821,8 +821,8 @@ export default function HomePage() {
         )}
       </section>
       {/* ── KOMUNITAS ── */}
-      <section className="max-w-7xl mx-auto px-4 mt-8 pb-12">
-        <div className="flex items-center justify-between mb-4">
+      <section className="w-full max-w-7xl mx-auto mt-8 pb-12 overflow-hidden">
+        <div className="flex items-center justify-between px-4 mb-4">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-gold" />
             <h2 className="font-serif text-lg font-bold" style={{ color: 'var(--text)' }}>Koleksi Komunitas</h2>
@@ -863,31 +863,35 @@ function CommunitySection({
   onToggleLike: (review: CommunityReview) => void;
 }) {
   return (
-    <>
+    <div className="w-full max-w-full overflow-hidden">
       {loading ? (
         <>
           <div
-            className="lg:hidden -mx-4 px-4 flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory"
-            style={{ scrollbarWidth: 'none' }}
+            className="lg:hidden w-full max-w-full px-4 flex gap-3 overflow-x-auto overscroll-x-contain pb-2 snap-x snap-mandatory scroll-px-4"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {Array.from({ length: 3 }).map((_, i) => <CommunityCardSkeleton key={i} isLight={isLight} />)}
           </div>
-          <div className="hidden lg:grid grid-cols-3 gap-3">
+          <div className="hidden lg:grid grid-cols-3 gap-3 mx-4">
             {Array.from({ length: 3 }).map((_, i) => <CommunityCardSkeleton key={i} isLight={isLight} />)}
           </div>
         </>
       ) : reviews.length === 0 ? (
-        <div className="rounded-2xl border p-5 text-sm" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--muted)' }}>
+        <div className="rounded-2xl border p-5 text-sm mx-4" style={{ background: 'var(--surface)', borderColor: 'var(--border)', color: 'var(--muted)' }}>
           Koleksi komunitas belum tersedia saat ini.
         </div>
       ) : (
         <>
           <div
-            className="lg:hidden -mx-4 px-4 flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory"
-            style={{ scrollbarWidth: 'none' }}
+            className="lg:hidden w-full max-w-full px-4 flex gap-3 overflow-x-auto overscroll-x-contain pb-2 snap-x snap-mandatory scroll-px-4"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             {reviews.slice(0, 5).map((r, i) => (
-              <div key={r.review_id || r.key} className="flex-shrink-0 w-[84vw] max-w-[300px] snap-start">
+              <div
+                key={r.review_id || r.key}
+                className="flex-shrink-0 snap-start"
+                style={{ width: 'min(300px, calc(100% - 2rem))' }}
+              >
                 <ReviewCard
                   reviewId={r.review_id}
                   name={r.user}
@@ -907,7 +911,7 @@ function CommunitySection({
               </div>
             ))}
           </div>
-          <div className="hidden lg:grid grid-cols-3 gap-3">
+          <div className="hidden lg:grid grid-cols-3 gap-3 mx-4">
             {reviews.slice(0, 8).map((r, i) => (
               <ReviewCard
                 key={r.review_id || r.key}
@@ -929,7 +933,7 @@ function CommunitySection({
           </div>
         </>
       )}
-    </>
+    </div>
   );
 }
 

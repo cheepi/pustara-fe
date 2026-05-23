@@ -321,7 +321,16 @@ export default function BookDetailPage() {
       refreshBookSnapshot();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal masuk antrean.';
-      if (message.includes('409')) {
+      const lowerMessage = message.toLowerCase();
+      if (lowerMessage.includes('already in queue') || lowerMessage.includes('duplicate') || lowerMessage.includes('unique')) {
+        const status = await fetchMyBookShelfStatus(book.id).catch(() => null);
+        setQueued(true);
+        setQueuePosition(status?.queue_position ?? queuePosition ?? null);
+        setQueueCount(Number(status?.queue_count ?? queueCount ?? book.queue ?? 0));
+        setBook((prev) => prev ? { ...prev, queue: Number(status?.queue_count ?? prev.queue ?? 0) } : prev);
+        showToast('Kamu sudah ada di antrean buku ini.', 'success');
+        setModal('none');
+      } else if (message.includes('409')) {
         showToast('Buku sudah tersedia. Kamu bisa pinjam langsung.', 'error');
       } else if (message.includes('401')) {
         showToast('Sesi login berakhir. Silakan login kembali.', 'error');
@@ -340,7 +349,7 @@ export default function BookDetailPage() {
   const activeQueueCount = Math.max(queueCount, Number(book.queue || 0));
   const hasQueue = activeQueueCount > 0;
   const queuePositionLabel = queuePosition ? `#${queuePosition}` : '';
-  const canBorrowNow = borrowed || (!hasQueue && isAvailable) || (queued && queuePosition === 1);
+  const canBorrowNow = borrowed || (!hasQueue && isAvailable) || (queued && queuePosition === 1 && isAvailable);
 
   const borrowDate = new Date();
   const returnDate = new Date(borrowDate);
@@ -799,12 +808,12 @@ export default function BookDetailPage() {
                   </div>
                   <h3 className="font-serif text-xl font-black mb-1">Buku Sedang Dipinjam</h3>
                   <p className={cn('text-sm leading-relaxed mb-4', tk.modalMuted)}>
-                    Saat ini ada <strong>{book.queue || 0} orang</strong> dalam antrean.
+                    Saat ini ada <strong>{activeQueueCount} orang</strong> dalam antrean.
                     {queued ? ' Kamu sudah masuk antrean dan akan mendapat notifikasi ketika buku tersedia.' : ' Kamu akan mendapat notifikasi ketika buku tersedia.'}
                   </p>
                   <div className={cn('rounded-2xl p-4 mb-5 text-left', tk.modalSub)}>
                     <p className={cn('text-xs font-semibold mb-1', tk.modalMuted)}>Estimasi Waktu Tunggu</p>
-                    <p className="text-lg font-black text-amber-400">~{Math.max((queued ? ((queuePosition || 1) - 1) : (book.queue || 0)) * 7, 0)} Hari</p>
+                    <p className="text-lg font-black text-amber-400">~{Math.max((queued ? ((queuePosition || 1) - 1) : activeQueueCount) * 7, 0)} Hari</p>
                     <p className={cn('text-xs mt-0.5', tk.modalMuted)}>berdasarkan rata-rata peminjaman 7 hari</p>
                     {queued && queuePosition && (
                       <p className={cn('text-xs mt-2 font-semibold', tk.modalMuted)}>Posisimu saat ini: #{queuePosition}</p>

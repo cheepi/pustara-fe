@@ -365,11 +365,35 @@ export async function returnBorrowedBookForMe(bookId: string): Promise<ShelfActi
 }
 
 export async function joinQueueForMe(bookId: string): Promise<ShelfActionResponse> {
-  const paths = [
-    `/shelf/me/queue/${bookId}`,
-    `/api/shelf/me/queue/${bookId}`,
-  ];
-  const data = await tryApiPostWithFallback<ShelfActionResponse>(paths);
+  const token = await auth?.currentUser?.getIdToken();
+  if (!token) {
+    throw new Error('HTTP 401: Missing auth token');
+  }
+
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+  await fetch('/api/auth/verify-token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  }).catch(() => {
+    // Best effort sync only. Queue endpoint remains authoritative.
+  });
+
+  const response = await fetch(`${apiUrl}/shelf/me/queue/${bookId}`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = String(payload?.message || payload?.error || 'Queue request failed');
+    throw new Error(`HTTP ${response.status}: ${message}`);
+  }
+
+  const data = (payload?.data ?? payload) as ShelfActionResponse;
   return {
     queued: Boolean(data?.queued ?? true),
     queue_position: data?.queue_position ?? null,

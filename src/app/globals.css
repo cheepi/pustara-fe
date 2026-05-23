@@ -47,16 +47,36 @@
   html,
   body {
     height: 100%;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
     overscroll-behavior: none;
     -ms-overflow-style: none !important;
     scrollbar-width: none !important;
   }
 
   body {
+    position: relative;
     background-color: var(--bg);
     color: var(--text);
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
+  }
+
+  #__next {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+  }
+
+  body > div {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
   }
 
   html::-webkit-scrollbar,
