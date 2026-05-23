@@ -13,8 +13,8 @@
  */
 
 import { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { Star, Heart, BookOpen, Edit, Trash } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Star, Heart, BookOpen, Edit, Trash, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import AvatarImage from '@/components/shared/AvatarImage';
@@ -22,6 +22,8 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { toggleReviewLike, getReviewLikeStatus } from '@/lib/reviewLikes';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 export interface ReviewCardProps {
   /** Actual review UUID — required for like/unlike API call */
@@ -43,6 +45,7 @@ export interface ReviewCardProps {
   loc?: string;
   /** Firebase UID of the review author for ownership checks */
   firebaseUid?: string;
+  username?: string;
 
   // ── Book context (optional — shown on community & homepage) ──────────────────
   bookTitle?: string;
@@ -100,6 +103,7 @@ export default function ReviewCard({
   bookCoverUrl,
   bookId,
   firebaseUid,
+  username,
   variant = 'default',
   index = 0,
   onEdit,
@@ -115,6 +119,21 @@ export default function ReviewCard({
   const [liking,    setLiking]    = useState(false);
   // Track whether we've fetched the real like status yet
   const [statusFetched, setStatusFetched] = useState(!user);
+  const [currentRating, setCurrentRating] = useState(rating);
+  const [currentText, setCurrentText] = useState(text || '');
+  const [editOpen, setEditOpen] = useState(false);
+  const [editRating, setEditRating] = useState(rating);
+  const [editText, setEditText] = useState(text);
+  const [editSaving, setEditSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteSaving, setDeleteSaving] = useState(false);
+
+  useEffect(() => {
+    setCurrentRating(rating);
+    setCurrentText(text || '');
+    setEditRating(rating);
+    setEditText(text || '');
+  }, [rating, text, reviewId]);
 
   // ── Fetch real like status on mount when user is logged in ────────────────────
   // This is what makes the heart stay pink after a page refresh.
@@ -157,24 +176,49 @@ export default function ReviewCard({
     }
   }
 
-  const [deleting, setDeleting] = useState(false);
-  async function handleDelete() {
+  async function handleEditSubmit() {
     if (!reviewId || !user) return;
-    if (!confirm('Apakah Anda yakin ingin menghapus ulasan ini?')) return;
-    setDeleting(true);
+    if (!editRating || !editText.trim()) return;
+
+    setEditSaving(true);
     try {
       const token = await user.getIdToken();
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
-      const res = await fetch(`${API_URL}/reviews/${reviewId}`, {
+      const response = await fetch(`${API_URL}/reviews/${reviewId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ rating: editRating, body: editText.trim() }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.message || 'Gagal mengubah ulasan');
+      setCurrentRating(editRating);
+      setCurrentText(editText.trim());
+      setEditOpen(false);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Gagal mengubah ulasan');
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!reviewId || !user) return;
+    setDeleteSaving(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`${API_URL}/reviews/${reviewId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (!res.ok) throw new Error('Gagal menghapus');
+      if (!response.ok) throw new Error('Gagal menghapus');
+      setDeleteOpen(false);
       onDeleted?.(reviewId);
     } catch (e) {
       alert('Gagal menghapus ulasan');
     } finally {
-      setDeleting(false);
+      setDeleteSaving(false);
     }
   }
 
@@ -222,183 +266,233 @@ export default function ReviewCard({
         transition={{ delay: index * 0.04 }}
         whileHover={{ y: -2, transition: { duration: 0.15 } }}
       >
-        {/* Top row: avatar + name/stars + cover thumbnail */}
         <div className="flex items-start gap-2.5 mb-3">
-          <AvatarImage
-            src={avatarUrl || null}
-            alt={name || '?'}
-            initials={(name || '?').slice(0, 2).toUpperCase()}
-            size="sm"
-          />
-          <div className="flex-1 min-w-0">
-            <p className={cn('text-sm font-semibold truncate leading-tight', tk.text)}>
-              {name || '—'}
-            </p>
-            <div className="flex items-center gap-1 mt-0.5">
-              <div className="flex gap-0.5">
-                {[1,2,3,4,5].map(s => (
-                  <Star key={s} className={cn('w-2.5 h-2.5',
-                    s <= rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
-                ))}
-              </div>
-              {timeStr && (
-                <span className={cn('text-[10px] leading-none', tk.muted)}>{timeStr}</span>
-              )}
-            </div>
-          </div>
-
-          {/* Book thumbnail — right-aligned */}
-          {(bookId || bookCoverUrl) && (
-            bookId
-              ? (
-                <Link href={`/book/${bookId}`} className="flex-shrink-0">
-                  <div className={cn('w-9 h-12 rounded-lg overflow-hidden shadow-md', tk.coverBg)}>
-                    {bookCoverUrl
-                      ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" />
-                      : <BookOpen className="w-3.5 h-3.5 text-gold/30 m-auto mt-3.5" />
-                    }
+          {username ? (
+            <Link href={`/profile/@${username}`} className="flex flex-1 min-w-0 items-start gap-2.5 cursor-pointer">
+              <AvatarImage
+                src={avatarUrl || null}
+                alt={name || '?'}
+                initials={(name || '?').slice(0, 2).toUpperCase()}
+                size="sm"
+              />
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-sm font-semibold truncate leading-tight hover:text-gold transition-colors block', tk.text)}>{name || '—'}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} className={cn('w-2.5 h-2.5', s <= currentRating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+                    ))}
                   </div>
-                </Link>
-              ) : (
-                <div className={cn('flex-shrink-0 w-9 h-12 rounded-lg overflow-hidden shadow-md', tk.coverBg)}>
-                  {bookCoverUrl
-                    ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" />
-                    : <BookOpen className="w-3.5 h-3.5 text-gold/30 m-auto mt-3.5" />
-                  }
+                  {timeStr && <span className={cn('text-[10px] leading-none', tk.muted)}>{timeStr}</span>}
                 </div>
-              )
+              </div>
+            </Link>
+          ) : (
+            <>
+              <AvatarImage
+                src={avatarUrl || null}
+                alt={name || '?'}
+                initials={(name || '?').slice(0, 2).toUpperCase()}
+                size="sm"
+              />
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-sm font-semibold truncate leading-tight', tk.text)}>{name || '—'}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} className={cn('w-2.5 h-2.5', s <= currentRating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+                    ))}
+                  </div>
+                  {timeStr && <span className={cn('text-[10px] leading-none', tk.muted)}>{timeStr}</span>}
+                </div>
+              </div>
+            </>
+          )}
+
+          {(bookId || bookCoverUrl) && (
+            bookId ? (
+              <Link href={`/book/${bookId}`} className="flex-shrink-0">
+                <div className={cn('w-9 h-12 rounded-lg overflow-hidden shadow-md', tk.coverBg)}>
+                  {bookCoverUrl ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-3.5 h-3.5 text-gold/30 m-auto mt-3.5" />}
+                </div>
+              </Link>
+            ) : (
+              <div className={cn('flex-shrink-0 w-9 h-12 rounded-lg overflow-hidden shadow-md', tk.coverBg)}>
+                {bookCoverUrl ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-3.5 h-3.5 text-gold/30 m-auto mt-3.5" />}
+              </div>
+            )
           )}
         </div>
 
-        {/* Book title */}
         {bookTitle && (
-          bookId
-            ? (
-              <Link href={`/book/${bookId}`}>
-                <p className="text-xs font-semibold text-gold/80 hover:text-gold transition-colors mb-1 truncate">
-                  {bookTitle}
-                </p>
-              </Link>
-            ) : (
-              <p className="text-xs font-semibold text-gold/80 mb-1 truncate">{bookTitle}</p>
-            )
+          bookId ? (
+            <Link href={`/book/${bookId}`}>
+              <p className="text-xs font-semibold text-gold/80 hover:text-gold transition-colors mb-1 truncate">{bookTitle}</p>
+            </Link>
+          ) : (
+            <p className="text-xs font-semibold text-gold/80 mb-1 truncate">{bookTitle}</p>
+          )
         )}
 
-        {/* Review text */}
-        <p className={cn('text-xs leading-relaxed line-clamp-2 mb-3', tk.muted)}>
-          {text || '—'}
-        </p>
+        <p className={cn('text-xs leading-relaxed line-clamp-2 mb-3', tk.muted)}>{currentText || '—'}</p>
 
-        {/* Like */}
         <div className="flex-1" />
         <LikeButton />
       </motion.div>
     );
   }
 
-  // ── DEFAULT variant ──────────────────────────────────────────────────────────
-  // Used by: book detail, full reviews page, community feed
   const hasBookContext = Boolean(bookTitle || bookCoverUrl);
 
   return (
-    <motion.div
-      className={cn('rounded-2xl p-4', tk.surface)}
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0 }}
-      transition={{ delay: index * 0.04 }}
-    >
-      {/* Reviewer header */}
-      <div className="flex items-center gap-3 mb-3">
-        <AvatarImage
-          src={avatarUrl || null}
-          alt={name || '?'}
-          initials={(name || '?').slice(0, 2).toUpperCase()}
-          size="sm"
-        />
-        <div className="flex-1 min-w-0">
-          <p className={cn('text-sm font-semibold', tk.text)}>{name || '—'}</p>
-          <p className={cn('text-xs', tk.muted)}>
-            {timeStr && <span>{timeStr}</span>}
-          </p>
-          <div className="flex items-center gap-1 mt-0.5">
-            <div className="flex gap-0.5">
-              {[1,2,3,4,5].map(s => (
-                <Star key={s} className={cn('w-3 h-3', s <= rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
-              ))}
-            </div>
-            {/* Ownership actions */}
-            {user && firebaseUid && user.uid === firebaseUid && (
-              <div className="flex gap-2 ml-2 text-gray-500">
-                <button
-                  onClick={() => onEdit?.(reviewId!, rating, text)}
-                  disabled={deleting}
-                  className="cursor-pointer hover:text-gold transition-colors disabled:opacity-50"
-                  aria-label="Edit review"
-                >
-                  <Edit size={16} />
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={deleting}
-                  className="cursor-pointer hover:text-red-500 transition-colors disabled:opacity-50"
-                  aria-label="Delete review"
-                >
-                  <Trash size={16} />
-                </button>
+    <>
+      <motion.div
+        className={cn('rounded-2xl p-4', tk.surface)}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0 }}
+        transition={{ delay: index * 0.04 }}
+      >
+        <div className="flex items-center gap-3 mb-3">
+          {username ? (
+            <Link href={`/profile/@${username}`} className="flex flex-1 min-w-0 items-center gap-3 cursor-pointer">
+              <AvatarImage src={avatarUrl || null} alt={name || '?'} initials={(name || '?').slice(0, 2).toUpperCase()} size="sm" />
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-sm font-semibold hover:text-gold transition-colors block truncate', tk.text)}>{name || '—'}</p>
+                <p className={cn('text-xs', tk.muted)}>{timeStr && <span>{timeStr}</span>}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} className={cn('w-3 h-3', s <= currentRating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+                    ))}
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+            </Link>
+          ) : (
+            <>
+              <AvatarImage src={avatarUrl || null} alt={name || '?'} initials={(name || '?').slice(0, 2).toUpperCase()} size="sm" />
+              <div className="flex-1 min-w-0">
+                <p className={cn('text-sm font-semibold', tk.text)}>{name || '—'}</p>
+                <p className={cn('text-xs', tk.muted)}>{timeStr && <span>{timeStr}</span>}</p>
+                <div className="flex items-center gap-1 mt-0.5">
+                  <div className="flex gap-0.5">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star key={s} className={cn('w-3 h-3', s <= currentRating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+          {user && firebaseUid && user.uid === firebaseUid && (
+            <div className="flex gap-2 ml-2 text-gray-500">
+              <button
+                onClick={() => {
+                  setEditRating(currentRating);
+                  setEditText(currentText);
+                  setEditOpen(true);
+                }}
+                disabled={editSaving || deleteSaving}
+                className="cursor-pointer hover:text-gold transition-colors disabled:opacity-50"
+                aria-label="Edit review"
+              >
+                <Edit size={16} />
+              </button>
+              <button
+                onClick={() => setDeleteOpen(true)}
+                disabled={editSaving || deleteSaving}
+                className="cursor-pointer hover:text-red-500 transition-colors disabled:opacity-50"
+                aria-label="Delete review"
+              >
+                <Trash size={16} />
+              </button>
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Book context */}
-      {hasBookContext && (
-        <div className="flex gap-3 mb-3">
-          {(bookCoverUrl || bookId) && (
-            bookId
-              ? (
+        {hasBookContext && (
+          <div className="flex gap-3 mb-3">
+            {(bookCoverUrl || bookId) && (
+              bookId ? (
                 <Link href={`/book/${bookId}`} className="flex-shrink-0">
                   <div className={cn('w-12 h-16 rounded-xl overflow-hidden shadow-lg flex items-center justify-center', tk.coverBg)}>
-                    {bookCoverUrl
-                      ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" />
-                      : <BookOpen className="w-4 h-4 text-gold/30" />
-                    }
+                    {bookCoverUrl ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-gold/30" />}
                   </div>
                 </Link>
               ) : (
                 <div className={cn('flex-shrink-0 w-12 h-16 rounded-xl overflow-hidden shadow-lg flex items-center justify-center', tk.coverBg)}>
-                  {bookCoverUrl
-                    ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" />
-                    : <BookOpen className="w-4 h-4 text-gold/30" />
-                  }
+                  {bookCoverUrl ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-gold/30" />}
                 </div>
               )
-          )}
-          <div className="flex-1 min-w-0">
-            {bookTitle && (
-              bookId
-                ? <Link href={`/book/${bookId}`}>
-                    <p className={cn('text-sm font-bold hover:text-gold transition-colors', tk.text)}>{bookTitle}</p>
-                  </Link>
-                : <p className={cn('text-sm font-bold', tk.text)}>{bookTitle}</p>
             )}
-            {bookAuthor && <p className={cn('text-xs mb-1', tk.muted)}>{bookAuthor}</p>}
-            <p className={cn('text-sm leading-relaxed line-clamp-3', tk.muted)}>{text}</p>
+            <div className="flex-1 min-w-0">
+              {bookTitle && (bookId ? <Link href={`/book/${bookId}`}><p className={cn('text-sm font-bold hover:text-gold transition-colors', tk.text)}>{bookTitle}</p></Link> : <p className={cn('text-sm font-bold', tk.text)}>{bookTitle}</p>)}
+              {bookAuthor && <p className={cn('text-xs mb-1', tk.muted)}>{bookAuthor}</p>}
+              <p className={cn('text-sm leading-relaxed line-clamp-3', tk.muted)}>{currentText}</p>
+            </div>
           </div>
+        )}
+
+        {!hasBookContext && <p className={cn('text-sm leading-relaxed mb-3', tk.muted)}>{currentText}</p>}
+
+        <div className={cn('flex items-center pt-2', hasBookContext && 'border-t mt-1')} style={hasBookContext ? { borderColor: 'var(--border)' } : {}}>
+          <LikeButton />
         </div>
-      )}
+      </motion.div>
 
-      {/* Review text (no book context) */}
-      {!hasBookContext && (
-        <p className={cn('text-sm leading-relaxed mb-3', tk.muted)}>{text}</p>
-      )}
+      <AnimatePresence>
+        {editOpen && (
+          <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !editSaving && setEditOpen(false)} />
+            <motion.div className={cn('relative w-full max-w-md rounded-3xl overflow-hidden shadow-2xl', tk.surface)} initial={{ opacity: 0, y: 40, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.97 }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>
+              <button onClick={() => !editSaving && setEditOpen(false)} className={cn('absolute top-4 right-4 z-10 p-1.5 rounded-xl transition-colors', tk.muted, 'hover:text-gold')} type="button"><X className="w-4 h-4" /></button>
+              <div className={cn('px-6 pt-6 pb-4 border-b', isLight ? 'border-slate-200' : 'border-white/10')}>
+                <p className={cn('text-xs font-semibold uppercase tracking-wider mb-0.5', tk.muted)}>Edit Ulasan</p>
+                <h3 className="font-serif text-lg font-black leading-tight line-clamp-1">{bookTitle || name}</h3>
+              </div>
+              <div className="px-6 py-5">
+                <div className="flex flex-col items-center mb-5">
+                  <p className={cn('text-xs font-medium mb-3', tk.muted)}>Rating kamu</p>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map((value) => (
+                      <button key={value} onClick={() => setEditRating(value)} className="transition-transform hover:scale-110 active:scale-95" type="button">
+                        <Star className={cn('w-9 h-9 transition-colors duration-100', value <= editRating ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea value={editText} onChange={(event) => setEditText(event.target.value)} placeholder="Ceritakan pengalamanmu membaca buku ini..." rows={4} maxLength={500} className={cn('w-full rounded-2xl border px-4 py-3 text-sm resize-none outline-none transition-all', isLight ? 'bg-slate-50 border-slate-200 text-navy-900 placeholder-slate-400 focus:border-gold' : 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/50')} />
+                <div className={cn('text-right text-xs mt-1', tk.muted)}>{editText.length}/500</div>
+                <div className="flex gap-3 mt-4">
+                  <button onClick={() => !editSaving && setEditOpen(false)} className={cn('flex-1 py-3 rounded-2xl text-sm font-medium transition-colors', isLight ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-white/8 text-white/60 hover:bg-white/12')} type="button">Batal</button>
+                  <motion.button onClick={handleEditSubmit} disabled={editSaving || !editRating || !editText.trim()} className="flex-1 py-3 rounded-2xl bg-gold text-navy-900 font-semibold text-sm hover:bg-gold-light transition-colors disabled:opacity-60" whileTap={{ scale: 0.98 }} type="button">{editSaving ? 'Menyimpan...' : 'Simpan Perubahan'}</motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {/* Like */}
-      <div className={cn('flex items-center pt-2', hasBookContext && 'border-t mt-1')}
-        style={hasBookContext ? { borderColor: 'var(--border)' } : {}}>
-        <LikeButton />
-      </div>
-    </motion.div>
+      <AnimatePresence>
+        {deleteOpen && (
+          <motion.div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !deleteSaving && setDeleteOpen(false)} />
+            <motion.div className={cn('relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl', tk.surface)} initial={{ opacity: 0, y: 40, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 20, scale: 0.97 }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>
+              <button onClick={() => !deleteSaving && setDeleteOpen(false)} className={cn('absolute top-4 right-4 z-10 p-1.5 rounded-xl transition-colors', tk.muted, 'hover:text-gold')} type="button"><X className="w-4 h-4" /></button>
+              <div className="p-6">
+                <div className="w-14 h-14 rounded-2xl bg-red-500/15 text-red-400 flex items-center justify-center mb-4"><Trash className="w-6 h-6" /></div>
+                <h3 className="font-serif text-xl font-black mb-2">Hapus ulasan?</h3>
+                <p className={cn('text-sm leading-relaxed mb-5', tk.muted)}>Apakah Anda yakin ingin menghapus ulasan ini? Tindakan ini tidak bisa dibatalkan.</p>
+                <div className="flex gap-3">
+                  <button onClick={() => !deleteSaving && setDeleteOpen(false)} className={cn('flex-1 py-3 rounded-2xl text-sm font-medium transition-colors', isLight ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' : 'bg-white/8 text-white/60 hover:bg-white/12')} type="button">Batal</button>
+                  <motion.button onClick={handleDelete} disabled={deleteSaving} className="flex-1 py-3 rounded-2xl bg-red-500 text-white font-semibold text-sm hover:bg-red-600 transition-colors disabled:opacity-60" whileTap={{ scale: 0.98 }} type="button">{deleteSaving ? 'Menghapus...' : 'Hapus'}</motion.button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }

@@ -627,6 +627,7 @@ export default function BookDetailPage() {
                         key={r.id || i}
                         reviewId={r.id}
                         name={r.name || 'Anonim'}
+                        username={r.username}
                         avatarUrl={r.avatar_url || null}
                         rating={r.rating || 0}
                         text={r.text || r.body || r.review_text || ''}

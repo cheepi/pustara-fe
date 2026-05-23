@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import Link from 'next/link';
 import {
   AlertTriangle,
   BookOpen,
@@ -194,7 +195,9 @@ function UserModal({
 
               {user && mode === 'edit' && (
                 <div className={cn('rounded-2xl border px-4 py-3 flex items-center gap-3', dark ? 'bg-white/5 border-white/10' : 'bg-white/70 border-[#dfd3bb]')}>
-                  <AvatarImage src={user.avatarUrl} alt={user.displayName} initials={getInitials(user.displayName || user.email)} size="md" />
+                  <Link href={`/profile/@${user.username}`} className="flex-shrink-0" title={`Buka profil ${user.displayName}`}>
+                    <AvatarImage src={user.avatarUrl} alt={user.displayName} initials={getInitials(user.displayName || user.email)} size="md" />
+                  </Link>
                   <div className="min-w-0">
                     <p className={cn('font-semibold truncate', dark ? 'text-white' : 'text-[#20263a]')}>{user.displayName}</p>
                     <p className={cn('text-xs truncate', dark ? 'text-slate-400' : 'text-[#8e7d57]')}>{user.email}</p>
@@ -602,7 +605,9 @@ export default function UsersManagementPage() {
                       <tr key={user.uid} className={cn('border-t transition-colors', dark ? 'border-white/5 hover:bg-white/5' : 'border-[#e8dfcf] hover:bg-white/70')}>
                         <td className="px-4 py-4">
                           <div className="flex items-center gap-3 min-w-0">
-                            <AvatarImage src={user.avatarUrl} alt={user.displayName} initials={getInitials(user.displayName || user.email)} size="md" />
+                            <Link href={`/profile/@${user.username}`} className="flex-shrink-0" title={`Buka profil ${user.displayName}`}>
+                              <AvatarImage src={user.avatarUrl} alt={user.displayName} initials={getInitials(user.displayName || user.email)} size="md" />
+                            </Link>
                             <div className="min-w-0">
                               <p className={cn('font-semibold truncate', tk.text)}>{user.displayName}</p>
                               <p className={cn('text-xs truncate', tk.muted)}>{user.email}</p>

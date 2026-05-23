@@ -8,6 +8,7 @@ import { formatRelativeTime } from '@/lib/reading';
 export interface FeedSidebarProfile {
   initials: string;
   name: string;
+  username?: string | null;
   subtitle: string;
   avatar_url: string | null;
   dipinjam: number;
@@ -359,6 +360,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
       profile: {
         initials,
         name,
+        username: profile?.username || null,
         subtitle: pickProfileSubtitle(profile),
         avatar_url: profile?.avatar_url || null,
         dipinjam: readingCount,
@@ -382,6 +384,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
       profile: {
         initials: 'P',
         name: 'Pembaca Pustara',
+        username: null,
         subtitle: 'Pembaca aktif',
         avatar_url: null,
         dipinjam: 0,

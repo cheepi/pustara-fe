@@ -24,6 +24,13 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport = {
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f8f6f1' }, 
+    { media: '(prefers-color-scheme: dark)', color: '#0f172a' },
+  ],
+};
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="id" suppressHydrationWarning>
