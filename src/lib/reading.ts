@@ -19,6 +19,7 @@ export interface ReadingSession {
 }
 
 async function getOptionalAuthHeader(): Promise<Record<string, string>> {
+  if (!auth) return {};
   const user = auth.currentUser;
   if (!user) return {};
 

@@ -4,6 +4,7 @@ import type { ReadingSession, Book } from './database';
  * Book being read with session data
  */
 export interface ReaderBook extends Pick<Book, 'id' | 'title' | 'authors' | 'cover_url' | 'file_url' | 'file_type' | 'total_pages'> {
+  currentPage: number;
   reading_session?: ReadingSession;
   dueDate?: string; 
   daysLeft?: number;

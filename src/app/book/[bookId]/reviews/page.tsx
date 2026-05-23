@@ -10,6 +10,9 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { fetchBookReviewData } from '@/lib/bookReviews';
 import type { Review } from '@/types/book';
 import type { BookDetail } from '@/types/book';
+import AvatarImage from '@/components/shared/AvatarImage';
+import ReviewCard from '@/components/shared/ReviewCard';
+import ReviewModal from '@/components/shared/ReviewModal';
 const RATING_FILTERS = ['Semua', '5 ★', '4 ★', '3 ★', '2 ★', '1 ★'];
 const PAGE_SIZE = 3;
 
@@ -24,13 +27,23 @@ export default function ReviewsPage() {
   const [reviews, setReviews] = useState<Review[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [filter,  setFilter]  = useState('Semua');
-  const [liked,   setLiked]   = useState<Set<number>>(new Set());
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
+
+  const [editingReview, setEditingReview] = useState<{id: string, rating: number, text: string} | null>(null);
+  const [reviewOpen, setReviewOpen] = useState(false);
 
   useEffect(() => {
     fetchBookReviewData(bookKey)
       .then(({ meta, reviews }) => {
+        console.log('[REVIEWS PAGE] Data loaded:', { bookKey, reviewCount: reviews.length });
+        reviews.slice(0, 3).forEach((r: any, idx: number) => {
+          console.log(`[REVIEWS PAGE] Review ${idx}:`, { 
+            id: r.id, 
+            rating: r.rating, 
+            textLength: r.text?.length || r.body?.length || 0 
+          });
+        });
         setMeta(meta);
         setReviews(reviews);
       })
@@ -48,6 +61,11 @@ export default function ReviewsPage() {
   const filtered  = filter === 'Semua' ? reviews : reviews.filter(r => r.rating === parseInt(filter, 10));
   const displayed = filtered.slice(0, visible);
   const hasMore   = visible < filtered.length;
+  const ratingReviews = reviews.filter((r) => Number(r.rating) > 0);
+  const liveRatingCount = ratingReviews.length;
+  const liveAvgRating = liveRatingCount > 0
+    ? ratingReviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / liveRatingCount
+    : 0;
 
   if (loadingData || !meta) {
     return (
@@ -112,11 +130,11 @@ export default function ReviewsPage() {
               <div className="flex gap-0.5">
                 {[1,2,3,4,5].map(s => (
                   <Star key={s} className={cn('w-4 h-4',
-                    s <= Math.round(meta.avg_rating) ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
+                    s <= Math.round(liveAvgRating) ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
                 ))}
               </div>
-              <span className="text-gold font-bold">{meta.avg_rating}</span>
-              <span className={cn('text-xs', tk.muted)}>({meta.rating_count.toLocaleString()} ulasan)</span>
+              <span className="text-gold font-bold">{liveAvgRating.toFixed(1)}</span>
+              <span className={cn('text-xs', tk.muted)}>({liveRatingCount.toLocaleString()} ulasan)</span>
             </div>
           </div>
         </motion.div>
@@ -163,49 +181,28 @@ export default function ReviewsPage() {
         {/* Reviews */}
         <div className="flex flex-col gap-3">
           <AnimatePresence initial={false}>
-            {displayed.map((r, i) => {
-              const isLiked = liked.has(i);
-              return (
-                <motion.div key={i}
-                  className={cn('rounded-2xl border p-4', tk.surface)}
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0 }}
-                  transition={{ delay: i < PAGE_SIZE ? i * 0.04 : 0 }}>
-
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                      {r.avatar}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
-                      <p className={cn('text-xs', tk.muted)}>{r.loc} · {r.time ?? '-'}</p>
-                    </div>
-                    <div className="flex gap-0.5">
-                      {[1,2,3,4,5].map(s => (
-                        <Star key={s} className={cn('w-3 h-3',
-                          s <= r.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-200' : 'text-slate-700')} />
-                      ))}
-                    </div>
-                  </div>
-
-                  <p className={cn('text-sm leading-relaxed mb-3', tk.muted)}>{r.text}</p>
-
-                  {/* Actions */}
-                  <button
-                    onClick={() => setLiked(l => {
-                      const n = new Set(l);
-                      isLiked ? n.delete(i) : n.add(i);
-                      return n;
-                    })}
-                    className={cn('flex items-center gap-1.5 text-xs font-medium transition-colors',
-                      isLiked ? 'text-rose-400' : tk.muted, 'hover:text-rose-400')}>
-                    <Heart className={cn('w-3.5 h-3.5', isLiked && 'fill-rose-400')} />
-                    {(r.likes ?? 0) + (isLiked ? 1 : 0)}
-                  </button>
-                </motion.div>
-              );
-            })}
+            {displayed.map((r, i) => (
+              <ReviewCard
+                key={r.id || i}
+                reviewId={r.id || ''}
+                name={r.name || ''}
+                avatarUrl={r.avatar_url}
+                rating={r.rating}
+                text={r.text || r.body || ''}
+                initialLikes={r.likes}
+                time={r.time || ''}
+                loc={r.loc || ''}
+                firebaseUid={r.firebase_uid}
+                index={i}
+                onEdit={(id, rating, text) => {
+                  setEditingReview({ id, rating, text });
+                  setReviewOpen(true);
+                }}
+                onDeleted={(id) => {
+                  setReviews(prev => prev.filter(rev => rev.id !== id));
+                }}
+              />
+            ))}
           </AnimatePresence>
         </div>
 
@@ -237,6 +234,24 @@ export default function ReviewsPage() {
         )}
 
       </main>
+
+      <ReviewModal
+        bookTitle={meta?.title || ''}
+        bookKey={bookKey}
+        open={reviewOpen}
+        initialRating={editingReview?.rating}
+        initialText={editingReview?.text}
+        onClose={() => { setReviewOpen(false); setEditingReview(null); }}
+        onSubmit={() => {
+          setReviewOpen(false);
+          setEditingReview(null);
+          // Refetch data
+          fetchBookReviewData(bookKey).then(({ meta: newMeta, reviews: newReviews }) => {
+            setMeta(newMeta);
+            setReviews(newReviews);
+          });
+        }}
+      />
     </div>
   );
 }

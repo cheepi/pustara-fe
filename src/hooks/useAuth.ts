@@ -9,6 +9,7 @@ export function useAuth() {
 
   useEffect(() => {
     if (!auth) {
+      setUser(null);
       setLoading(false);
       return;
     }

@@ -1,19 +1,44 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Shield, Lock, Eye, EyeOff, Smartphone, LogOut,
   ChevronRight, AlertTriangle, CheckCircle, X, Loader2,
-  KeyRound, Trash2, Download, Bell, Globe,
+  KeyRound, Trash2, Download, Bell, Globe, Mail,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useToast } from '@/components/feedback/ToastProvider';
 import { useAuthStore } from '@/store/authStore';
-import { signOut, updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
+import { usePasswordManagement } from '@/hooks/usePasswordManagement';
+import { usePrivacySettings } from '@/hooks/usePrivacySettings';
+import { getSessions, fetchWithSessionCheck, type Session } from '@/lib/sessions';
+import { getOrCreateDeviceId } from '@/lib/deviceDetection';
 import Navbar from '@/components/layout/Navbar';
+
+// ── Coming Soon Badge ─────────────────────────────────────────────────────────
+function ComingSoonBadge() {
+  return (
+    <motion.div
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border bg-opacity-40 backdrop-blur-sm"
+      style={{
+        background: 'rgba(168, 85, 247, 0.1)',
+        border: '1px solid rgba(168, 85, 247, 0.3)',
+      }}
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: 0.1 }}
+    >
+      <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
+      <span className="text-[10px] font-semibold tracking-widest uppercase text-purple-300">
+        Segera Hadir
+      </span>
+    </motion.div>
+  );
+}
 
 // ── Toggle Switch ──────────────────────────────────────────────────────────────
 function Toggle({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }) {
@@ -22,7 +47,7 @@ function Toggle({ on, onToggle, disabled }: { on: boolean; onToggle: () => void;
       onClick={onToggle}
       disabled={disabled}
       className={cn(
-        'relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 disabled:opacity-40',
+        'relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed',
         on ? 'bg-gold' : 'bg-slate-300 dark:bg-slate-600'
       )}
       style={{ background: on ? undefined : 'var(--border)' }}
@@ -62,45 +87,63 @@ function Section({ title, children, delay = 0 }: { title: string; children: Reac
 
 // ── Row variants ───────────────────────────────────────────────────────────────
 function ToggleRow({
-  icon: Icon, label, sub, on, onToggle, iconColor = 'text-gold',
+  icon: Icon, label, sub, on, onToggle, iconColor = 'text-gold', comingSoon = false, disabled = false,
 }: {
   icon: React.ElementType; label: string; sub?: string;
-  on: boolean; onToggle: () => void; iconColor?: string;
+  on: boolean; onToggle: () => void; iconColor?: string; comingSoon?: boolean; disabled?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3.5">
+    <motion.div 
+      className={cn('flex items-center gap-3 px-4 py-3.5', comingSoon && 'opacity-60')}
+      initial={comingSoon ? { opacity: 0.6 } : undefined}
+      animate={comingSoon ? { opacity: 0.6 } : undefined}
+    >
       <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--surface2)' }}>
         <Icon className={cn('w-4 h-4', iconColor)} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{label}</p>
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>{label}</p>
+          {comingSoon && <ComingSoonBadge />}
+        </div>
         {sub && <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--muted)' }}>{sub}</p>}
       </div>
-      <Toggle on={on} onToggle={onToggle} />
-    </div>
+      <Toggle on={on} onToggle={onToggle} disabled={disabled || comingSoon} />
+    </motion.div>
   );
 }
 
 function ActionRow({
-  icon: Icon, label, sub, onClick, danger = false, iconColor,
+  icon: Icon, label, sub, onClick, danger = false, iconColor, comingSoon = false, disabled = false,
 }: {
   icon: React.ElementType; label: string; sub?: string;
-  onClick: () => void; danger?: boolean; iconColor?: string;
+  onClick: () => void; danger?: boolean; iconColor?: string; comingSoon?: boolean; disabled?: boolean;
 }) {
   return (
-    <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3.5 transition-colors text-left hover:opacity-80 active:scale-[0.99]">
+    <motion.button 
+      onClick={onClick} 
+      disabled={disabled || comingSoon}
+      className={cn(
+        'w-full flex items-center gap-3 px-4 py-3.5 transition-colors text-left',
+        !comingSoon && 'hover:opacity-80 active:scale-[0.99]',
+        (disabled || comingSoon) && 'cursor-not-allowed opacity-60'
+      )}
+    >
       <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: 'var(--surface2)' }}>
         <Icon className={cn('w-4 h-4', iconColor ?? (danger ? 'text-red-400' : 'text-gold'))} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className={cn('text-sm font-medium', danger ? 'text-red-400' : '')}
-           style={!danger ? { color: 'var(--text)' } : undefined}>
-          {label}
-        </p>
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className={cn('text-sm font-medium', danger ? 'text-red-400' : '')}
+             style={!danger ? { color: 'var(--text)' } : undefined}>
+            {label}
+          </p>
+          {comingSoon && <ComingSoonBadge />}
+        </div>
         {sub && <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{sub}</p>}
       </div>
-      <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--muted)' }} />
-    </button>
+      {!comingSoon && <ChevronRight className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--muted)' }} />}
+    </motion.button>
   );
 }
 
@@ -152,22 +195,48 @@ export default function PrivacySecurityPage() {
   const { user }  = useAuthStore();
   const isLight   = theme === 'light';
 
-  // ── Privacy toggles ──
-  const [activityVisible,  setActivityVisible]  = useState(true);
-  const [readingPublic,    setReadingPublic]     = useState(false);
-  const [reviewsPublic,    setReviewsPublic]     = useState(true);
-  const [followersVisible, setFollowersVisible]  = useState(true);
-  const [dataUsage,        setDataUsage]         = useState(true);
-  const [personalizedAds,  setPersonalizedAds]   = useState(false);
+  // ── Privacy settings from backend ──
+  const {
+    settings: privacySettings,
+    loading: privacyLoading,
+    isUpdating: privacyUpdating,
+    error: privacyError,
+    updateSetting: updatePrivacySetting,
+  } = usePrivacySettings();
+
+  // Show error toast if privacy settings fail to load
+  useEffect(() => {
+    if (privacyError) {
+      showToast(`Gagal memuat pengaturan privasi: ${privacyError}`, 'error');
+    }
+  }, [privacyError, showToast]);
+
+  // Map backend settings to local variables for easier reading
+  const activityVisible  = privacySettings?.activity_visible ?? true;
+  const readingPublic    = privacySettings?.public_reading_list ?? true;
+  const reviewsPublic    = privacySettings?.public_reviews ?? true;
 
   // ── Security toggles ──
-  const [twoFactor,   setTwoFactor]   = useState(false);
   const [loginAlerts, setLoginAlerts] = useState(true);
 
   // ── Modal state ──
   const [modal, setModal] = useState<
-    'change-password' | 'sessions' | 'delete-account' | 'download-data' | null
+    'change-password' | 'forgot-password' | 'sessions' | 'delete-account' | 'logout-all' | null
   >(null);
+
+  // ── Password management hook ──
+  const {
+    changePassword,
+    changePasswordLoading,
+    changePasswordError,
+    clearChangePasswordError,
+    sendResetEmail,
+    resetEmailLoading,
+    resetEmailError,
+    resetEmailSent,
+    clearResetEmailError,
+    validatePassword,
+  } = usePasswordManagement();
 
   // ── Change password form ──
   const [oldPw,     setOldPw]     = useState('');
@@ -175,51 +244,144 @@ export default function PrivacySecurityPage() {
   const [confirmPw, setConfirmPw] = useState('');
   const [showOld,   setShowOld]   = useState(false);
   const [showNew,   setShowNew]   = useState(false);
-  const [pwLoading, setPwLoading] = useState(false);
-  const [pwError,   setPwError]   = useState('');
+
+  // ── Forgot password form ──
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetShownMessage, setResetShownMessage] = useState(false);
 
   // ── Delete confirm ──
   const [deleteInput, setDeleteInput] = useState('');
 
-  // ── Download ──
-  const [dlLoading, setDlLoading] = useState(false);
-  const [dlDone,    setDlDone]    = useState(false);
+  // ── Active sessions ──
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [logoutAllLoading, setLogoutAllLoading] = useState(false);
+  const currentDeviceId = useMemo(() => getOrCreateDeviceId(), []);
+
+  // ── Determine current device by persistent device_id ──
+  const currentSessionId = useMemo(() => {
+    if (sessions.length === 0) return null;
+
+    const exactMatch = sessions.find(
+      (session) => session.device_id && session.device_id === currentDeviceId
+    );
+    if (exactMatch) return exactMatch.id;
+
+    // Fallback for legacy sessions without device_id.
+    return sessions.reduce((latest, session) => {
+      const latestTime = new Date(latest.last_active).getTime();
+      const currentTime = new Date(session.last_active).getTime();
+      return currentTime > latestTime ? session : latest;
+    }).id;
+  }, [currentDeviceId, sessions]);
 
   // ── Change password handler ──
   async function handleChangePassword() {
-    setPwError('');
-    if (!newPw || newPw.length < 6) { setPwError('Kata sandi minimal 6 karakter.'); return; }
-    if (newPw !== confirmPw)         { setPwError('Konfirmasi kata sandi tidak cocok.'); return; }
-    if (!user?.email)                { setPwError('Akun tidak valid.'); return; }
+    clearChangePasswordError();
+    if (!newPw || newPw.length < 6) return;
+    if (newPw !== confirmPw) {
+      // Error is handled in the validation
+      return;
+    }
+    if (!user?.email) return;
 
-    setPwLoading(true);
     try {
-      const cred = EmailAuthProvider.credential(user.email, oldPw);
-      await reauthenticateWithCredential(user, cred);
-      await updatePassword(user, newPw);
+      await changePassword(user.email, oldPw, newPw);
+      
+      // Success - reset form and close modal
       setModal(null);
-      setOldPw(''); setNewPw(''); setConfirmPw('');
-      showToast('Kata sandi berhasil diperbarui!', 'success');
-    } catch (e: any) {
-      const msg =
-        e.code === 'auth/wrong-password'    ? 'Kata sandi lama salah.' :
-        e.code === 'auth/too-many-requests'  ? 'Terlalu banyak percobaan. Coba lagi nanti.' :
-        e.code === 'auth/requires-recent-login' ? 'Sesi kadaluarsa. Silakan login ulang.' :
-        'Gagal memperbarui kata sandi.';
-      setPwError(msg);
-    } finally {
-      setPwLoading(false);
+      setOldPw('');
+      setNewPw('');
+      setConfirmPw('');
+      showToast('Kata sandi berhasil diperbarui! 🔒', 'success');
+    } catch (error) {
+      // Error is already in changePasswordError state
+      console.error('[ChangePassword] Error:', error);
     }
   }
 
-  // ── Download data handler ──
-  async function handleDownload() {
-    setDlLoading(true);
-    // Simulate async export
-    await new Promise(r => setTimeout(r, 2000));
-    setDlLoading(false);
-    setDlDone(true);
-    showToast('Data berhasil diekspor!', 'success');
+  // ── Forgot password handler ──
+  async function handleForgotPassword() {
+    clearResetEmailError();
+    
+    if (!resetEmail) {
+      return;
+    }
+
+    try {
+      await sendResetEmail(resetEmail);
+      
+      // Success - show message
+      showToast('Email reset kata sandi telah dikirim! Periksa inbox Anda.', 'success');
+      setResetShownMessage(true);
+      
+      // Auto-close after 3 seconds
+      setTimeout(() => {
+        setModal(null);
+        setResetEmail('');
+        setResetShownMessage(false);
+      }, 2000);
+    } catch (error) {
+      // Error is already in resetEmailError state
+      console.error('[ForgotPassword] Error:', error);
+    }
+  }
+
+  // ── Logout all sessions handler ──
+  async function handleLogoutAll() {
+    setLogoutAllLoading(true);
+    try {
+      // Get Firebase ID token
+      const currentUser = auth?.currentUser;
+      const token = currentUser ? await currentUser.getIdToken() : null;
+      
+      if (!token) {
+        showToast('Gagal mendapatkan token autentikasi', 'error');
+        setLogoutAllLoading(false);
+        return;
+      }
+
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const result = await fetchWithSessionCheck(
+        `${apiUrl}/auth/logout-all`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        },
+        showToast
+      );
+
+      // Check untuk SESSION_REVOKED atau error
+      if (!result.success || result.error === 'SESSION_REVOKED') {
+        showToast('Gagal keluar dari semua perangkat', 'error');
+        console.error('[logout-all] Error:', result);
+        return;
+      }
+
+      // Success - clear sessions and show toast
+      setSessions([]);
+      showToast('Berhasil keluar dari semua perangkat', 'success');
+
+      // Sign out from Firebase and redirect
+      setTimeout(async () => {
+        try {
+          if (auth) {
+            await signOut(auth);
+          }
+          router.replace('/catalog');
+        } catch (error) {
+          console.error('[logout-all redirect] Error:', error);
+        }
+      }, 1000);
+    } catch (error) {
+      showToast('Terjadi kesalahan', 'error');
+      console.error('[logout-all] Exception:', error);
+    } finally {
+      setLogoutAllLoading(false);
+    }
   }
 
   // ── Input style helper ──
@@ -230,16 +392,7 @@ export default function PrivacySecurityPage() {
       : 'bg-navy-700/60 border-white/10 text-white placeholder-white/30 focus:border-gold/50 focus:ring-2 focus:ring-gold/10'
   );
 
-  const sessions = [
-    { device: 'Chrome · Windows 11', loc: 'Jakarta, ID', time: 'Aktif sekarang', current: true },
-    { device: 'Safari · iPhone 15',  loc: 'Bandung, ID', time: '2 jam lalu',     current: false },
-    { device: 'Firefox · macOS',     loc: 'Depok, ID',   time: '3 hari lalu',    current: false },
-  ];
   const [activeSessions, setActiveSessions] = useState(sessions);
-
-  function addToast(arg0: string, arg1: string) {
-    throw new Error('Function not implemented.');
-  }
 
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
@@ -276,16 +429,12 @@ export default function PrivacySecurityPage() {
               icon={KeyRound}
               label="Ubah Kata Sandi"
               sub="Perbarui kata sandi secara berkala"
-              onClick={() => { setPwError(''); setModal('change-password'); }}
-            />
-            <ToggleRow
-              icon={Smartphone}
-              label="Verifikasi Dua Langkah"
-              sub="Tambahkan lapisan keamanan ekstra saat login"
-              on={twoFactor}
-              onToggle={() => {
-                setTwoFactor(v => !v);
-                addToast(!twoFactor ? '2FA diaktifkan ✓' : '2FA dinonaktifkan', !twoFactor ? 'success' : 'info');
+              onClick={() => {
+                clearChangePasswordError();
+                setOldPw('');
+                setNewPw('');
+                setConfirmPw('');
+                setModal('change-password');
               }}
             />
             <ToggleRow
@@ -295,15 +444,22 @@ export default function PrivacySecurityPage() {
               on={loginAlerts}
               onToggle={() => {
                 setLoginAlerts(v => !v);
-                addToast(!loginAlerts ? 'Notifikasi login diaktifkan' : 'Notifikasi login dimatikan', 'info');
+                showToast(!loginAlerts ? 'Notifikasi login diaktifkan' : 'Notifikasi login dimatikan', 'info');
               }}
               iconColor="text-blue-400"
+              comingSoon
             />
             <ActionRow
               icon={Globe}
               label="Sesi Aktif"
-              sub={`${activeSessions.length} perangkat aktif`}
-              onClick={() => setModal('sessions')}
+              sub="Kelola perangkat yang terhubung dengan akun Anda"
+              onClick={async () => {
+                setSessionsLoading(true);
+                const data = await getSessions(showToast);
+                setSessions(data);
+                setSessionsLoading(false);
+                setModal('sessions');
+              }}
               iconColor="text-emerald-400"
             />
           </Section>
@@ -315,55 +471,33 @@ export default function PrivacySecurityPage() {
               label="Aktivitas Terlihat"
               sub="Pengguna lain dapat melihat aktivitas bacamu"
               on={activityVisible}
-              onToggle={() => { setActivityVisible(v => !v); addToast('Preferensi disimpan', 'info'); }}
+              onToggle={async () => {
+                await updatePrivacySetting('activity_visible', !activityVisible);
+                showToast(!activityVisible ? 'Aktivitas kini terlihat' : 'Aktivitas disembunyikan', 'success');
+              }}
+              disabled={privacyLoading || privacyUpdating}
             />
             <ToggleRow
               icon={Eye}
               label="Daftar Bacaan Publik"
               sub="Rak bukumu terlihat oleh semua pengguna"
               on={readingPublic}
-              onToggle={() => { setReadingPublic(v => !v); addToast('Preferensi disimpan', 'info'); }}
+              onToggle={async () => {
+                await updatePrivacySetting('public_reading_list', !readingPublic);
+                showToast(!readingPublic ? 'Daftar bacaan kini publik' : 'Daftar bacaan disembunyikan', 'success');
+              }}
+              disabled={privacyLoading || privacyUpdating}
             />
             <ToggleRow
               icon={Eye}
               label="Ulasan Publik"
               sub="Ulasanmu muncul di halaman komunitas"
               on={reviewsPublic}
-              onToggle={() => { setReviewsPublic(v => !v); addToast('Preferensi disimpan', 'info'); }}
-            />
-            <ToggleRow
-              icon={Eye}
-              label="Daftar Pengikut Publik"
-              sub="Siapa saja bisa melihat daftar mengikuti & pengikutmu"
-              on={followersVisible}
-              onToggle={() => { setFollowersVisible(v => !v); addToast('Preferensi disimpan', 'info'); }}
-              iconColor="text-purple-400"
-            />
-          </Section>
-
-          {/* ── DATA & PERSONALISASI ── */}
-          <Section title="Data & Personalisasi" delay={0.15}>
-            <ToggleRow
-              icon={Shield}
-              label="Personalisasi AI"
-              sub="Izinkan PustarAI menggunakan riwayat baca untuk rekomendasi"
-              on={dataUsage}
-              onToggle={() => { setDataUsage(v => !v); addToast('Preferensi disimpan', 'info'); }}
-            />
-            <ToggleRow
-              icon={Shield}
-              label="Iklan Dipersonalisasi"
-              sub="Tampilkan iklan berdasarkan minat dan aktivitasmu"
-              on={personalizedAds}
-              onToggle={() => { setPersonalizedAds(v => !v); addToast('Preferensi disimpan', 'info'); }}
-              iconColor="text-orange-400"
-            />
-            <ActionRow
-              icon={Download}
-              label="Unduh Data Saya"
-              sub="Ekspor semua data akun dalam format JSON"
-              onClick={() => { setDlDone(false); setModal('download-data'); }}
-              iconColor="text-sky-400"
+              onToggle={async () => {
+                await updatePrivacySetting('public_reviews', !reviewsPublic);
+                showToast(!reviewsPublic ? 'Ulasan kini publik' : 'Ulasan disembunyikan', 'success');
+              }}
+              disabled={privacyLoading || privacyUpdating}
             />
           </Section>
 
@@ -373,17 +507,15 @@ export default function PrivacySecurityPage() {
               icon={LogOut}
               label="Keluar dari Semua Perangkat"
               sub="Mengakhiri semua sesi aktif"
-              onClick={async () => {
-                if (auth) await signOut(auth);
-                router.replace('/catalog');
-              }}
+              onClick={() => setModal('logout-all')}
+              disabled={logoutAllLoading}
               danger
             />
             <ActionRow
               icon={Trash2}
               label="Hapus Akun"
               sub="Tindakan ini tidak dapat dibatalkan"
-              onClick={() => { setDeleteInput(''); setModal('delete-account'); }}
+              onClick={() => setModal('delete-account')}
               danger
             />
           </Section>
@@ -433,23 +565,26 @@ export default function PrivacySecurityPage() {
             </div>
 
             {/* Strength bar */}
-            {newPw.length > 0 && (
-              <div className="mt-2">
-                <div className="flex gap-1 mb-1">
-                  {[1,2,3,4].map(i => (
-                    <div key={i} className={cn(
-                      'h-1 flex-1 rounded-full transition-all duration-300',
-                      newPw.length >= i * 3
-                        ? newPw.length < 6 ? 'bg-red-400' : newPw.length < 9 ? 'bg-amber-400' : 'bg-emerald-400'
-                        : 'bg-slate-200 dark:bg-slate-700'
-                    )} style={newPw.length < i * 3 ? { background: 'var(--border)' } : undefined} />
-                  ))}
+            {newPw.length > 0 && (() => {
+              const validation = validatePassword(newPw);
+              const strength = newPw.length < 6 ? 0 : newPw.length < 8 ? 1 : newPw.length < 12 ? 2 : 3;
+              const colors = ['bg-red-400', 'bg-amber-400', 'bg-blue-400', 'bg-emerald-400'];
+              return (
+                <div className="mt-2">
+                  <div className="flex gap-1 mb-1">
+                    {[0,1,2,3].map(i => (
+                      <div key={i} className={cn(
+                        'h-1 flex-1 rounded-full transition-all duration-300',
+                        i <= strength ? colors[strength] : 'bg-slate-200 dark:bg-slate-700'
+                      )} style={i <= strength ? undefined : { background: 'var(--border)' }} />
+                    ))}
+                  </div>
+                  <p className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                    {validation.message}
+                  </p>
                 </div>
-                <p className="text-[10px]" style={{ color: 'var(--muted)' }}>
-                  {newPw.length < 6 ? 'Terlalu pendek' : newPw.length < 9 ? 'Cukup' : 'Kuat'}
-                </p>
-              </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* Confirm */}
@@ -466,150 +601,317 @@ export default function PrivacySecurityPage() {
 
           {/* Error */}
           <AnimatePresence>
-            {pwError && (
+            {changePasswordError && (
               <motion.div
                 className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20"
                 initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
                 <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
-                <p className="text-xs text-red-400">{pwError}</p>
+                <p className="text-xs text-red-400">{changePasswordError.message}</p>
               </motion.div>
             )}
           </AnimatePresence>
 
           <button
             onClick={handleChangePassword}
-            disabled={pwLoading || !oldPw || !newPw || !confirmPw}
+            disabled={changePasswordLoading || !oldPw || !newPw || !confirmPw || newPw !== confirmPw}
             className="w-full py-3 rounded-xl bg-navy-800 text-white text-sm font-semibold
                        hover:bg-navy-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2 mt-1">
-            {pwLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Memperbarui...</> : 'Perbarui Kata Sandi'}
+            {changePasswordLoading ? <><Loader2 className="w-4 h-4 animate-spin" /> Memperbarui...</> : 'Perbarui Kata Sandi'}
+          </button>
+
+          {/* Forgot password link */}
+          <button
+            onClick={() => {
+              clearResetEmailError();
+              setResetEmail(user?.email || '');
+              setResetShownMessage(false);
+              setModal('forgot-password');
+            }}
+            className="w-full py-2 text-xs font-medium text-gold/80 hover:text-gold transition-colors text-center">
+            Lupa kata sandi?
           </button>
         </div>
+      </Modal>
+
+      {/* ══════════════════════════════════════════
+          MODAL — LUPA KATA SANDI
+      ══════════════════════════════════════════ */}
+      <Modal open={modal === 'forgot-password'} onClose={() => setModal(null)} title="Lupa Kata Sandi?">
+        {resetEmailSent && resetShownMessage ? (
+          <motion.div
+            className="flex flex-col gap-4 items-center text-center py-4"
+            initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}>
+            <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+              <CheckCircle className="w-6 h-6 text-emerald-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>Email Reset Terkirim!</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                Kami telah mengirimkan tautan reset kata sandi ke <strong>{resetEmail}</strong>.
+              </p>
+            </div>
+            <div className="w-full p-3 rounded-xl border" style={{ background: 'var(--surface2)', borderColor: 'var(--border)' }}>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+                Klik tautan dalam email untuk membuat kata sandi baru. Tautan berlaku selama 24 jam.
+              </p>
+            </div>
+            <p className="text-xs" style={{ color: 'var(--muted)' }}>Jendela ini akan ditutup dalam beberapa detik...</p>
+          </motion.div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Masukkan email akun Anda dan kami akan mengirimkan tautan untuk mengatur ulang kata sandi.
+            </p>
+
+            <div>
+              <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--muted)' }}>
+                Alamat Email
+              </label>
+              <div className="relative">
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={e => setResetEmail(e.target.value)}
+                  placeholder="nama@example.com"
+                  className={cn(inputCls, 'pl-10')} />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: 'var(--muted)' }} />
+              </div>
+            </div>
+
+            {/* Error */}
+            <AnimatePresence>
+              {resetEmailError && (
+                <motion.div
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20"
+                  initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+                  <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />
+                  <p className="text-xs text-red-400">{resetEmailError.message}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <button
+              onClick={handleForgotPassword}
+              disabled={resetEmailLoading || !resetEmail}
+              className="w-full py-3 rounded-xl bg-gold/90 text-slate-900 text-sm font-semibold
+                         hover:bg-gold transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              {resetEmailLoading ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Mengirim...</>
+              ) : (
+                <><Mail className="w-4 h-4" /> Kirim Tautan Reset</>
+              )}
+            </button>
+
+            <div className="text-center">
+              <button
+                onClick={() => {
+                  setResetEmail('');
+                  clearResetEmailError();
+                  setModal('change-password');
+                }}
+                className="text-xs font-medium transition-colors hover:text-gold"
+                style={{ color: 'var(--muted)' }}>
+                Ingat kata sandi? Kembali ke ubah kata sandi
+              </button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* ══════════════════════════════════════════
           MODAL — SESI AKTIF
       ══════════════════════════════════════════ */}
       <Modal open={modal === 'sessions'} onClose={() => setModal(null)} title="Sesi Aktif">
-        <div className="flex flex-col gap-3">
-          {activeSessions.map((s, i) => (
-            <motion.div key={i}
-              className="flex items-start gap-3 p-3 rounded-xl border"
-              style={{ background: 'var(--surface2)', borderColor: 'var(--border)' }}
-              initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.06 }}>
-              <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0"
-                   style={{ background: 'var(--surface)' }}>
-                <Smartphone className="w-4 h-4 text-gold" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{s.device}</p>
-                <p className="text-xs" style={{ color: 'var(--muted)' }}>{s.loc} · {s.time}</p>
-                {s.current && (
-                  <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-semibold text-emerald-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    Sesi ini
-                  </span>
-                )}
-              </div>
-              {!s.current && (
-                <button
-                  onClick={() => {
-                    setActiveSessions(prev => prev.filter((_, j) => j !== i));
-                    addToast('Sesi diakhiri', 'info');
-                  }}
-                  className="text-red-400 hover:text-red-300 transition-colors flex-shrink-0 p-1">
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </motion.div>
-          ))}
-
-          {activeSessions.length > 1 && (
-            <button
-              onClick={() => {
-                setActiveSessions(prev => prev.filter(s => s.current));
-                addToast('Semua sesi lain diakhiri', 'success');
-              }}
-              className="w-full py-2.5 rounded-xl border border-red-400/20 text-red-400 text-sm font-semibold
-                         hover:bg-red-400/10 transition-all">
-              Akhiri Semua Sesi Lain
-            </button>
-          )}
-        </div>
-      </Modal>
-
-      {/* ══════════════════════════════════════════
-          MODAL — UNDUH DATA
-      ══════════════════════════════════════════ */}
-      <Modal open={modal === 'download-data'} onClose={() => setModal(null)} title="Unduh Data Saya">
-        <div className="flex flex-col gap-4">
-          <p className="text-sm leading-relaxed" style={{ color: 'var(--muted)' }}>
-            Ekspor semua data akunmu termasuk profil, riwayat baca, ulasan, wishlist, dan preferensi AI dalam format JSON.
-          </p>
-
-          <div className="rounded-xl p-3 border" style={{ background: 'var(--surface2)', borderColor: 'var(--border)' }}>
-            {['Profil & preferensi', 'Riwayat baca & pinjaman', 'Ulasan & rating', 'Wishlist', 'Data PustarAI'].map((item, i) => (
-              <div key={i} className="flex items-center gap-2 py-1.5">
-                <CheckCircle className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                <span className="text-xs" style={{ color: 'var(--text)' }}>{item}</span>
-              </div>
-            ))}
-          </div>
-
-          {dlDone ? (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <CheckCircle className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-              <p className="text-xs text-emerald-400 font-medium">Data berhasil diekspor! Cek email kamu.</p>
+        {sessionsLoading ? (
+          <motion.div
+            className="flex flex-col gap-3 items-center justify-center py-8"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <Loader2 className="w-6 h-6 animate-spin text-gold" />
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>Memuat sesi aktif...</p>
+          </motion.div>
+        ) : sessions.length === 0 ? (
+          <motion.div
+            className="flex flex-col gap-4 items-center text-center py-8"
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+          >
+            <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+              <Smartphone className="w-6 h-6 text-blue-400" />
             </div>
-          ) : (
-            <button
-              onClick={handleDownload}
-              disabled={dlLoading}
-              className="w-full py-3 rounded-xl bg-navy-800 text-white text-sm font-semibold
-                         hover:bg-navy-700 transition-all disabled:opacity-60 flex items-center justify-center gap-2">
-              {dlLoading
-                ? <><Loader2 className="w-4 h-4 animate-spin" /> Menyiapkan ekspor...</>
-                : <><Download className="w-4 h-4" /> Mulai Unduh</>
-              }
-            </button>
-          )}
-        </div>
+            <p className="text-sm" style={{ color: 'var(--muted)' }}>Tidak ada sesi aktif</p>
+          </motion.div>
+        ) : (
+          <motion.div className="space-y-3">
+            <AnimatePresence>
+              {sessions.map((session, idx) => {
+                const isCurrentDevice = session.id === currentSessionId;
+                return (
+                  <motion.div
+                    key={session.id}
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="p-3 rounded-lg border"
+                    style={{ background: 'var(--surface2)', borderColor: 'var(--border)' }}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <p className="text-sm font-medium" style={{ color: 'var(--text)' }}>
+                        {session.device_name}
+                      </p>
+                      {isCurrentDevice && (
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.8 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          className="px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
+                          style={{
+                            background: 'rgba(34, 197, 94, 0.15)',
+                            border: '1px solid rgba(34, 197, 94, 0.3)',
+                            color: '#22c55e',
+                          }}
+                        >
+                          Perangkat Ini
+                        </motion.div>
+                      )}
+                    </div>
+                    <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                      {session.ip_address}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                      {new Date(session.last_active).toLocaleString('id-ID')}
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </motion.div>
+        )}
       </Modal>
+
+
 
       {/* ══════════════════════════════════════════
           MODAL — HAPUS AKUN
       ══════════════════════════════════════════ */}
       <Modal open={modal === 'delete-account'} onClose={() => setModal(null)} title="Hapus Akun">
-        <div className="flex flex-col gap-4">
-          <div className="flex items-start gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-            <p className="text-xs text-red-400 leading-relaxed">
-              Tindakan ini <strong>tidak dapat dibatalkan</strong>. Semua data, riwayat baca, ulasan, dan preferensi AI akan dihapus secara permanen.
+        <motion.div
+          className="flex flex-col gap-4 items-center text-center py-6"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        >
+          <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+            <Trash2 className="w-6 h-6 text-red-400" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text)' }}>
+              Yakin Ingin Menghapus Akun?
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Tindakan ini akan menghapus semua data Anda secara permanen. Anda tidak dapat mengurungkan tindakan ini.
             </p>
           </div>
-
-          <div>
-            <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--muted)' }}>
-              Ketik <span className="font-mono font-bold" style={{ color: 'var(--text)' }}>HAPUS</span> untuk konfirmasi
-            </label>
+          <div className="w-full p-3 rounded-xl border border-red-500/20 bg-red-500/10 mt-2 text-left">
+            <p className="text-xs leading-relaxed text-red-400">
+              Konfirmasi: ketik <strong>hapus {user?.email || 'akun'}</strong> di bawah lalu tekan tombol "Hapus Akun".
+            </p>
             <input
-              value={deleteInput} onChange={e => setDeleteInput(e.target.value)}
-              placeholder="HAPUS"
-              className={inputCls} />
+              value={deleteInput}
+              onChange={e => setDeleteInput(e.target.value)}
+              placeholder={`Ketik hapus ${user?.email || 'akun'}`}
+              className={cn(inputCls, 'mt-2')}
+            />
           </div>
 
-          <button
-            disabled={deleteInput !== 'HAPUS'}
-            onClick={async () => {
-              // In real app: call user.delete() after re-auth
-              if (auth) await signOut(auth);
-              router.replace('/catalog');
-            }}
-            className="w-full py-3 rounded-xl bg-red-500 text-white text-sm font-semibold
-                       hover:bg-red-600 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-            Hapus Akun Secara Permanen
-          </button>
-        </div>
+          <div className="flex w-full gap-3 mt-4">
+            <button
+              onClick={() => setModal(null)}
+              className="flex-1 py-3 rounded-xl border text-sm font-semibold transition hover:opacity-80"
+            >Batal</button>
+            <button
+              onClick={async () => {
+                const requiredText = `hapus ${user?.email || 'akun'}`;
+                if (deleteInput !== requiredText) {
+                  showToast(`Ketik "${requiredText}" sebagai konfirmasi`, 'error');
+                  return;
+                }
+
+                try {
+                  const token = await auth?.currentUser?.getIdToken();
+                  if (!token) {
+                    showToast('Gagal mendapatkan token autentikasi', 'error');
+                    return;
+                  }
+
+                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+                  const res = await fetch(`${apiUrl}/auth/delete-account`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      'Authorization': `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ confirm: true }),
+                  });
+                  const json = await res.json().catch(() => ({}));
+                  if (!res.ok || json.success === false) {
+                    showToast(json.error || json.message || 'Gagal menghapus akun', 'error');
+                    return;
+                  }
+
+                  showToast('Akun berhasil dihapus', 'success');
+                  // Sign out locally and redirect
+                  if (auth) await signOut(auth);
+                  router.replace('/');
+                } catch (err) {
+                  console.error('[delete-account] Error:', err);
+                  showToast('Terjadi kesalahan saat menghapus akun', 'error');
+                }
+              }}
+              className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-semibold transition hover:opacity-90"
+            >Hapus Akun</button>
+          </div>
+        </motion.div>
+      </Modal>
+
+      {/* ══════════════════════════════════════════
+          MODAL — KELUAR SEMUA PERANGKAT
+      ══════════════════════════════════════════ */}
+      <Modal open={modal === 'logout-all'} onClose={() => setModal(null)} title="Konfirmasi Keluar">
+        <motion.div
+          className="flex flex-col gap-4 items-center text-center py-4"
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+        >
+          <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+            <LogOut className="w-6 h-6 text-red-400" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm mb-1" style={{ color: 'var(--text)' }}>
+              Akhiri Semua Sesi?
+            </p>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--muted)' }}>
+              Anda akan dikeluarkan dari semua perangkat yang terhubung ke akun ini, termasuk perangkat yang sedang Anda gunakan sekarang.
+            </p>
+          </div>
+          <div className="flex w-full gap-3 mt-4">
+            <button
+              onClick={() => setModal(null)}
+              className="flex-1 py-3 rounded-xl border text-sm font-semibold transition hover:opacity-80"
+              disabled={logoutAllLoading}
+            >
+              Batal
+            </button>
+            <button
+              onClick={handleLogoutAll}
+              disabled={logoutAllLoading}
+              className="flex-1 py-3 rounded-xl bg-red-500 text-white text-sm font-semibold transition hover:opacity-90 flex items-center justify-center gap-2"
+            >
+              {logoutAllLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Ya, Keluar'}
+            </button>
+          </div>
+        </motion.div>
       </Modal>
 
     </div>

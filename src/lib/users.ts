@@ -9,6 +9,7 @@ export interface UpdateMyProfilePayload {
   name?: string;
   username?: string;
   bio?: string;
+  avatar_url?: string;
   preferred_genres?: string[];
 }
 
@@ -19,6 +20,7 @@ export interface UsernameAvailabilityResult {
 }
 
 async function getOptionalAuthHeader(): Promise<Record<string, string>> {
+  if (!auth) return {};
   const user = auth.currentUser;
   if (!user) return {};
 
@@ -43,6 +45,18 @@ function parseStringArray(value: unknown): string[] {
     }
   }
   return [];
+}
+
+function normalizeGenreStats(value: unknown): Array<{ genre: string; count: number; pct: number }> {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => ({
+      genre: String((item as Record<string, unknown>).genre ?? '').trim(),
+      count: Number((item as Record<string, unknown>).count ?? 0),
+      pct: Number((item as Record<string, unknown>).pct ?? 0),
+    }))
+    .filter((item) => Boolean(item.genre));
 }
 
 function toShortId(value: unknown): string {
@@ -93,6 +107,25 @@ function normalizePublicIdentity(raw: Record<string, unknown>): { displayName: s
 
 function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
   const identity = normalizePublicIdentity(raw);
+  function toCoverUrlFromId(id: unknown, size = 'M') {
+    const n = Number(id);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    return `https://covers.openlibrary.org/b/id/${n}-${size}.jpg`;
+  }
+
+  function normalizeBookList(list: unknown) {
+    if (!Array.isArray(list)) return [];
+    return list.map((item) => {
+      const rec = item as Record<string, unknown>;
+      const coverUrl = rec.cover_url ? String(rec.cover_url) : null;
+      const coverId = rec.cover_id ?? rec.coverId ?? rec.coverId;
+      return {
+        ...(rec as Record<string, unknown>),
+        cover_url: coverUrl || (coverId ? toCoverUrlFromId(coverId) : null),
+      } as unknown;
+    });
+  }
+
   return {
     id: String(raw.id ?? ''),
     username: identity.username,
@@ -104,13 +137,27 @@ function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
     preferred_genres: parseStringArray(raw.preferred_genres),
     total_read: Number(raw.total_read ?? 0),
     reading_streak: Number(raw.reading_streak ?? 0),
+    streak_is_active: Boolean(raw.streak_is_active),
+    streak_last_length: Number(raw.streak_last_length ?? 0),
+    streak_last_active_day: raw.streak_last_active_day ? String(raw.streak_last_active_day) : null,
+    streak_last_start_day: raw.streak_last_start_day ? String(raw.streak_last_start_day) : null,
+    streak_last_end_day: raw.streak_last_end_day ? String(raw.streak_last_end_day) : null,
+    streak_reset_day: raw.streak_reset_day ? String(raw.streak_reset_day) : null,
     created_at: raw.created_at ? String(raw.created_at) : null,
     updated_at: raw.updated_at ? String(raw.updated_at) : null,
     followers_count: Number(raw.followers_count ?? 0),
     following_count: Number(raw.following_count ?? 0),
     is_following: Boolean(raw.is_following),
-    currently_reading: Array.isArray(raw.currently_reading) ? raw.currently_reading as UserProfile['currently_reading'] : [],
-    liked_books: Array.isArray(raw.liked_books) ? raw.liked_books as UserProfile['liked_books'] : [],
+    currently_reading: normalizeBookList(raw.currently_reading) as UserProfile['currently_reading'],
+    liked_books: normalizeBookList(raw.liked_books) as UserProfile['liked_books'],
+    stats: raw.stats && typeof raw.stats === 'object'
+      ? {
+          total_read: Number((raw.stats as Record<string, unknown>).total_read ?? 0),
+          reading_streak: Number((raw.stats as Record<string, unknown>).reading_streak ?? 0),
+          reviews_written: Number((raw.stats as Record<string, unknown>).reviews_written ?? 0),
+          favorite_genres: normalizeGenreStats((raw.stats as Record<string, unknown>).favorite_genres),
+        }
+      : undefined,
   };
 }
 
@@ -118,6 +165,7 @@ function normalizeRecommendedUser(raw: Record<string, unknown>): RecommendedUser
   const identity = normalizePublicIdentity(raw);
   return {
     id: String(raw.id ?? ''),
+    firebase_uid: raw.firebase_uid ? String(raw.firebase_uid) : null,
     username: identity.username,
     display_name: identity.displayName,
     name: identity.displayName,
@@ -126,17 +174,25 @@ function normalizeRecommendedUser(raw: Record<string, unknown>): RecommendedUser
     preferred_genres: parseStringArray(raw.preferred_genres),
     followers_count: Number(raw.followers_count ?? 0),
     total_read: Number(raw.total_read ?? 0),
+    reviews_written: Number(raw.reviews_written ?? 0),
     reading_streak: Number(raw.reading_streak ?? 0),
     is_following: Boolean(raw.is_following),
   };
 }
 
-export async function getUserProfile(id: string): Promise<UserProfile | null> {
-  if (!id) return null;
+export async function getUserProfile(usernameOrId: string): Promise<UserProfile | null> {
+  if (!usernameOrId) {
+    return null;
+  }
 
   try {
     const headers = await getOptionalAuthHeader();
-    const res = await fetch(`${API_URL}/users/${id}`, {
+    // Support both username (with @ or %40) and ID
+    const decoded = decodeURIComponent(usernameOrId).trim();
+    const param = decoded.startsWith('@') ? decoded.slice(1) : decoded;
+    const url = `${API_URL}/users/${param}`;
+
+    const res = await fetch(url, {
       cache: 'no-store',
       headers,
     });
@@ -148,7 +204,7 @@ export async function getUserProfile(id: string): Promise<UserProfile | null> {
     const raw = (json?.data ?? {}) as Record<string, unknown>;
     return normalizeUserProfile(raw);
   } catch (err) {
-    console.warn(`[users] getUserProfile(${id}) gagal:`, err);
+    console.warn(`[users] getUserProfile(${usernameOrId}) gagal:`, err);
     return null;
   }
 }
@@ -202,9 +258,30 @@ export async function getRecommendedUsers(limit = 8): Promise<RecommendedUser[]>
   }
 }
 
+export async function searchUsers(query: string, limit = 12): Promise<RecommendedUser[]> {
+  try {
+    const headers = await getOptionalAuthHeader();
+    const params = new URLSearchParams({ q: String(query || ''), limit: String(limit) });
+
+    const res = await fetch(`${API_URL}/users/search?${params.toString()}`, {
+      cache: 'no-store',
+      headers,
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const list = Array.isArray(json?.data) ? json.data : [];
+    return list.map((item: Record<string, unknown>) => normalizeRecommendedUser(item));
+  } catch (err) {
+    console.warn('[users] searchUsers gagal:', err);
+    return [];
+  }
+}
+
 export async function getMyFollowingUsers(limit = 30): Promise<RecommendedUser[]> {
   try {
     const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return [];
     const params = new URLSearchParams({ limit: String(limit) });
 
     const res = await fetch(`${API_URL}/users/me/following?${params.toString()}`, {
@@ -212,12 +289,15 @@ export async function getMyFollowingUsers(limit = 30): Promise<RecommendedUser[]
       headers,
     });
 
+    if (res.status === 401) return [];
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const list = Array.isArray(json?.data) ? json.data : [];
     return list.map((item: Record<string, unknown>) => normalizeRecommendedUser(item));
   } catch (err) {
-    console.warn('[users] getMyFollowingUsers gagal:', err);
+    if (!(err instanceof Error && /HTTP 401/.test(err.message))) {
+      console.warn('[users] getMyFollowingUsers gagal:', err);
+    }
     return [];
   }
 }
@@ -225,6 +305,7 @@ export async function getMyFollowingUsers(limit = 30): Promise<RecommendedUser[]
 export async function getMyFollowersUsers(limit = 30): Promise<RecommendedUser[]> {
   try {
     const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return [];
     const params = new URLSearchParams({ limit: String(limit) });
 
     const res = await fetch(`${API_URL}/users/me/followers?${params.toString()}`, {
@@ -232,12 +313,15 @@ export async function getMyFollowersUsers(limit = 30): Promise<RecommendedUser[]
       headers,
     });
 
+    if (res.status === 401) return [];
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json = await res.json();
     const list = Array.isArray(json?.data) ? json.data : [];
     return list.map((item: Record<string, unknown>) => normalizeRecommendedUser(item));
   } catch (err) {
-    console.warn('[users] getMyFollowersUsers gagal:', err);
+    if (!(err instanceof Error && /HTTP 401/.test(err.message))) {
+      console.warn('[users] getMyFollowersUsers gagal:', err);
+    }
     return [];
   }
 }
@@ -339,5 +423,81 @@ export async function checkUsernameAvailability(input: string): Promise<Username
       normalizedUsername,
       message: 'Koneksi bermasalah. Coba lagi.',
     };
+  }
+}
+
+/**
+ * Privacy Settings Types
+ */
+export interface PrivacySettings {
+  activity_visible: boolean;
+  public_reading_list: boolean;
+  public_reviews: boolean;
+}
+
+export interface PrivacySettingsUpdate {
+  activity_visible?: boolean;
+  public_reading_list?: boolean;
+  public_reviews?: boolean;
+}
+
+/**
+ * Fetch current privacy settings for authenticated user
+ */
+export async function getPrivacySettings(): Promise<PrivacySettings | null> {
+  try {
+    const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return null;
+
+    const res = await fetch(`${API_URL}/users/privacy-settings`, {
+      method: 'GET',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+    });
+
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const json = await res.json();
+    const data = json?.data as PrivacySettings | null;
+    return data;
+  } catch (err) {
+    console.warn('[users] getPrivacySettings gagal:', err);
+    return null;
+  }
+}
+
+/**
+ * Update privacy settings for authenticated user
+ */
+export async function updatePrivacySettings(
+  updates: PrivacySettingsUpdate
+): Promise<PrivacySettings | null> {
+  try {
+    const headers = await getOptionalAuthHeader();
+    if (!headers.Authorization) return null;
+
+    const res = await fetch(`${API_URL}/users/privacy-settings`, {
+      method: 'PUT',
+      cache: 'no-store',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+      body: JSON.stringify(updates),
+    });
+
+    if (res.status === 401) return null;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+    const json = await res.json();
+    const data = json?.data as PrivacySettings | null;
+    return data;
+  } catch (err) {
+    console.warn('[users] updatePrivacySettings gagal:', err);
+    return null;
   }
 }

@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import type { Auth } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey:            process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -10,12 +11,22 @@ const firebaseConfig = {
   appId:             process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Skip Firebase init during build
-const app = (typeof window !== 'undefined' && firebaseConfig.apiKey) 
+const hasBrowserEnv = typeof window !== 'undefined';
+const hasFirebaseConfig = Boolean(
+  firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.storageBucket &&
+  firebaseConfig.messagingSenderId &&
+  firebaseConfig.appId
+);
+
+// Prevent server-side prerender from touching Firebase when env vars are absent.
+const app = hasBrowserEnv && hasFirebaseConfig
   ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0])
   : null;
 
-export const auth = app ? getAuth(app) : null;
-export const googleProvider = app ? new GoogleAuthProvider() : null;
+export const auth = (app ? getAuth(app) : null) as Auth | null;
+export const googleProvider = new GoogleAuthProvider();
 
 export default app;

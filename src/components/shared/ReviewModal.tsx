@@ -1,12 +1,12 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Star, Lock } from 'lucide-react';
+import { X, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
-import { useAuth } from '@/hooks/useAuth';
-import { useRouter } from 'next/navigation';
-import { getCurrentUser, type User } from '@/lib/api';
+import { auth } from '@/lib/firebase';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 interface Props {
   bookTitle: string;
@@ -14,99 +14,114 @@ interface Props {
   open:      boolean;
   onClose:   () => void;
   onSubmit?: (rating: number, text: string) => void;
+  initialRating?: number;
+  initialText?: string;
 }
 
 const RATING_LABELS = ['', 'Kurang', 'Biasa', 'Bagus', 'Sangat Bagus', 'Luar Biasa!'];
 
-export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmit }: Props) {
+export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmit, initialRating, initialText }: Props) {
   const { theme } = useTheme();
-  const { user, loading: authLoading } = useAuth();
-  const router = useRouter();
   const isLight = theme === 'light';
 
-  const [rating,      setRating]      = useState(0);
-  const [hovered,     setHovered]     = useState(0);
-  const [text,        setText]        = useState('');
-  const [submitted,   setSubmitted]   = useState(false);
-  const [loading,     setLoading]     = useState(false);
+  const [rating,    setRating]    = useState(initialRating || 0);
+  const [hovered,   setHovered]   = useState(0);
+  const [text,      setText]      = useState(initialText || '');
+  const [submitted, setSubmitted] = useState(false);
+  const [loading,   setLoading]   = useState(false);
 
-  // Auto-close after 1.5s when submitted
+
   useEffect(() => {
-    if (submitted) {
-      const timer = setTimeout(() => {
-        handleClose();
-      }, 1500);
-      return () => clearTimeout(timer);
+    if (open) {
+      setRating(initialRating || 0);
+      setText(initialText || '');
+      setHovered(0);
     }
-  }, [submitted]);
+  }, [open, initialRating, initialText]);
 
-  function handleSubmit() {
+  const REVIEW_KEY = `pustara_review_${bookKey}`;
+
+  /* function handleSubmit() {
     if (!rating || !text.trim()) return;
-    // fix: Only require Firebase user, not dbUser from getCurrentUser
-    if (!user) return;
-
     setLoading(true);
-    
-    // fix: Use Firebase token directly - don't depend on getCurrentUser
-    user.getIdToken()
-      .then((token) => {
-        // fix: Gunakan API_URL untuk POST /reviews, bukan relative path
-        const API_URL = 'http://localhost:3000';
-        const url = `${API_URL}/reviews`;
-        console.log('POST URL:', url);
-        
-        const body = {
-          book_id: bookKey,
-          rating: rating,
-          review_text: text
-          // fix: Don't send user_id from frontend - backend gets it from token
-        };
-        
-        console.log('TOKEN:', token ? `✓ present (${token.slice(0, 20)}...)` : '❌ undefined/null');
-        
-        return fetch(url, {
+
+    // Simpan ke localStorage
+    const review = { rating, text, date: new Date().toISOString() };
+    localStorage.setItem(REVIEW_KEY, JSON.stringify(review));
+
+    setTimeout(() => {
+      setLoading(false);
+      setSubmitted(true);
+      onSubmit?.(rating, text);
+    }, 800);
+  } */
+      async function handleSubmit() {
+      if (!rating || !text.trim()) return;
+
+      try {
+        setLoading(true);
+        if (!auth) {
+          alert('Layanan autentikasi belum siap. Muat ulang halaman.');
+          return;
+        }
+        const token = await auth.currentUser?.getIdToken();
+        if (!token) {
+          alert('Silakan login terlebih dahulu.');
+          return;
+        }
+
+        // Ensure user exists/synced in backend before review write.
+        await fetch('/api/auth/verify-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token }),
+        }).catch(() => {
+          // Best effort sync only.
+        });
+
+        const response = await fetch(`${API_URL}/reviews`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(body)
+          body: JSON.stringify({
+            book_id: bookKey,
+            rating,
+            body: text,
+          }),
         });
-      })
-      .then(res => {
-        // fix: Cek response status sebelum parse JSON
-        console.log('Response status:', res.status, res.statusText);
-        if (!res.ok) {
-          return res.text().then(text => {
-            console.error('Error response body:', text.substring(0, 200));
-            throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-          });
-        }
-        return res.json();
-      })
-      .then(data => {
-        if (data.success) {
-          console.log('✅ [ReviewModal] Review submitted successfully');
-          setLoading(false);
-          setSubmitted(true);
-          onSubmit?.(rating, text);
-        } else {
-          throw new Error(data.message || 'Failed to submit review');
-        }
-      })
-      .catch(err => {
-        console.error('Review submission error:', err?.message);
-        alert('Gagal mengirim ulasan: ' + err?.message);
-        setLoading(false);
-      });
-  }
 
-  function handleLoginClick() {
-    onClose();
-    router.push('/auth/signin');
-  }
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          throw new Error(result?.message || 'Failed to submit review');
+        }
+
+        // fallback/local cache
+        const review = {
+          rating,
+          text,
+          date: new Date().toISOString(),
+        };
+
+        localStorage.setItem(REVIEW_KEY, JSON.stringify(review));
+
+        setSubmitted(true);
+
+        onSubmit?.(rating, text);
+
+      } catch (error) {
+        console.error('Submit review error:', error);
+        const message = error instanceof Error ? error.message : 'Gagal mengirim ulasan';
+        alert(message);
+      } finally {
+        setLoading(false);
+      }
+    }
 
   function handleClose() {
+    // Reset state kalau belum submit
     if (!submitted) {
       setRating(0);
       setHovered(0);
@@ -155,6 +170,7 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
 
             <AnimatePresence mode="wait">
 
+              {/* ── SUCCESS STATE ── */}
               {submitted ? (
                 <motion.div key="success"
                   className="p-8 text-center"
@@ -176,36 +192,6 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
                     className="w-full py-3 rounded-2xl bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-600 transition-colors">
                     Tutup
                   </button>
-                </motion.div>
-
-              ) : !user || authLoading ? (
-                /* ── LOGIN REQUIRED STATE ── */
-                <motion.div key="login-required"
-                  className="p-8 text-center"
-                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-
-                  <motion.div
-                    className="w-16 h-16 rounded-full bg-gold/20 flex items-center justify-center mx-auto mb-4"
-                    initial={{ scale: 0 }} animate={{ scale: 1 }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
-                    <Lock className="w-8 h-8 text-gold" />
-                  </motion.div>
-
-                  <h3 className="font-serif text-xl font-black mb-2">Login Diperlukan</h3>
-                  <p className={cn('text-sm mb-6', tk.muted)}>
-                    Silakan login untuk menulis ulasan tentang buku ini.
-                  </p>
-
-                  <div className="flex flex-col gap-3">
-                    <button onClick={handleLoginClick}
-                      className="w-full py-3 rounded-2xl bg-gold text-navy-900 font-bold text-sm hover:bg-gold/90 transition-colors">
-                      Login Sekarang
-                    </button>
-                    <button onClick={handleClose}
-                      className={cn('w-full py-3 rounded-2xl text-sm font-medium transition-colors', tk.cancel)}>
-                      Batal
-                    </button>
-                  </div>
                 </motion.div>
 
               ) : (
@@ -273,20 +259,20 @@ export default function ReviewModal({ bookTitle, bookKey, open, onClose, onSubmi
                       </button>
                       <motion.button
                         onClick={handleSubmit}
-                        disabled={!rating || !text.trim() || loading || !user}
+                        disabled={!rating || !text.trim() || loading}
                         className={cn(
                           'flex-1 py-3 rounded-2xl text-sm font-bold transition-all',
-                          rating && text.trim() && !loading && user
+                          rating && text.trim() && !loading
                             ? 'bg-navy-800 text-white hover:bg-navy-700'
                             : isLight ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-white/8 text-white/30 cursor-not-allowed'
                         )}
-                        whileTap={rating && text.trim() && user ? { scale: 0.97 } : {}}>
+                        whileTap={rating && text.trim() ? { scale: 0.97 } : {}}>
                         {loading ? (
                           <span className="flex items-center justify-center gap-2">
                             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                             Mengirim...
                           </span>
-                        ) : 'Kirim Ulasan'}
+                        ) : (initialRating ? 'Simpan Perubahan' : 'Kirim Ulasan')}
                       </motion.button>
                     </div>
                   </div>

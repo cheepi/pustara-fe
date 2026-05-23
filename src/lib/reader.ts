@@ -1,5 +1,6 @@
 import { fetchBookById } from '@/lib/books';
 import { READER_FALLBACK_BOOKS } from '@/data/readerFallback';
+import { getBookById } from '@/lib/supabase-admin';
 import type { ReaderBook } from '@/types/reader';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
@@ -31,6 +32,7 @@ function toReaderBook(id: string, title: string, author: string, pdfUrl?: string
     dueDate,
     daysLeft,
     pdfUrl: pdfUrl || SAMPLE_PDF,
+    currentPage: 1,
     total_pages: 0,
   };
 }
@@ -47,16 +49,42 @@ export async function fetchReaderBook(bookId: string): Promise<ReaderBook> {
         author: String(data.author ?? data.authors ?? '-'),
         authors: Array.isArray(data.authors) ? data.authors : [String(data.author ?? data.authors ?? '-')],
         cover_url: data.cover_url ?? null,
-        file_url: String(data.pdfUrl ?? data.fileUrl ?? data.file_url ?? SAMPLE_PDF),
+        // Always use proxy endpoint /books/:id/file instead of exposing storage URL
+        file_url: null,
         file_type: 'pdf',
         dueDate: String(data.dueDate ?? formatDueDate(7).dueDate),
         daysLeft: Number(data.daysLeft ?? 7),
-        pdfUrl: String(data.pdfUrl ?? data.fileUrl ?? data.file_url ?? SAMPLE_PDF),
+        pdfUrl: undefined,
+        currentPage: Number(data.currentPage ?? data.current_page ?? 1),
         total_pages: Number(data.total_pages ?? 0),
       };
     }
   } catch {
     // fallback below
+  }
+
+  // Try Supabase first for newly uploaded books
+  try {
+    const supabaseBook = await getBookById(bookId);
+    if (supabaseBook && supabaseBook.file_url) {
+      return {
+        id: supabaseBook.id,
+        title: supabaseBook.title,
+        author: supabaseBook.authors[0] || 'Unknown',
+        authors: supabaseBook.authors,
+        cover_url: supabaseBook.cover_url ?? null,
+        // Always use proxy endpoint /books/:id/file instead of exposing storage URL
+        file_url: null,
+        file_type: 'pdf',
+        dueDate: formatDueDate(7).dueDate,
+        daysLeft: 7,
+        pdfUrl: undefined,
+        currentPage: 1,
+        total_pages: supabaseBook.pages || 0,
+      };
+    }
+  } catch {
+    // fallback to fetchBookById
   }
 
   const fromBooks = await fetchBookById(bookId);

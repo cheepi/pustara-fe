@@ -36,38 +36,95 @@
    BASE
 ══════════════════════════════════════════ */
 @layer base {
-  * { box-sizing: border-box; }
+  * { 
+    box-sizing: border-box; 
+    /* Sembunyiin scrollbar di Firefox, IE & Edge */
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+    scrollbar-color: transparent transparent;
+  }
 
   html,
   body {
     height: 100%;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
+    overscroll-behavior: none;
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
   }
 
   body {
+    position: relative;
     background-color: var(--bg);
     color: var(--text);
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
   }
 
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-navy-500 rounded-full; }
-
-  .scrollbar-gold::-webkit-scrollbar { height: 4px; }
-  .scrollbar-gold::-webkit-scrollbar-track { background: transparent; }
-  .scrollbar-gold::-webkit-scrollbar-thumb { background: rgba(201,168,76,0.3); border-radius: 999px; }
-  .scrollbar-gold::-webkit-scrollbar-thumb:hover { background: rgba(201,168,76,0.6); }
-
-  .no-scrollbar {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  #__next {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
   }
 
-  .no-scrollbar::-webkit-scrollbar {
+  body > div {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    overflow-x: clip;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
     display: none !important;
     width: 0 !important;
     height: 0 !important;
+    background: transparent !important;
+    -webkit-appearance: none !important;
+  }
+
+  *::-webkit-scrollbar { 
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+    -webkit-appearance: none !important;
+  }
+
+  *::-webkit-scrollbar-track,
+  *::-webkit-scrollbar-thumb {
+    display: none !important;
+    background: transparent !important;
+  }
+
+  /* Biarin aja class ini kalau butuh nembak elemen spesifik */
+  .no-scrollbar {
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
+  }
+
+  .no-scrollbar::-webkit-scrollbar,
+  .no-scrollbar::-webkit-scrollbar-track,
+  .no-scrollbar::-webkit-scrollbar-thumb {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+    -webkit-appearance: none !important;
+  }
+}
+
+/* ── Prevent iOS auto-zoom on inputs ──────────────────────────── */
+@media screen and (-webkit-min-device-pixel-ratio: 0) {
+  input,
+  textarea,
+  select {
+    font-size: max(16px, 1em) !important;
   }
 }
 
@@ -146,4 +203,19 @@
     overflow: hidden !important;
     height: 100dvh;
   }
+}
+
+/* Force react-pdf canvas to fit its wrapper used in reader */
+.reader-page canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  position: absolute !important;
+  inset: 0 !important;
+}
+.reader-page > div {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
 }

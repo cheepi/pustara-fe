@@ -4,3 +4,5 @@ build
 .env
 .env.local
 .next
+next-env.d.ts
+.vercel

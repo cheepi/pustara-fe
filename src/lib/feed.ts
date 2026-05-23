@@ -9,9 +9,12 @@ export interface FeedSidebarProfile {
   initials: string;
   name: string;
   subtitle: string;
+  avatar_url: string | null;
   dipinjam: number;
   streak: number;
   selesai: number;
+  borrowed_tooltip?: string;
+  streak_tooltip?: string;
 }
 
 export interface FeedSuggestion {
@@ -19,7 +22,7 @@ export interface FeedSuggestion {
   name: string;
   loc: string;
   books: number;
-  avatar: string;
+  avatar_url: string | null;
 }
 
 export interface FeedSidebarPayload {
@@ -55,6 +58,10 @@ interface BackendActivity {
   actor_name: string;
   actor_avatar: string | null;
   timestamp: string | null;
+  review_text?: string | null;
+  review_id?: string | null;
+  review_rating?: number;
+  review_likes?: number;
 }
 
 interface BackendActivityResponse {
@@ -156,6 +163,33 @@ function pickProfileSubtitle(profile: unknown): string {
   return value || 'Pembaca aktif';
 }
 
+function formatDayKey(dayKey?: string | null): string {
+  if (!dayKey) return '-';
+  const date = new Date(`${dayKey}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return dayKey;
+  return new Intl.DateTimeFormat('id-ID', {
+    timeZone: STREAK_TIME_ZONE,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date);
+}
+
+function buildStreakTooltip(profile: { reading_streak?: number; streak_is_active?: boolean; streak_last_length?: number; streak_last_start_day?: string | null; streak_last_end_day?: string | null; streak_reset_day?: string | null; }): string {
+  const streak = Math.max(0, Number(profile.reading_streak ?? 0));
+  const isActive = Boolean(profile.streak_is_active);
+  const lastLength = Math.max(0, Number(profile.streak_last_length ?? streak));
+  const startDay = formatDayKey(profile.streak_last_start_day);
+  const endDay = formatDayKey(profile.streak_last_end_day);
+  const resetDay = formatDayKey(profile.streak_reset_day);
+
+  if (isActive) {
+    return [`Streak aktif: ${streak} hari`, `Mulai: ${startDay}`, `Aktif terakhir: ${endDay}`].join('\n');
+  }
+
+  return [`Streak terakhir: ${lastLength} hari`, `Berakhir: ${endDay}`, `Reset: ${resetDay}`].join('\n');
+}
+
 function calcStreakFromActivities(activities: BackendActivity[]): number {
   const days = new Set<string>();
   for (const activity of activities) {
@@ -204,50 +238,84 @@ export async function fetchTrendingFeedItems(topN = 5): Promise<FeedItem[]> {
   }
 }
 
-export async function fetchFeedActivities(limit = 8): Promise<FeedItem[]> {
+export async function fetchFeedActivities(limit = 8, includeNetwork = true): Promise<FeedItem[]> {
   try {
-    const response = await apiGet<BackendActivityResponse>(`/feed/me/activity?limit=${limit}&include_network=1`);
+    const scope = includeNetwork ? '1' : '0';
+    const response = await apiGet<BackendActivityResponse>(`/feed/me/activity?limit=${limit}&include_network=${scope}`);
+    console.log('[Feed Frontend] Activities received:', response.activities.length, 'scope:', scope);
 
-    return response.activities.map((activity, idx) => ({
-      id: `activity_${activity.session_id}_${idx}`,
-      type: 'activity',
-      actorId: activity.actor_id ? String(activity.actor_id) : undefined,
-      time: formatRelativeTime(activity.timestamp || undefined),
-      user: activity.actor_name,
-      avatar: toInitials(activity.actor_name).charAt(0),
-      loc: 'Komunitas Pustara',
-      action:
-        activity.status === 'finished'
-          ? 'selesai membaca'
-          : activity.status === 'wishlist'
-            ? 'menyimpan ke wishlist'
-            : 'sedang membaca',
-      rating: undefined,
-      bookKey: activity.book.id,
-      bookTitle: stripCoverLeakText(activity.book.title || 'Tanpa Judul'),
-      bookAuthor: stripCoverLeakText(Array.isArray(activity.book.authors) ? activity.book.authors.join(', ') : String(activity.book.authors || '')),
-      bookCoverUrl: normalizeCoverUrl(activity.book.cover_url),
-      reviewText:
-        activity.status === 'finished'
-          ? 'Menyelesaikan bacaan terbaru di Pustara.'
-          : activity.status === 'wishlist'
-            ? 'Menambahkan buku ini ke wishlist.'
-            : `Progress membaca ${Math.round(activity.progress_percentage)}%.`,
-    } as FeedItem));
+    return response.activities.map((activity, idx) => {
+      console.log('[Feed Frontend] Processing activity:', { status: activity.status, type: activity.type, hasReview: !!activity.review_text });
+      console.log('[Feed Frontend] Review data:', { review_id: activity.review_id, review_text_len: String(activity.review_text || '').length, review_rating: activity.review_rating });
+      console.log('[Feed Frontend] Book data:', { id: activity.book?.id, title: activity.book?.title, cover_url: activity.book?.cover_url });
+
+      const bookCoverUrl = normalizeCoverUrl(activity.book.cover_url);
+      console.log('[Feed Frontend] Cover URL after normalize:', { before: activity.book?.cover_url, after: bookCoverUrl });
+
+      return {
+        id: `activity_${activity.session_id}_${idx}`,
+        type: 'activity',
+        actorId: activity.actor_id ? String(activity.actor_id) : undefined,
+        time: formatRelativeTime(activity.timestamp || undefined),
+        user: activity.actor_name,
+        avatar_url: activity.actor_avatar,
+        loc: 'Komunitas Pustara',
+        action:
+          activity.status === 'finished'
+            ? 'selesai membaca'
+            : activity.status === 'wishlist'
+              ? 'menyimpan ke wishlist'
+              : activity.status === 'review'
+                ? 'memberikan ulasan'
+                : 'sedang membaca',
+        rating: activity.status === 'review' ? activity.review_rating : undefined,
+        reviewId: activity.status === 'review' ? activity.review_id : undefined,
+        bookKey: activity.book.id,
+        bookTitle: stripCoverLeakText(activity.book.title || 'Tanpa Judul'),
+        bookAuthor: stripCoverLeakText(Array.isArray(activity.book.authors) ? activity.book.authors.join(', ') : String(activity.book.authors || '')),
+        bookCoverUrl: bookCoverUrl,
+        reviewText:
+          activity.status === 'finished'
+            ? 'Menyelesaikan bacaan terbaru di Pustara.'
+            : activity.status === 'wishlist'
+              ? 'Menambahkan buku ini ke wishlist.'
+              : activity.status === 'review'
+                ? (activity.review_text || '')
+                : `Progress membaca ${Math.round(activity.progress_percentage)}%.`,
+      } as FeedItem;
+    });
   } catch (error) {
-    console.error('Error fetching feed activities:', error);
+    console.error('[Feed Frontend] Error fetching feed activities:', error);
     return [];
   }
 }
 
 export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
   try {
-    const [profile, feedResponse, recoResponse, shelfData] = await Promise.all([
+    const [profileResult, feedResult, recoResult, shelfResult] = await Promise.allSettled([
       getMyProfile(),
       apiGet<BackendActivityResponse>('/feed/me/activity?limit=60'),
       apiGet<BackendRecommendationsResponse>('/feed/me/recommendations?limit=3'),
       fetchShelfData(),
     ]);
+
+    const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+    const feedResponse = feedResult.status === 'fulfilled' ? feedResult.value : { activities: [] };
+    const recoResponse = recoResult.status === 'fulfilled' ? recoResult.value : { users: [] };
+    const shelfData = shelfResult.status === 'fulfilled' ? shelfResult.value : null;
+
+    if (profileResult.status === 'rejected') {
+      console.warn('Error fetching sidebar profile payload:', profileResult.reason);
+    }
+    if (feedResult.status === 'rejected') {
+      console.warn('Error fetching sidebar activity payload:', feedResult.reason);
+    }
+    if (recoResult.status === 'rejected') {
+      console.warn('Error fetching sidebar recommendation payload:', recoResult.reason);
+    }
+    if (shelfResult.status === 'rejected') {
+      console.warn('Error fetching sidebar shelf payload:', shelfResult.reason);
+    }
 
     const name = profile?.name || 'Pembaca Pustara';
     const initials = toInitials(name);
@@ -263,13 +331,17 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
     const activityReadingCount = feedResponse.activities.filter(a => isReadingStatus(a.status)).length;
     const readingCount = Math.max(0, shelfBorrowedCount || profileReadingCount || activityReadingCount);
 
+    const shelfFinishedCount = Number(shelfData?.stats?.total_read ?? 0);
     const profileFinishedCount = Number(profile?.total_read ?? 0);
     const activityFinishedCount = feedResponse.activities.filter(a => a.status === 'finished').length;
-    const finishedCount = Math.max(0, profileFinishedCount || activityFinishedCount);
+    const finishedCount = Math.max(0, shelfFinishedCount || profileFinishedCount || activityFinishedCount);
 
     const profileStreak = Number(profile?.reading_streak ?? 0);
-    const computedStreak = calcStreakFromActivities(feedResponse.activities);
-    const streak = Math.max(0, profileStreak, computedStreak);
+    const streak = Math.max(0, profileStreak);
+    const streakTooltip = buildStreakTooltip(profile ?? {});
+    const borrowedTooltip = shelfData?.stats?.total_overdue
+      ? `Aktif ${readingCount} buku\nOverdue ${Number(shelfData.stats.total_overdue || 0)} buku dipindah ke riwayat`
+      : `Aktif ${readingCount} buku`;
 
     // Map recent reads from activities
     const recentReads = feedResponse.activities
@@ -288,9 +360,12 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
         initials,
         name,
         subtitle: pickProfileSubtitle(profile),
+        avatar_url: profile?.avatar_url || null,
         dipinjam: readingCount,
         streak,
         selesai: finishedCount,
+        borrowed_tooltip: borrowedTooltip,
+        streak_tooltip: streakTooltip,
       },
       recentReads,
       suggestions: recoResponse.users.map((user) => ({
@@ -298,7 +373,7 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
         name: user.name,
         loc: user.bio || 'Komunitas Pustara',
         books: user.books_count,
-        avatar: toInitials(user.name).charAt(0),
+        avatar_url: user.avatar || null,
       })).slice(0, 5),
     };
   } catch (error) {
@@ -308,9 +383,12 @@ export async function fetchFeedSidebarPayload(): Promise<FeedSidebarPayload> {
         initials: 'P',
         name: 'Pembaca Pustara',
         subtitle: 'Pembaca aktif',
+        avatar_url: null,
         dipinjam: 0,
         streak: 0,
         selesai: 0,
+        borrowed_tooltip: 'Aktif 0 buku',
+        streak_tooltip: 'Streak aktif: 0 hari',
       },
       recentReads: [],
       suggestions: [],

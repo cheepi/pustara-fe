@@ -11,6 +11,12 @@ export interface UserBookSummary extends Pick<BookDetail, 'id' | 'title' | 'auth
   reading_session?: ReadingSession;
 }
 
+export interface GenreStat {
+  genre: string;
+  count: number;
+  pct: number;
+}
+
 /**
  * Complete user profile with related data
  */
@@ -26,6 +32,12 @@ export interface UserProfile {
   preferred_genres: string[];
   total_read: number;
   reading_streak: number;
+  streak_is_active?: boolean;
+  streak_last_length?: number;
+  streak_last_active_day?: string | null;
+  streak_last_start_day?: string | null;
+  streak_last_end_day?: string | null;
+  streak_reset_day?: string | null;
   created_at: string | null;
   updated_at?: string | null;
   followers_count: number;
@@ -36,8 +48,8 @@ export interface UserProfile {
   stats?: {
     total_read: number;
     reading_streak: number;
-    borrowed_books: number;
     reviews_written: number;
+    favorite_genres?: GenreStat[];
   };
 }
 
@@ -46,6 +58,7 @@ export interface UserProfile {
  */
 export interface RecommendedUser {
   id: string;
+  firebase_uid?: string | null;
   username: string | null;
   display_name: string | null;
   // Backward-compat alias because some cards still render `name`.
@@ -55,6 +68,7 @@ export interface RecommendedUser {
   preferred_genres: string[];
   followers_count: number;
   total_read: number;
+  reviews_written?: number;
   reading_streak: number;
   is_following: boolean;
 }

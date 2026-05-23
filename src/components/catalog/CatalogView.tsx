@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Sun, Moon, Medal, TrendingUp, X, SearchX, Sparkles } from 'lucide-react';
+import { Search, Sun, Moon, Medal, TrendingUp, X, SearchX, Sparkles, BookOpen, ArrowRight, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import { CTASection } from './CTASection';
@@ -12,7 +12,6 @@ import Link from 'next/link';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
 import { useGenreShelves } from '@/hooks/useGenreShelves';
 import { fetchBrowseBooks, fetchTopPustakrew } from '@/lib/browse';
-import { BROWSE_POPULAR_BOOKS } from '@/data/browseFallback';
 import type { BrowseBook } from '@/types/browse';
 
 // ── Types & constants ──────────────────────────────────────────────────────────
@@ -41,21 +40,78 @@ export default function CatalogView() {
     shelves: genreShelves,
     loading: genreShelvesLoading,
     error: genreShelvesError,
-  } = useGenreShelves({ targetGenres: ['Coming-of-age', 'Misteri', 'Drama', 'Fiksi', 'Sejarah', 'Romance', 'Non-fiksi'], booksLimit: 10 });
-  const popularFallbackBooks: PopularBook[] = BROWSE_POPULAR_BOOKS.map((b) => ({
-    key: b.key,
-    title: b.title,
-    author: b.author,
-    coverUrl: b.coverUrl,
-    coverId: b.coverId,
-    genre: b.genres,
-    desc: b.desc,
-    year: b.year ? String(b.year) : '',
-    pages: b.pages,
-    avgRating: b.rating,
-  }));
-  const popularBooksForCarousel = popularBooks.length > 0 ? popularBooks : popularFallbackBooks;
+  } = useGenreShelves({ targetGenres: ['Misteri', 'Fiksi', 'Non-fiksi'], booksLimit: 13 });
+  const popularBooksForCarousel = popularBooks;
   
+  const [recentBooks, setRecentBooks] = useState<{
+    book_id: string; key: string; title: string; author: string;
+    genre: string; rating: number; cover_url: string | null; description: string;
+  }[]>([]);
+  const [recentLoading, setRecentLoading] = useState(true);
+
+  const [stats, setStats] = useState({
+    totalBooks: 10000,
+    readers: 50000,
+    rating: 4.8,
+  });
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadStats() {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+      const base = apiBase.replace(/\/$/, '');
+
+      try {
+        const [booksRes, communityRes, recentRes] = await Promise.all([
+          fetch(`${base}/books?limit=1`),
+          fetch(`${base}/reviews/stats`),
+          fetch(`${base}/books/recent?limit=20`),
+        ]);
+
+        const booksJson = booksRes.ok ? await booksRes.json() : null;
+        const communityJson = communityRes.ok ? await communityRes.json() : null;
+        const recentJson = recentRes.ok ? await recentRes.json() : null;
+
+        if (!active) return;
+
+        const totalBooks = Number(
+          booksJson?.pagination?.total
+          ?? booksJson?.pagination?.total_items
+          ?? booksJson?.data?.length
+          ?? 0
+        );
+        const readers = Number(
+          communityJson?.data?.raw?.total_readers
+          ?? communityJson?.data?.readers
+          ?? 0
+        );
+        const recentBooks = Array.isArray(recentJson?.data) ? recentJson.data : [];
+        const ratingValues = recentBooks
+          .map((book: Record<string, unknown>) => Number(book.avg_rating ?? book.rating ?? 0))
+          .filter((value: number) => Number.isFinite(value) && value > 0);
+        const rating = ratingValues.length > 0
+          ? ratingValues.reduce((sum: number, value: number) => sum + value, 0) / ratingValues.length
+          : 0;
+
+        setStats((current) => ({
+          totalBooks: totalBooks > 0 ? totalBooks : current.totalBooks,
+          readers: readers > 0 ? readers : current.readers,
+          rating: rating > 0 ? Number(rating.toFixed(1)) : current.rating,
+        }));
+      } catch {
+        // Keep fallback values if public stats endpoints are unavailable.
+      }
+    }
+
+    void loadStats();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+
   // ── Token classes ──
   const tk = {
     text:     dark ? 'text-white'       : 'text-navy-900',
@@ -77,6 +133,35 @@ export default function CatalogView() {
   // ── Load top3 on mount ──
   useEffect(() => {
     fetchTopPustakrew(3).then(setTop3).catch(() => setTop3([]));
+  }, []);
+  
+  useEffect(() => {
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+    if (!apiBase) { setRecentLoading(false); return; }
+    let active = true;
+    fetch(`${apiBase.replace(/\/$/, '')}/books/recent?limit=4`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(json => {
+        if (!active) return;
+        const raw = Array.isArray(json) ? json : json?.data ?? [];
+        setRecentBooks(raw.map((b: Record<string, unknown>) => ({
+          book_id: String(b.book_id ?? b.id ?? ''),
+          key: String(b.key ?? b.book_id ?? b.id ?? ''),
+          title: String(b.title ?? ''),
+          author: Array.isArray(b.authors)
+            ? b.authors.map(String).join(', ')
+            : String(b.author ?? b.authors ?? ''),
+          genre: Array.isArray(b.genres)
+            ? b.genres.map(String).filter(Boolean)[0] ?? '-'
+            : String(b.genre ?? b.genres ?? '-').split(',')[0].trim(),
+          rating: Number(b.rating ?? b.avg_rating ?? 0),
+          cover_url: b.cover_url ? String(b.cover_url) : null,
+          description: String(b.description ?? ''),
+        })));
+      })
+      .catch(() => { if (active) setRecentBooks([]); })
+      .finally(() => { if (active) setRecentLoading(false); });
+    return () => { active = false; };
   }, []);
 
   // ── Debounced search ──
@@ -161,13 +246,18 @@ export default function CatalogView() {
               </Link>
             </motion.div>
 
-            {/* Stats */}
             <motion.div className="flex gap-5"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
-              {[['10K+', 'Judul Buku'], ['500+', 'Penulis'], ['50K+', 'Pembaca']].map(([v, l]) => (
-                <div key={l}>
-                  <p className="font-serif text-xl font-black text-gold">{v}</p>
-                  <p className={cn('text-[11px] mt-0.5', tk.muted)}>{l}</p>
+              {[
+                [stats.totalBooks, 'Judul Buku'],
+                [stats.readers, 'Pembaca'],
+                [stats.rating, 'Rating'],
+              ].map(([value, label]) => (
+                <div key={label}>
+                  <div className="font-serif text-2xl font-black text-gold">
+                    {typeof value === 'number' && value < 100 ? value.toFixed(label === 'Rating' ? 1 : 0) : Number(value).toLocaleString('id-ID')}{label === 'Rating' ? '' : '+'}
+                  </div>
+                  <div className={cn('text-[11px] mt-0.5', tk.muted)}>{label}</div>
                 </div>
               ))}
             </motion.div>
@@ -331,6 +421,309 @@ export default function CatalogView() {
         />
       </section>
 
+      {!recentLoading && recentBooks.length > 0 && (
+        <section className="max-w-7xl mx-auto px-4 mt-16 mb-[-86px]" id="recent">
+
+          {/* Section header */}
+          <div className="flex flex-col items-center text-center mb-14">
+            <motion.p
+              className="text-gold text-xs tracking-[0.3em] uppercase font-semibold mb-4 flex items-center gap-2"
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.5 }}
+            >
+              <Sparkles className="w-3 h-3" />
+              Koleksi Terbaru
+            </motion.p>
+            <motion.h3
+              className={cn('font-serif text-4xl md:text-6xl font-black leading-none', tk.text)}
+              initial={{ opacity: 0, y: 16, filter: 'blur(8px)' }}
+              whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            >
+              Baru Ditambahkan
+            </motion.h3>
+          </div>
+
+          {/* Cards */}
+          <div className="flex flex-col">
+            {recentBooks.map((book, index) => {
+              const isEven = index % 2 === 0;
+              return (
+                <div
+                  key={book.book_id}
+                  className={cn(
+                    'relative flex flex-col items-center gap-8',
+                    'md:flex-row md:items-center md:gap-0',
+                    !isEven && 'md:flex-row-reverse',
+                    'min-h-[60vh] py-12 md:py-20 group',
+                    index < recentBooks.length - 1 && 'border-b',
+                  )}
+                  style={{ borderColor: dark ? 'rgba(255,255,255,0.05)' : 'rgba(13,24,41,0.07)' }}
+                >
+                  {/* Giant watermark number */}
+                  <motion.div
+                    className={cn(
+                      'absolute leading-none select-none pointer-events-none z-0 font-serif font-black',
+                      'text-[10rem] md:text-[22rem]',
+                      isEven ? 'left-0' : 'right-0',
+                    )}
+                    style={{ color: dark ? 'rgba(255,255,255,0.025)' : 'rgba(13,24,41,0.04)' }}
+                    initial={{ opacity: 0, scale: 0.85 }}
+                    whileInView={{ opacity: 1, scale: 1 }}
+                    viewport={{ once: true, margin: '-10%' }}
+                    transition={{ duration: 1.4, ease: 'easeOut' }}
+                  >
+                    {String(index + 1).padStart(2, '0')}
+                  </motion.div>
+
+                  {/* Cover */}
+                  <div className={cn(
+                    'w-full md:w-1/2 flex z-10',
+                    isEven ? 'justify-center md:justify-end md:pr-12' : 'justify-center md:justify-start md:pl-12',
+                  )}>
+                    <motion.div
+                      className="relative w-full max-w-[240px] md:w-[300px] aspect-[2/3] rounded-2xl overflow-hidden"
+                      style={{
+                        boxShadow: dark
+                          ? '0 20px 60px rgba(0,0,0,0.5)'
+                          : '0 20px 60px rgba(13,24,41,0.15)',
+                        border: '1px solid var(--border)',
+                      }}
+                      initial={{ clipPath: 'inset(100% 0 0 0)' }}
+                      whileInView={{ clipPath: 'inset(0% 0 0 0)' }}
+                      viewport={{ once: true, margin: '-15%' }}
+                      transition={{ duration: 1.1, ease: [0.16, 1, 0.3, 1] }}
+                    >
+                      <motion.div
+                        className="absolute inset-0"
+                        initial={{ scale: 1.3 }}
+                        whileInView={{ scale: 1 }}
+                        viewport={{ once: true, margin: '-15%' }}
+                        transition={{ duration: 1.5, ease: [0.16, 1, 0.3, 1] }}
+                      >
+                        {book.cover_url ? (
+                          <img
+                            src={book.cover_url}
+                            alt={book.title}
+                            className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div
+                            className="w-full h-full flex items-center justify-center"
+                            style={{ background: dark ? '#172944' : '#e8e2d6' }}
+                          >
+                            <BookOpen className="w-12 h-12 opacity-20 text-gold" />
+                          </div>
+                        )}
+                      </motion.div>
+                      {/* Spine shadow */}
+                      <div
+                        className={cn('absolute inset-y-0 w-6 z-10 pointer-events-none', isEven ? 'left-0' : 'right-0')}
+                        style={{
+                          background: isEven
+                            ? `linear-gradient(to right, ${dark ? 'rgba(13,24,41,0.5)' : 'rgba(13,24,41,0.12)'}, transparent)`
+                            : `linear-gradient(to left, ${dark ? 'rgba(13,24,41,0.5)' : 'rgba(13,24,41,0.12)'}, transparent)`,
+                        }}
+                      />
+                    </motion.div>
+                  </div>
+
+                  {/* Text content */}
+                  <motion.div
+                    className={cn(
+                      'w-full md:w-1/2 flex flex-col z-20 px-4 md:px-0',
+                      isEven
+                        ? 'items-center text-center md:items-start md:text-left md:-ml-8'
+                        : 'items-center text-center md:items-end md:text-right md:-mr-8',
+                    )}
+                    initial="hidden"
+                    whileInView="visible"
+                    viewport={{ once: true, margin: '-15%' }}
+                    variants={{
+                      hidden: {},
+                      visible: { transition: { staggerChildren: 0.12, delayChildren: 0.2 } },
+                    }}
+                  >
+                    {/* Genre pill */}
+                    <motion.span
+                      className="text-[11px] uppercase tracking-[0.18em] font-semibold px-3.5 py-1.5 rounded-full mb-5"
+                      style={{
+                        background: 'rgba(201,168,76,0.1)',
+                        color: '#C9A84C',
+                        border: '1px solid rgba(201,168,76,0.25)',
+                      }}
+                      variants={{
+                        hidden: { opacity: 0, y: 20, filter: 'blur(6px)' },
+                        visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } },
+                      }}
+                    >
+                      {book.genre}
+                    </motion.span>
+
+                    {/* Title */}
+                    <motion.h3
+                      className={cn('font-serif font-black leading-[1.05] mb-2', tk.text)}
+                      style={{ fontSize: 'clamp(2.2rem, 5vw, 4rem)' }}
+                      variants={{
+                        hidden: { opacity: 0, y: 30, filter: 'blur(8px)' },
+                        visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.9, ease: [0.16, 1, 0.3, 1] } },
+                      }}
+                    >
+                      {book.title}
+                    </motion.h3>
+
+                    {/* Author */}
+                    <motion.p
+                      className="font-serif italic text-xl md:text-2xl mb-6"
+                      style={{ color: '#E2C06A' }}
+                      variants={{
+                        hidden: { opacity: 0, y: 20, filter: 'blur(6px)' },
+                        visible: { opacity: 1, y: 0, filter: 'blur(0px)', transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } },
+                      }}
+                    >
+                      {book.author}
+                    </motion.p>
+
+                    <motion.div
+                      className={cn('w-full max-w-sm', !isEven && 'md:ml-auto')}
+                      variants={{
+                        hidden: { opacity: 0, y: 16 },
+                        visible: { opacity: 1, y: 0, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } },
+                      }}
+                    >
+                      {/* Description */}
+                      <p className={cn('text-sm leading-relaxed mb-6', tk.muted)}>
+                        {book.description}
+                      </p>
+
+                      {/* Rating + CTA */}
+                      <div className={cn(
+                        'flex items-center justify-center gap-3',
+                        !isEven && 'md:justify-end',
+                      )}>
+                        <div
+                          className="flex items-center gap-1.5 px-3.5 py-2 rounded-full"
+                          style={{
+                            background: dark ? 'rgba(255,255,255,0.05)' : 'rgba(13,24,41,0.06)',
+                            border: '1px solid var(--border)',
+                          }}
+                        >
+                          <Star className="w-3.5 h-3.5 text-gold fill-gold" />
+                          <span className={cn('font-bold text-sm', tk.text)}>
+                            {book.rating.toFixed(1)}
+                          </span>
+                        </div>
+                        <Link
+                          href={`/book/${book.key}`}
+                          className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-semibold transition-all hover:opacity-90 hover:-translate-y-0.5"
+                          style={{ background: '#C9A84C', color: '#1a1000' }}
+                        >
+                          Lihat Detail
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </Link>
+                      </div>
+                    </motion.div>
+                  </motion.div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Fan CTA ending */}
+          <div className="relative flex flex-col items-center py-20 mt-4 border-t"
+            style={{ borderColor: dark ? 'rgba(255,255,255,0.06)' : 'rgba(13,24,41,0.08)' }}>
+
+            <motion.div
+              className="text-center mb-14 relative z-10"
+              initial={{ opacity: 0, y: 16 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+            >
+              <h3 className={cn('font-serif text-3xl md:text-5xl italic font-bold mb-2', tk.text)}>
+                Masih banyak lagi.
+              </h3>
+              <p className={cn('text-xs uppercase tracking-widest font-semibold', tk.muted)}>
+                Eksplorasi ratusan judul di Pustara
+              </p>
+            </motion.div>
+
+            {/* Fan of covers */}
+            <motion.div
+              className="relative w-full max-w-[600px] h-[220px] flex items-center justify-center mb-12"
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: '-10%' }}
+            >
+              {/* Glow */}
+              <div
+                className="absolute inset-0 rounded-full pointer-events-none"
+                style={{ background: 'radial-gradient(ellipse, rgba(201,168,76,0.12) 0%, transparent 70%)', filter: 'blur(30px)' }}
+              />
+              {[
+                { xOff: -160, yOff: 40,  rot: -28, opacity: 0.3, scale: 0.72, grayscale: true,  delay: 0,    coverIdx: 1 },
+                { xOff: -80,  yOff: 10,  rot: -14, opacity: 0.6, scale: 0.85, grayscale: false, delay: 0.08, coverIdx: 2 },
+                { xOff:  80,  yOff: 10,  rot:  14, opacity: 0.6, scale: 0.85, grayscale: false, delay: 0.16, coverIdx: 0 },
+                { xOff:  160, yOff: 40,  rot:  28, opacity: 0.3, scale: 0.72, grayscale: true,  delay: 0.24, coverIdx: 3 },
+                { xOff:  0,   yOff: -12, rot:  0,  opacity: 1.0, scale: 1.0,  grayscale: false, delay: 0.32, coverIdx: 0 },
+              ].map((card, i) => {
+                const src = recentBooks[card.coverIdx % recentBooks.length]?.cover_url;
+                const isFront = i === 4;
+                return (
+                  <motion.div
+                    key={i}
+                    className="absolute rounded-xl overflow-hidden"
+                    style={{
+                      width: isFront ? 130 : 110,
+                      aspectRatio: '2/3',
+                      border: isFront
+                        ? '1px solid rgba(201,168,76,0.4)'
+                        : '1px solid var(--border)',
+                      boxShadow: isFront
+                        ? '0 20px 50px rgba(0,0,0,0.4)'
+                        : '0 8px 24px rgba(0,0,0,0.25)',
+                      zIndex: i,
+                    }}
+                    variants={{
+                      hidden: { opacity: 0, y: 80, x: 0, rotate: 0, scale: 0.8 },
+                      visible: {
+                        opacity: card.opacity,
+                        y: card.yOff,
+                        x: card.xOff,
+                        rotate: card.rot,
+                        scale: card.scale,
+                        transition: { type: 'spring', bounce: 0.35, duration: 1.2, delay: card.delay },
+                      },
+                    }}
+                  >
+                    {src ? (
+                      <img
+                        src={src}
+                        alt=""
+                        className="w-full h-full object-cover"
+                        style={{ filter: card.grayscale ? 'grayscale(1)' : 'none' }}
+                      />
+                    ) : (
+                      <div style={{ background: dark ? '#172944' : '#e8e2d6', width: '100%', height: '100%' }} />
+                    )}
+                    {!isFront && (
+                      <div
+                        className="absolute inset-0"
+                        style={{ background: dark ? 'rgba(13,24,41,0.45)' : 'rgba(255,255,255,0.4)' }}
+                      />
+                    )}
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+
+          </div>
+        </section>
+      )}
+  
       {/* ══════════════════════════════════════════
           CTA SECTION 
       ══════════════════════════════════════════ */}

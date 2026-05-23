@@ -12,12 +12,19 @@ export interface BrowseBook {
   pages?: number;
   desc?: string;
   coverId?: number;
-  isbn?: string | number;
+  ratingCount?: number;
+  reviewCount?: number;
+  readerCount?: number;
+  borrowCount?: number;
+  readingSessionCount?: number;
+  totalReadingMinutes?: number;
+  popularityScore?: number;
+  lastActivityAt?: string;
 }
 
 export interface FriendActivityItem {
   user: string;
-  avatar: string;
+  avatar_url: string | null;
   action: string;
   book: string;
   coverUrl: string;

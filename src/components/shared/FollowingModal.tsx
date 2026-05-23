@@ -1,12 +1,15 @@
 'use client';
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Search, UserCheck, UserPlus, BookOpen, Users
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme/ThemeProvider';
+import AvatarImage from '@/components/shared/AvatarImage';
 import type { RecommendedUser } from '@/types/user';
+import { searchUsers } from '@/lib/users';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type ModalTab = 'following' | 'followers' | 'suggestions';
@@ -14,12 +17,14 @@ type ModalTab = 'following' | 'followers' | 'suggestions';
 interface ModalUser {
   id: string;
   name: string;
-  avatar: string;
+  avatar_url: string | null;
   bio: string;
   books: number;
   genres: string[];
   followersCount: number;
   username: string;
+  is_following?: boolean;
+  originalUser?: RecommendedUser;
 }
 
 function toModalUser(u: RecommendedUser): ModalUser {
@@ -27,12 +32,14 @@ function toModalUser(u: RecommendedUser): ModalUser {
   return {
     id: u.id,
     name: displayName,
-    avatar: displayName.charAt(0).toUpperCase() || 'P',
+    avatar_url: u.avatar_url || null,
     bio: u.bio || 'Pembaca aktif di komunitas Pustara.',
     books: Number(u.total_read ?? 0),
     genres: Array.isArray(u.preferred_genres) ? u.preferred_genres.slice(0, 3) : [],
     followersCount: Number(u.followers_count ?? 0),
     username: u.username || 'pustara_user',
+    is_following: Boolean(u.is_following),
+    originalUser: u,
   };
 }
 
@@ -63,6 +70,8 @@ export default function FollowingModal({
 
   const [tab,    setTab]    = useState<ModalTab>(initialTab);
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<RecommendedUser[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
   const tabs = [
     { id: 'following', label: 'Mengikuti', count: followingUsers.length },
@@ -75,6 +84,8 @@ export default function FollowingModal({
     if (open) {
       setTab(initialTab);
       setSearch('');
+      setSearchResults([]);
+      setSearchLoading(false);
     }
   }, [open, initialTab]);
 
@@ -85,19 +96,46 @@ export default function FollowingModal({
     return () => { document.body.style.overflow = ''; };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+
+    const query = search.trim();
+    if (query.length < 2) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    let active = true;
+    setSearchLoading(true);
+
+    const timer = window.setTimeout(() => {
+      searchUsers(query, 20)
+        .then((results) => {
+          if (!active) return;
+          setSearchResults(results);
+        })
+        .finally(() => {
+          if (active) setSearchLoading(false);
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [open, search]);
+
   const source = tab === 'following' ? followingUsers : tab === 'followers' ? followerUsers : suggestionUsers;
-  const filtered = source.filter(u => {
-    const name = (u.display_name || u.name || u.username || '').toLowerCase();
-    const username = String(u.username || '').toLowerCase();
-    return !search || name.includes(search.toLowerCase()) || username.includes(search.toLowerCase());
-  })
-    .map(toModalUser);
+  const sourceUsers = search.trim().length >= 2 ? searchResults : source;
+  const filtered = sourceUsers.map(toModalUser);
 
   const followingSet = new Set(followingUsers.map((u) => u.id));
   const followerMap = new Map(followerUsers.map((u) => [u.id, u]));
   const suggestionMap = new Map(suggestionUsers.map((u) => [u.id, u]));
 
   function resolveOriginalUser(user: ModalUser): RecommendedUser | null {
+    if (user.originalUser) return user.originalUser;
     const fromFollower = followerMap.get(user.id);
     if (fromFollower) return fromFollower;
     const fromSuggestion = suggestionMap.get(user.id);
@@ -106,6 +144,7 @@ export default function FollowingModal({
   }
 
   function isFollowing(user: ModalUser): boolean {
+    if (search.trim().length >= 2) return Boolean(user.is_following);
     if (tab === 'following') return true;
     const original = resolveOriginalUser(user);
     return original ? Boolean(original.is_following) : followingSet.has(user.id);
@@ -119,9 +158,7 @@ export default function FollowingModal({
       ? 'Belum ada pengikut.'
       : 'Belum ada saran pengguna.';
 
-  const filteredWithSearch = filtered.filter((u) =>
-    !search || u.name.toLowerCase().includes(search.toLowerCase()) || u.username.toLowerCase().includes(search.toLowerCase())
-  );
+  const hasSearch = search.trim().length >= 2;
 
   const tk = {
     text:    isLight ? 'text-navy-900'  : 'text-white',
@@ -201,20 +238,24 @@ export default function FollowingModal({
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Cari nama atau kota..."
+                placeholder="Cari nama atau username..."
                 className={cn('w-full pl-10 pr-4 py-2.5 border rounded-2xl text-sm outline-none transition-all', tk.input)}
               />
             </div>
 
             {/* List — scrollable */}
             <div className="overflow-y-auto flex-1 px-5 pb-6">
-              {filteredWithSearch.length === 0 ? (
+              {hasSearch && searchLoading ? (
                 <div className={cn('text-center py-12 text-sm', tk.muted)}>
-                  {search ? `Tidak ada hasil untuk "${search}"` : emptyLabel}
+                  Mencari pengguna...
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className={cn('text-center py-12 text-sm', tk.muted)}>
+                  {hasSearch ? `Tidak ada hasil untuk "${search.trim()}"` : emptyLabel}
                 </div>
               ) : (
                 <div className="flex flex-col gap-2.5">
-                  {filteredWithSearch.map((u, i) => {
+                  {filtered.map((u, i) => {
                     const followed = isFollowing(u);
                     const pending = pendingSet.has(u.id);
                     const original = resolveOriginalUser(u);
@@ -228,9 +269,15 @@ export default function FollowingModal({
 
                         <div className="flex items-start gap-3">
                           {/* Avatar */}
-                          <div className="w-11 h-11 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-base text-gold flex-shrink-0">
-                            {u.avatar}
-                          </div>
+                          <Link href={`/profile/@${u.username || u.id}`} className="flex-shrink-0" title={`Buka profil ${u.name}`}>
+                            <AvatarImage
+                              src={u.avatar_url}
+                              alt={u.name}
+                              initials={u.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+                              size="md"
+                              className="w-11 h-11"
+                            />
+                          </Link>
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
@@ -241,10 +288,11 @@ export default function FollowingModal({
 
                               {/* Follow button */}
                               <motion.button
-                                disabled={pending || !original || !onToggleFollow}
+                                disabled={pending || (!original && !u.originalUser) || !onToggleFollow}
                                 onClick={() => {
-                                  if (!original || !onToggleFollow) return;
-                                  onToggleFollow(original);
+                                  const target = original || u.originalUser;
+                                  if (!target || !onToggleFollow) return;
+                                  onToggleFollow(target);
                                 }}
                                 className={cn(
                                   'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all flex-shrink-0 disabled:opacity-60',

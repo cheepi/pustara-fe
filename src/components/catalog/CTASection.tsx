@@ -9,7 +9,7 @@ import Typewriter from '@/components/shared/Typewriter';
 // ─── Seamless Marquee — pure CSS, zero visible seam ───────────────────────────
 const MARQUEE_ITEMS = [
   '📚 Rak Buku Pribadi', '✨ Rekomendasi AI', '💬 Komunitas Pembaca',
-  '🔖 Bookmark & Catatan', '🏆 Reading Challenge', '📖 10.000+ Judul',
+  '🔖 Bookmark & Catatan', '🏆 Reading Challenge',
   '🌙 Mode Gelap', '📱 Tersedia di Mobile', '⭐ Rating & Ulasan',
   '🔥 Trending Mingguan', '🎯 Personalisasi Penuh', '💡 Diskusi Buku',
 ];
@@ -148,10 +148,63 @@ export function CTASection({ dark: _dark, isLight }: { dark?: boolean; isLight?:
   const dark = _dark ?? !isLight;
   const sectionRef = useRef<HTMLElement>(null);
   const inView = useInView(sectionRef, { once: true, margin: '-60px' });
+  const [stats, setStats] = useState({
+    totalBooks: 10000,
+    readers: 2400,
+    rating: 4.8,
+  });
 
   const card = dark ? 'bg-white/[0.04] border-white/10' : 'bg-white border-navy-200/60';
   const text = dark ? 'text-white' : 'text-navy-900';
   const sub  = dark ? 'text-white/50' : 'text-slate-500';
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadStats() {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
+      if (!apiBase) return;
+
+      try {
+        const base = apiBase.replace(/\/$/, '');
+        const [booksRes, communityRes, recentRes] = await Promise.all([
+          fetch(`${base}/books?limit=1`),
+          fetch(`${base}/reviews/stats`),
+          fetch(`${base}/books/recent?limit=20`),
+        ]);
+
+        const booksJson = booksRes.ok ? await booksRes.json() : null;
+        const communityJson = communityRes.ok ? await communityRes.json() : null;
+        const recentJson = recentRes.ok ? await recentRes.json() : null;
+
+        if (!active) return;
+
+        const totalBooks = Number(booksJson?.pagination?.total ?? booksJson?.pagination?.total_items ?? booksJson?.data?.length ?? 0);
+        const readers = Number(communityJson?.data?.raw?.total_readers ?? communityJson?.data?.readers ?? 0);
+        const recentBooks = Array.isArray(recentJson?.data) ? recentJson.data : [];
+        const ratingValues = recentBooks
+          .map((book: Record<string, unknown>) => Number(book.avg_rating ?? book.rating ?? 0))
+          .filter((value: number) => Number.isFinite(value) && value > 0);
+        const rating = ratingValues.length > 0
+          ? ratingValues.reduce((sum: number, value: number) => sum + value, 0) / ratingValues.length
+          : 0;
+
+        setStats((current) => ({
+          totalBooks: totalBooks > 0 ? totalBooks : current.totalBooks,
+          readers: readers > 0 ? readers : current.readers,
+          rating: rating > 0 ? Number(rating.toFixed(1)) : current.rating,
+        }));
+      } catch {
+        // Keep fallback values when public endpoints are unavailable.
+      }
+    }
+
+    void loadStats();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <section ref={sectionRef} className="max-w-7xl mx-auto px-4 mt-6 pb-16 overflow-hidden">
@@ -222,9 +275,9 @@ export function CTASection({ dark: _dark, isLight }: { dark?: boolean; isLight?:
               <motion.div className="flex gap-6 mt-8"
                 initial={{ opacity: 0 }} animate={inView ? { opacity: 1 } : {}} transition={{ delay: 0.6 }}>
                 {[
-                  { icon: BookOpen, val: 10000, suffix: '+',  label: 'Judul'    },
-                  { icon: Users,    val: 2400,  suffix: '+',  label: 'Pembaca'  },
-                  { icon: Zap,      val: 4.8,   suffix: '/5', label: 'Rating'   },
+                  { icon: BookOpen, val: stats.totalBooks, suffix: '+',  label: 'Judul'    },
+                  { icon: Users,    val: stats.readers,    suffix: '+',  label: 'Pembaca'  },
+                  { icon: Zap,      val: stats.rating,     suffix: '/5', label: 'Rating'   },
                 ].map(({ icon: Icon, val, suffix, label }) => (
                   <div key={label} className="flex items-center gap-2">
                     <Icon className="w-3.5 h-3.5 text-gold/60" />
@@ -245,10 +298,10 @@ export function CTASection({ dark: _dark, isLight }: { dark?: boolean; isLight?:
               <Terminal />
               <div className="grid grid-cols-2 gap-2.5 mt-3">
                 {[
-                  { emoji: '⚡', label: 'PustarAI',  desc: 'Rekomendasi personal'  },
-                  { emoji: '🔖', label: 'Rak Buku',  desc: 'Koleksi & wishlist'    },
-                  { emoji: '💬', label: 'Komunitas', desc: 'Diskusi & ulasan'      },
-                  { emoji: '🏆', label: 'Challenge', desc: 'Reading goals tahunan' },
+                    { emoji: '⚡', label: 'PustarAI',  desc: 'Rekomendasi personal'  },
+                    { emoji: '🔖', label: 'Rak Buku',  desc: 'Koleksi & wishlist'    },
+                    { emoji: '💬', label: 'Komunitas', desc: 'Diskusi & ulasan'      },
+                    { emoji: '🌌', label: 'Immersive UX', desc: 'Pengalaman yang imersif' },
                 ].map(({ emoji, label, desc }, i) => (
                   <motion.div key={label}
                     className={cn(

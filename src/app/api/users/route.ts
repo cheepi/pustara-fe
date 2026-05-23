@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${BACKEND_URL}/auth/users`, {
+    // Forward to /admin/users endpoint which requires admin role
+    const response = await fetch(`${BACKEND_URL}/admin/users`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -22,7 +23,11 @@ export async function GET(request: NextRequest) {
     });
 
     if (!response.ok) {
-      throw new Error('Failed to fetch users from backend');
+      const errorData = await response.json();
+      return NextResponse.json(
+        { success: false, error: errorData.error || 'Failed to fetch users' },
+        { status: response.status }
+      );
     }
 
     const data = await response.json();
@@ -35,3 +40,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

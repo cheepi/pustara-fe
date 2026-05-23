@@ -9,9 +9,15 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { useProtectedRoute } from '@/hooks/useProtectedRoute';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import type { NotificationItem } from '@/types/notifications';
-import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
-import { fetchNotifications } from '@/lib/notifications';
+import {
+  deleteNotification,
+  fetchNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  NOTIFICATIONS_CHANGED_EVENT,
+} from '@/lib/notifications';
 import { NotificationType } from '@/types/database';
+import AvatarImage from '@/components/shared/AvatarImage';
 
 const TABS = [
   { id: 'all',    label: 'Semua'    },
@@ -49,14 +55,77 @@ export default function NotificationsPage() {
   const { theme } = useTheme();
   const dark = theme === 'dark';
 
-  const [notifs, setNotifs] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [notifs, setNotifs] = useState<NotificationItem[]>([]);
   const [tab, setTab]       = useState('all');
+  const [loading, setLoading] = useState(true);
+
+  const tk = {
+    text:    dark ? 'text-white'      : 'text-navy-900',
+    muted:   dark ? 'text-slate-400'  : 'text-slate-500',
+    surface: dark ? 'bg-navy-800/60 border-white/8' : 'bg-white border-parchment-darker',
+    chip:    dark ? 'bg-navy-700/50 border-navy-500/60 text-slate-300' : 'bg-white border-parchment-darker text-slate-600',
+    chipAct: 'bg-gold/15 border-gold/40 text-gold',
+    unread:  dark ? 'bg-navy-700/80'  : 'bg-blue-50/60',
+  };
 
   useEffect(() => {
-    fetchNotifications().then(setNotifs).catch(() => setNotifs(INITIAL_NOTIFICATIONS));
+    let active = true;
+    fetchNotifications()
+      .then((items) => {
+        if (active) setNotifs(items);
+      })
+      .catch(() => {
+        if (active) setNotifs([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   if (!ready) return <PageSkeleton />;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
+        <Navbar />
+
+        <main className="max-w-2xl mx-auto px-4 pt-6 pb-20">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-9 h-9 rounded-xl animate-pulse" style={{ background: 'var(--surface2)' }} />
+            <div className="flex-1">
+              <div className="h-7 w-40 rounded animate-pulse" style={{ background: 'var(--surface2)' }} />
+              <div className="h-3 w-24 rounded mt-2 animate-pulse" style={{ background: 'var(--surface2)' }} />
+            </div>
+            <div className="h-9 w-28 rounded-xl animate-pulse" style={{ background: 'var(--surface2)' }} />
+          </div>
+
+          <div className="flex gap-2 mb-5 overflow-x-auto pb-1 scrollbar-none">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div
+                key={idx}
+                className="flex-shrink-0 h-10 w-24 rounded-xl animate-pulse"
+                style={{ background: 'var(--surface2)' }}
+              />
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: 5 }).map((_, idx) => (
+              <div
+                key={idx}
+                className={cn('h-24 rounded-2xl border animate-pulse', tk.surface)}
+                style={{ animationDelay: `${idx * 0.06}s` }}
+              />
+            ))}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   const unreadCount = notifs.filter(n => !n.read).length;
 
@@ -67,26 +136,40 @@ export default function NotificationsPage() {
     return true;
   });
 
-  function markAllRead() {
+  async function markAllRead() {
     setNotifs(ns => ns.map(n => ({ ...n, read: true })));
+    try {
+      await markAllNotificationsRead();
+      window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+    } catch {
+      fetchNotifications().then(setNotifs).catch(() => {});
+    }
   }
 
-  function markRead(id: string) {
+  async function markRead(id: string) {
     setNotifs(ns => ns.map(n => n.id === id ? { ...n, read: true } : n));
+    try {
+      await markNotificationRead(id);
+      window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+    } catch {
+      fetchNotifications().then(setNotifs).catch(() => {});
+    }
   }
 
-  function deleteNotif(id: string) {
+  async function deleteNotif(id: string) {
     setNotifs(ns => ns.filter(n => n.id !== id));
+    try {
+      await deleteNotification(id);
+      window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+    } catch {
+      fetchNotifications().then(setNotifs).catch(() => {});
+    }
   }
 
-  const tk = {
-    text:    dark ? 'text-white'      : 'text-navy-900',
-    muted:   dark ? 'text-slate-400'  : 'text-slate-500',
-    surface: dark ? 'bg-navy-800/60 border-white/8' : 'bg-white border-parchment-darker',
-    chip:    dark ? 'bg-navy-700/50 border-navy-500/60 text-slate-300' : 'bg-white border-parchment-darker text-slate-600',
-    chipAct: 'bg-gold/15 border-gold/40 text-gold',
-    unread:  dark ? 'bg-navy-700/80'  : 'bg-blue-50/60',
-  };
+  async function openNotif(n: NotificationItem) {
+    await markRead(n.id);
+    if (n.book_id) router.push(`/book/${n.book_id}`);
+  }
 
   return (
     <div className="min-h-screen transition-colors duration-300" style={{ background: 'var(--bg)' }}>
@@ -135,7 +218,15 @@ export default function NotificationsPage() {
 
         {/* List */}
         <AnimatePresence mode="popLayout">
-          {filtered.length === 0 ? (
+          {loading ? (
+            <motion.div key="loading"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col gap-2">
+              {Array.from({ length: 5 }).map((_, idx) => (
+                <div key={idx} className={cn('h-24 rounded-2xl border animate-pulse', tk.surface)} />
+              ))}
+            </motion.div>
+          ) : filtered.length === 0 ? (
             <motion.div key="empty"
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center py-24 text-center">
@@ -156,7 +247,7 @@ export default function NotificationsPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: 40, scale: 0.96 }}
                   transition={{ delay: idx * 0.03, type: 'spring', stiffness: 400, damping: 30 }}
-                  onClick={() => markRead(n.id)}
+                  onClick={() => openNotif(n)}
                   className={cn(
                     'group relative flex gap-3.5 p-4 rounded-2xl border cursor-pointer transition-all',
                     tk.surface,
@@ -171,8 +262,8 @@ export default function NotificationsPage() {
 
                   {/* Icon or avatar */}
                   <div className={cn(
-                    'flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center',
-                    n.bookCover ? 'overflow-hidden' : typeBg(n.type)
+                    'flex-shrink-0 w-10 h-10 rounded-xl overflow-hidden flex items-center justify-center',
+                    n.bookCover ? 'overflow-hidden' : ''
                   )}>
                     {n.bookCover ? (
                       <img
@@ -180,16 +271,17 @@ export default function NotificationsPage() {
                         className="w-full h-full object-cover"
                         alt=""
                       />
-                    ) : n.avatar ? (
-                      <span className={cn(
-                        'w-full h-full rounded-xl flex items-center justify-center font-bold text-sm',
-                        typeBg(n.type),
-                        dark ? 'text-white' : 'text-navy-800'
-                      )}>
-                        {n.avatar}
-                      </span>
+                    ) : n.avatar_url ? (
+                      <AvatarImage 
+                        src={n.avatar_url}
+                        alt="User avatar"
+                        initials="U"
+                        size="sm"
+                      />
                     ) : (
-                      typeIcon(n.type, dark)
+                      <div className={cn('w-full h-full rounded-xl flex items-center justify-center', typeBg(n.type))}>
+                        {typeIcon(n.type, dark)}
+                      </div>
                     )}
                   </div>
 

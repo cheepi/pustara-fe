@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
+import AvatarImage from '@/components/shared/AvatarImage';
 import Link from 'next/link';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { useProtectedRoute } from '@/hooks/useProtectedRoute';
@@ -19,7 +20,10 @@ import type { AiRecommendation } from '@/types/ai';
 import type { FeedItem } from '@/types/feed';
 import type { RecommendedUser } from '@/types/user';
 import { fetchFeedActivities, fetchFeedSidebarPayload, fetchTrendingFeedItems, type FeedSidebarPayload } from '@/lib/feed';
+import { fetchNotifications } from '@/lib/notifications';
 import { getRecommendedUsers, toggleFollowUser } from '@/lib/users';
+import { useSimilarUsers } from '@/hooks/useSimilarUsers';
+import { toggleReviewLike, getReviewLikeStatus } from '@/lib/reviewLikes';
 
 const pseudo = (n: number, mn: number, mx: number) =>
   mn + ((n * 9301 + 49297) % 233280) / 233280 * (mx - mn);
@@ -42,6 +46,7 @@ const EMPTY_SIDEBAR_PAYLOAD: FeedSidebarPayload = {
     initials: 'P',
     name: 'Pembaca Pustara',
     subtitle: 'Pembaca aktif',
+    avatar_url: null,
     dipinjam: 0,
     streak: 0,
     selesai: 0,
@@ -52,7 +57,7 @@ const EMPTY_SIDEBAR_PAYLOAD: FeedSidebarPayload = {
 
 const FILTER_TABS = [
   { id: 'all',      label: 'Semua',      icon: null        },
-  { id: 'activity', label: 'Teman',      icon: Users       },
+  { id: 'activity', label: 'Mengikuti',      icon: Users       },
   { id: 'ai_reco',  label: 'PustarAI',   icon: Sparkles    },
   { id: 'trending', label: 'Trending',   icon: TrendingUp  },
   { id: 'notif',    label: 'Notifikasi', icon: Bell        },
@@ -83,31 +88,47 @@ function useTrendingCover(book?: TrendingBook) {
 function CoverThumb({ coverId, src, size = 'sm' }: { coverId?: number; src?: string | null; size?: 'sm' | 'md' | 'lg' }) {
   const dims = { sm: 'w-10 h-14', md: 'w-14 h-20', lg: 'w-20 h-28' };
   const imgSrc = src ?? (coverId ? `https://covers.openlibrary.org/b/id/${coverId}-M.jpg` : null);
+  
+  if (!imgSrc && size === 'md') {
+    console.log('[CoverThumb] No image source', { src, coverId, size });
+  }
+  
   if (!imgSrc) return <div className={cn('rounded-xl flex-shrink-0 bg-navy-700/40', dims[size])} />;
+  
   return (
     <div className={cn('rounded-xl overflow-hidden shadow-lg flex-shrink-0', dims[size])}>
-      <img src={imgSrc} className="w-full h-full object-cover" loading="lazy" alt="" />
+      <img src={imgSrc} className="w-full h-full object-cover" loading="lazy" alt="" onError={() => console.log('[CoverThumb] Image failed to load:', imgSrc)} />
     </div>
   );
 }
 
 // ── Card components ───────────────────────────────────────────────────────────
 function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark: boolean; tk: any; liked: boolean; onLike: () => void }) {
-  const actorProfileHref = item.actorId ? `/profile/${item.actorId}` : null;
+  const actorProfileHref = item.actorId ? `/profile/@${item.actorUsername || item.actorId}` : null;
+  const initials = item.user ? item.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() : 'U';
 
   return (
     <div className={cn('rounded-3xl border p-5 transition-all', tk.card)}>
       <div className="flex items-center gap-3 mb-4">
         {actorProfileHref ? (
           <Link href={actorProfileHref}
-            className="w-10 h-10 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0 hover:bg-gold/30 transition-colors"
             aria-label={`Buka profil ${item.user || 'user'}`}>
-            {item.avatar}
+            <AvatarImage 
+              src={item.avatar_url || null}
+              alt={item.user || 'User avatar'}
+              initials={initials}
+              size="sm"
+              className="w-10 h-10 rounded-2xl flex-shrink-0"
+            />
           </Link>
         ) : (
-          <div className="w-10 h-10 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-            {item.avatar}
-          </div>
+          <AvatarImage 
+            src={item.avatar_url || null}
+            alt={item.user || 'User avatar'}
+            initials={initials}
+            size="sm"
+            className="w-10 h-10 rounded-2xl flex-shrink-0"
+          />
         )}
         <div className="flex-1 min-w-0">
           {actorProfileHref ? (
@@ -123,7 +144,7 @@ function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark:
         </div>
       </div>
       <div className="flex gap-4">
-        <Link href={`/book/${item.bookKey}`}><CoverThumb coverId={item.coverId} size="md" /></Link>
+        <Link href={`/book/${item.bookKey}`}><CoverThumb src={item.bookCoverUrl} coverId={item.coverId} size="md" /></Link>
         <div className="flex-1 min-w-0">
           <p className={cn('text-xs font-medium mb-1', tk.muted)}>
             <span className="font-semibold text-gold/80">{item.action}</span>
@@ -152,7 +173,7 @@ function ActivityCard({ item, dark, tk, liked, onLike }: { item: FeedItem; dark:
         </button>
         <Link href={`/book/${item.bookKey}/reviews`}
           className={cn('flex items-center gap-1.5 text-xs font-medium transition-colors', tk.muted, 'hover:text-gold')}>
-          <MessageCircle className="w-4 h-4" /> Ulasan
+          <MessageCircle className="w-4 h-4" /> Lihat Ulasan Lainnya
         </Link>
         <Link href={`/book/${item.bookKey}`}
           className={cn('ml-auto flex items-center gap-1 text-xs font-medium transition-colors', tk.muted, 'hover:text-gold')}>
@@ -442,13 +463,14 @@ export default function FeedPage() {
   const dark = theme === 'dark';
 
   const { recommendations: aiRecs, loading: aiLoading } = useRecommendations();
-
+  const { books: similarUserBooks } = useSimilarUsers(2);
   const [filter, setFilter]               = useState('all');
   const [liked,  setLiked]                = useState<Set<string>>(new Set());
-  const [visibleCount, setVisibleCount]   = useState(5);
+  const [visibleCount, setVisibleCount]   = useState(8);
   const [loadingMore, setLoadingMore]     = useState(false);
   const [trendingItems, setTrendingItems] = useState<FeedItem[]>([]);
   const [activityItems, setActivityItems] = useState<FeedItem[]>([]);
+  const [notificationItems, setNotificationItems] = useState<FeedItem[]>([]);
   const [sidebar, setSidebar]             = useState<FeedSidebarPayload>(EMPTY_SIDEBAR_PAYLOAD);
   const [recommendedUsers, setRecommendedUsers] = useState<RecommendedUser[]>([]);
   const [followLoadingIds, setFollowLoadingIds] = useState<Set<string>>(new Set());
@@ -480,9 +502,66 @@ export default function FeedPage() {
     }
   }, [recentReadsCollapsed]);
 
-  async function loadFeedData() {
+  async function loadMainFeedData() {
     if (!ready || !user) return;
     setFeedLoading(true);
+
+    const authDisplayName = (user.displayName || user.email?.split('@')[0] || '').trim();
+    const authName = normalizeComparable(authDisplayName);
+    const authEmailPrefix = normalizeComparable(user.email?.split('@')[0]);
+    const authUid = String(user.uid || '').trim();
+
+    // Determine scope based on selected filter tab
+    const includeNetwork = filter === 'activity';
+    const notificationsPromise = fetchNotifications();
+
+    try {
+      const [trending, activities] = await Promise.all([
+        fetchTrendingFeedItems(5),
+        fetchFeedActivities(8, includeNetwork),
+      ]);
+
+      console.log('[FEED PAGE] Activities loaded:', activities.length, 'filter:', filter, 'includeNetwork:', includeNetwork);
+      activities.forEach(a => {
+        console.log('[FEED PAGE] Activity:', { action: a.action, reviewText: a.reviewText?.slice(0, 30) || 'none' });
+      });
+
+      const filteredActivities = activities.filter((activity) => {
+        const actorName = normalizeComparable(activity.user);
+        return !actorName || (actorName !== authName && actorName !== authEmailPrefix);
+      });
+
+      setTrendingItems(trending);
+      setActivityItems(filteredActivities);
+    } catch (error) {
+      console.error('[FEED PAGE] Error loading feed:', error);
+      setTrendingItems([]);
+      setActivityItems([]);
+    } finally {
+      setFeedLoading(false);
+    }
+
+    try {
+      const notifications = await notificationsPromise;
+      setNotificationItems(
+        notifications.slice(0, 8).map((item) => ({
+          id: `notif_${item.id}`,
+          type: 'notif',
+          time: item.time || 'Baru saja',
+          notifTitle: item.title,
+          notifBody: item.body,
+          avatar_url: item.avatar_url || null,
+          bookKey: item.book_id || undefined,
+        }))
+      );
+    } catch {
+      setNotificationItems([]);
+    }
+  }
+
+  async function loadSidebarData() {
+    if (!ready || !user) return;
+
     setSidebarLoading(true);
     setSuggestionsLoading(true);
 
@@ -494,29 +573,10 @@ export default function FeedPage() {
     const sidebarPromise = fetchFeedSidebarPayload();
     const usersPromise = getRecommendedUsers(8);
 
-    try {
-      const [trending, activities] = await Promise.all([
-        fetchTrendingFeedItems(5),
-        fetchFeedActivities(8),
-      ]);
+    const [payloadResult, usersResult] = await Promise.allSettled([sidebarPromise, usersPromise]);
 
-      const filteredActivities = activities.filter((activity) => {
-        const actorName = normalizeComparable(activity.user);
-        return !actorName || (actorName !== authName && actorName !== authEmailPrefix);
-      });
-
-      setTrendingItems(trending);
-      setActivityItems(filteredActivities);
-    } catch {
-      setTrendingItems([]);
-      setActivityItems([]);
-    } finally {
-      setFeedLoading(false);
-    }
-
-    try {
-      const [payload, users] = await Promise.all([sidebarPromise, usersPromise]);
-
+    if (payloadResult.status === 'fulfilled') {
+      const payload = payloadResult.value;
       const profileName = normalizeComparable(payload.profile.name);
       const shouldPatchName = profileName === 'pembaca pustara' || !profileName;
       const finalName = shouldPatchName && authDisplayName ? authDisplayName : payload.profile.name;
@@ -530,18 +590,8 @@ export default function FeedPage() {
         },
       };
 
-      const filteredUsers = users.filter((candidate) => {
-        const candidateName = normalizeComparable(candidate.display_name || candidate.name);
-        const candidateHandle = normalizeComparable(candidate.username);
-        const byName = authName && (candidateName === authName || candidateHandle === authName);
-        const byEmailPrefix = authEmailPrefix && (candidateName === authEmailPrefix || candidateHandle === authEmailPrefix);
-        const byId = authUid && String(candidate.id) === authUid;
-        return !(byName || byEmailPrefix || byId);
-      }).slice(0, 5);
-
       setSidebar(patchedPayload);
-      setRecommendedUsers(filteredUsers);
-    } catch {
+    } else {
       setSidebar({
         ...EMPTY_SIDEBAR_PAYLOAD,
         profile: {
@@ -550,17 +600,68 @@ export default function FeedPage() {
           initials: toInitials(authDisplayName || EMPTY_SIDEBAR_PAYLOAD.profile.name),
         },
       });
-      setRecommendedUsers([]);
-    } finally {
-      setSidebarLoading(false);
-      setSuggestionsLoading(false);
     }
+
+    if (usersResult.status === 'fulfilled') {
+      const filteredUsers = usersResult.value.filter((candidate) => {
+        const candidateName = normalizeComparable(candidate.display_name || candidate.name);
+        const candidateHandle = normalizeComparable(candidate.username);
+        const byName = authName && (candidateName === authName || candidateHandle === authName);
+        const byEmailPrefix = authEmailPrefix && (candidateName === authEmailPrefix || candidateHandle === authEmailPrefix);
+        const byId = authUid && String(candidate.id) === authUid;
+        return !(byName || byEmailPrefix || byId);
+      }).slice(0, 5);
+
+      setRecommendedUsers(filteredUsers);
+    } else {
+      setRecommendedUsers([]);
+    }
+
+    setSidebarLoading(false);
+    setSuggestionsLoading(false);
   }
 
-  // Fetch live data
+  // Fetch main feed whenever the tab changes.
   useEffect(() => {
-    void loadFeedData();
+    void loadMainFeedData();
+  }, [ready, user?.uid, user?.displayName, user?.email, filter]);
+
+  // Sidebar data only depends on the authenticated user, not the active tab.
+  useEffect(() => {
+    void loadSidebarData();
   }, [ready, user?.uid, user?.displayName, user?.email]);
+
+  // Fetch like statuses for all review activities in the feed
+  useEffect(() => {
+    if (!user || !activityItems.length) return;
+
+    async function fetchLikeStatuses() {
+      const reviewActivities = activityItems.filter((a) => a.reviewId);
+      console.log('[Feed Like Status] Fetching statuses for', reviewActivities.length, 'reviews');
+
+      const likedIds = new Set<string>();
+
+      for (const activity of reviewActivities) {
+        try {
+          if (!activity.reviewId) continue;
+          const status = await getReviewLikeStatus(activity.reviewId);
+          console.log('[Feed Like Status]', { reviewId: activity.reviewId, isLiked: status.liked });
+          if (status.liked) {
+            likedIds.add(activity.id);
+          }
+        } catch (err) {
+          console.error('[Feed Like Status] Error fetching status for', activity.reviewId, ':', err);
+        }
+      }
+
+      if (likedIds.size > 0) {
+        setLiked(likedIds);
+        console.log('[Feed Like Status] Set liked to', likedIds.size, 'activities');
+      }
+    }
+
+    void fetchLikeStatuses();
+  }, [activityItems, user]);
 
   async function handleFollowToggle(user: RecommendedUser) {
     if (followLoadingIds.has(user.id)) return;
@@ -601,7 +702,7 @@ export default function FeedPage() {
 
   // Build FEED: gabung semua sources
   const FEED: FeedItem[] = (() => {
-    const feed = [...activityItems];
+    const feed = [...activityItems, ...notificationItems];
 
     if (trendingItems.length > 0) {
       feed.splice(0, 0, trendingItems[0]);
@@ -613,6 +714,16 @@ export default function FeedPage() {
       feed.unshift({ id: 'ai_real_0', type: 'ai_reco', time: 'Baru saja', aiReco: aiRecs[0] });
       if (aiRecs.length > 1) feed.splice(5, 0, { id: 'ai_real_1', type: 'ai_reco', time: '5 jam lalu', aiReco: aiRecs[1] });
     }
+
+    similarUserBooks.forEach((reco, i) => {
+      feed.splice(7 + i * 3, 0, {
+        id: `similar_user_${i}`,
+        type: 'ai_reco',
+        time: 'Berdasarkan pembaca seperti kamu',
+        aiReco: { ...reco, reason_primary: '👥 Disukai pembaca dengan selera mirip kamu' },
+      });
+    });
+    
     return feed;
   })();
 
@@ -632,16 +743,16 @@ export default function FeedPage() {
     ? sidebar.recentReads.slice(0, 3)
     : sidebar.recentReads;
 
-  useEffect(() => { setVisibleCount(5); }, [filter]);
+  useEffect(() => { setVisibleCount(8); }, [filter]);
 
   useEffect(() => {
     const obs = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting && !loadingMore && visibleCount < allFiltered.length) {
         setLoadingMore(true);
         setTimeout(() => {
-          setVisibleCount(v => Math.min(v + 3, FEED.length));
+          setVisibleCount(v => Math.min(v + 5, FEED.length));
           setLoadingMore(false);
-        }, 600);
+        }, 350);
       }
     }, { threshold: 0.1 });
     if (loaderRef.current) obs.observe(loaderRef.current);
@@ -690,7 +801,13 @@ export default function FeedPage() {
                 ) : (
                   <>
                     <div className="flex items-center gap-3 mb-4">
-                      <div className="w-12 h-12 rounded-2xl bg-gold/25 border border-gold/40 flex items-center justify-center font-bold text-lg text-gold">{sidebar.profile.initials}</div>
+                      <AvatarImage
+                        src={sidebar.profile.avatar_url || null}
+                        alt={sidebar.profile.name || 'User avatar'}
+                        initials={sidebar.profile.initials}
+                        size="md"
+                        className="w-12 h-12 rounded-2xl border border-gold/40 flex-shrink-0"
+                      />
                       <div>
                         <p className={cn('font-semibold text-sm', tk.text)}>{sidebar.profile.name}</p>
                         <p className={cn('text-xs max-w-[180px] truncate', tk.muted)} title={sidebar.profile.subtitle}>{sidebar.profile.subtitle}</p>
@@ -791,8 +908,9 @@ export default function FeedPage() {
               <h1 className={cn('font-serif text-2xl font-black', tk.text)}>Feed</h1>
               <button
                 onClick={() => {
-                  setVisibleCount(5);
-                  void loadFeedData();
+                  setVisibleCount(8);
+                  void loadMainFeedData();
+                  void loadSidebarData();
                 }}
                 className={cn('p-2 rounded-xl transition-colors', tk.muted, 'hover:text-gold', dark ? 'hover:bg-white/5' : 'hover:bg-navy-50')}>
                 <RefreshCw className="w-4 h-4" />
@@ -843,7 +961,34 @@ export default function FeedPage() {
                     {item.type === 'activity' && (
                       <ActivityCard item={item} dark={dark} tk={tk}
                         liked={liked.has(item.id)}
-                        onLike={() => setLiked(s => { const n = new Set(s); s.has(item.id) ? n.delete(item.id) : n.add(item.id); return n; })}
+                        onLike={async () => {
+                          console.log('[Feed Like Click]', { 
+                            itemId: item.id,
+                            reviewId: item.reviewId, 
+                            type: item.type,
+                            action: item.action,
+                            hasReviewId: !!item.reviewId,
+                            isReviewActivity: item.action?.includes('ulasan') || item.action?.includes('review')
+                          });
+                          
+                          // Update local state
+                          setLiked(s => { const n = new Set(s); s.has(item.id) ? n.delete(item.id) : n.add(item.id); return n; });
+                          
+                          // Send like to backend if it's a review activity
+                          if (item.reviewId) {
+                            try {
+                              console.log('[Feed Like] Toggling like for review:', item.reviewId);
+                              const result = await toggleReviewLike(item.reviewId);
+                              console.log('[Feed Like] Like toggled successfully:', result);
+                            } catch (err) {
+                              console.error('[Feed Like] Exception toggling like:', err);
+                              // Rollback local state on error
+                              setLiked(s => { const n = new Set(s); s.has(item.id) ? n.delete(item.id) : n.add(item.id); return n; });
+                            }
+                          } else {
+                            console.log('[Feed Like] No review ID, not a review activity', { reviewId: item.reviewId, action: item.action });
+                          }
+                        }}
                       />
                     )}
                     {item.type === 'ai_reco'  && <AIRecoCard   item={item} dark={dark} tk={tk} />}
@@ -894,18 +1039,18 @@ export default function FeedPage() {
                   )}
                   {recommendedUsers.map((u) => {
                     const displayName = u.display_name || u.name || u.username || 'Pustara User';
-                    const initial = displayName.charAt(0).toUpperCase() || 'P';
+                    const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
                     const isPending = followLoadingIds.has(u.id);
 
                     return (
                     <div key={u.id} className="flex items-center gap-3">
-                      <Link
-                        href={`/profile/${u.id}`}
-                        className="w-9 h-9 rounded-2xl bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0 hover:bg-gold/30 transition-colors"
-                        aria-label={`Buka profil ${displayName}`}
-                      >
-                        {initial}
-                      </Link>
+                      <AvatarImage
+                        src={u.avatar_url}
+                        alt={displayName}
+                        initials={initials}
+                        size="sm"
+                        className="w-9 h-9 rounded-2xl flex-shrink-0"
+                      />
                       <div className="flex-1 min-w-0">
                         <p className={cn('text-sm font-semibold truncate', tk.text)} title={displayName}>{displayName}</p>
                         <p className={cn('text-xs truncate', tk.muted)} title={`@${u.username || 'pustara_user'} · ${u.followers_count} pengikut`}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>
@@ -925,7 +1070,7 @@ export default function FeedPage() {
                           {isPending ? '...' : (u.is_following ? 'Mengikuti' : 'Ikuti')}
                         </button>
                         <Link
-                          href={`/profile/${u.id}`}
+                          href={`/profile/@${u.username || u.id}`}
                           className={cn('text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all',
                             dark ? 'border-white/20 text-white/70 hover:bg-white/10' : 'border-slate-300 text-slate-600 hover:bg-slate-100')}
                         >

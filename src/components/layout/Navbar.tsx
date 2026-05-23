@@ -14,16 +14,23 @@ import { signOut } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import Wordmark from '../icons/Wordmark';
 import Logo from '../icons/Logo';
+import AvatarImage from '@/components/shared/AvatarImage';
+import { getMyProfile } from '@/lib/users';
+import { fetchUnreadNotificationCount, NOTIFICATIONS_CHANGED_EVENT } from '@/lib/notifications';
+import type { UserProfile } from '@/types/user';
 
-const MotionLogo = motion(Logo);
+const MotionLogo = motion.create(Logo);
 export default function Navbar() {
   const [menuOpen,   setMenuOpen]   = useState(false);
   const [dropOpen,   setDropOpen]   = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [mobileQuery, setMobileQuery] = useState('');
+  const [isMobileNav, setIsMobileNav] = useState(false); // false = SSR-safe default (desktop)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const { user }          = useAuthStore();
+  const { user, profileCache, setProfileCache, clearProfileCache } = useAuthStore();
   const { theme, toggle } = useTheme();
   const router            = useRouter();
   const pathname          = usePathname();
@@ -62,8 +69,19 @@ export default function Navbar() {
   const dropLogout  = isLight ? 'text-red-500 hover:bg-red-50' : 'text-red-400 hover:bg-red-400/10';
 
   // ── Effects ────────────────────────────────────────────────────────────────
+  // Detect mobile viewport — client-only, default false matches SSR
   useEffect(() => {
-    if (searchOpen) setTimeout(() => searchRef.current?.focus(), 100);
+    const update = () => setIsMobileNav(window.innerWidth < 768);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
+
+  useEffect(() => {
+    if (searchOpen) {
+      setMobileQuery('');
+      setTimeout(() => searchRef.current?.focus(), 100);
+    }
   }, [searchOpen]);
 
   useEffect(() => {
@@ -99,11 +117,77 @@ export default function Navbar() {
     return () => window.clearTimeout(timeoutId);
   }, [router, user]);
 
-  const firstName = user?.displayName?.split(' ')[0] || 'Akun';
-  const initial   = (user?.displayName || user?.email || 'U')[0].toUpperCase();
+  // Fetch user profile to get avatar_url from database
+  useEffect(() => {
+    if (!user) {
+      clearProfileCache();
+      setUnreadNotifications(0);
+      return;
+    }
+
+    const cachedDisplayName = user.displayName || user.email || 'Pengguna';
+    const cachedAvatarUrl = user.photoURL || null;
+    const isSameUserCache = profileCache?.uid === user.uid;
+
+    if (!isSameUserCache) {
+      setProfileCache({
+        uid: user.uid,
+        displayName: cachedDisplayName,
+        avatarUrl: cachedAvatarUrl,
+        email: user.email || null,
+      });
+    }
+
+    const fetchProfile = async () => {
+      try {
+        const profileData = await getMyProfile();
+        if (!profileData) return;
+        setProfileCache({
+          uid: user.uid,
+          displayName: profileData.display_name || profileData.name || cachedDisplayName,
+          avatarUrl: profileData.avatar_url || cachedAvatarUrl,
+          email: profileData.email || user.email || null,
+        });
+      } catch (error) {
+        console.error('Failed to fetch profile in navbar:', error);
+      }
+    };
+
+    fetchProfile();
+  }, [clearProfileCache, setProfileCache, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    let active = true;
+    const loadUnreadNotifications = async () => {
+      try {
+        const count = await fetchUnreadNotificationCount();
+        if (active) setUnreadNotifications(count);
+      } catch {
+        if (active) setUnreadNotifications(0);
+      }
+    };
+
+    loadUnreadNotifications();
+    const interval = window.setInterval(loadUnreadNotifications, 60_000);
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, loadUnreadNotifications);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, loadUnreadNotifications);
+    };
+  }, [pathname, user?.uid]);
+
+  const displayName = profileCache?.displayName || user?.displayName || user?.email || 'Pengguna';
+  const firstName = displayName.split(' ')[0] || 'Akun';
+  const initial = (displayName || user?.email || 'U')[0].toUpperCase();
+  const avatarUrl = profileCache?.avatarUrl || user?.photoURL || null;
 
   async function handleConfirmLogout() {
     setLogoutConfirmOpen(false);
+    if (!auth) return;
     await signOut(auth);
   }
 
@@ -130,10 +214,10 @@ export default function Navbar() {
             <MotionLogo
               className="w-auto drop-shadow-lg flex-shrink-0 relative z-10 focus:outline-none"
               style={{
-                height: typeof window !== "undefined" && window.innerWidth < 768 ? "80px" : "86px",
-                marginTop: typeof window !== "undefined" && window.innerWidth < 768 ? "0px" : "-10px",
-                marginBottom: typeof window !== "undefined" && window.innerWidth < 768 ? "0px" : "-10px",
-                marginLeft: typeof window !== "undefined" && window.innerWidth < 768 ? "-18px" : "-36px",
+                height:       isMobileNav ? '80px'  : '86px',
+                marginTop:    isMobileNav ? '0px'   : '-10px',
+                marginBottom: isMobileNav ? '0px'   : '-10px',
+                marginLeft:   isMobileNav ? '-18px' : '-36px',
               }}
               whileHover={{ rotate: -12, scale: 1.1 }}
               whileTap={{ scale: 0.92 }}
@@ -205,7 +289,9 @@ export default function Navbar() {
                   <Link href="/notifications"
                     className={cn('relative p-2 rounded-xl transition-colors flex-shrink-0', txtSecondary, hoverTxt, hoverBg)}>
                     <Bell className="w-4 h-4" />
-                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-gold" />
+                    {unreadNotifications > 0 && (
+                      <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-gold" />
+                    )}
                   </Link>
 
                   {/* Theme toggle — desktop only, mobile lives in burger menu */}
@@ -227,11 +313,17 @@ export default function Navbar() {
 
                   {/* Profile dropdown — works on both mobile & desktop */}
                   <div className="relative">
-                    <button
+                      <button
                       onClick={() => setDropOpen(v => !v)}
-                      className={cn('flex items-center gap-1.5 pl-1.5 pr-1.5 py-1 rounded-xl transition-colors flex-shrink-0', hoverBg)}>
-                      <div className="w-7 h-7 rounded-full bg-gold/25 border border-gold/40 flex items-center justify-center font-bold text-xs text-gold flex-shrink-0">
-                        {initial}
+                      className={cn('flex items-center gap-1 pl-1 pr-1 py-0.5 rounded-xl transition-colors flex-shrink-0', hoverBg)}>
+                      <div className="w-7 h-7 rounded-full overflow-hidden border border-gold/30 flex-shrink-0">
+                        <AvatarImage 
+                          src={avatarUrl}
+                          alt={displayName}
+                          initials={initial}
+                          size="sm"
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                       <span className={cn('hidden md:block text-sm max-w-[72px] truncate', isLight ? 'text-navy-800' : 'text-white')}>
                         {firstName}
@@ -259,7 +351,7 @@ export default function Navbar() {
                             right: '12px', // matches the mx-3 of the navbar pill
                           }}>
                           <div className="px-4 py-3">
-                            <p className={cn('text-sm font-semibold truncate', dropHead)}>{user.displayName || 'Pengguna'}</p>
+                            <p className={cn('text-sm font-semibold truncate', dropHead)}>{displayName}</p>
                             <p className={cn('text-xs truncate mt-0.5', dropSub)}>{user.email}</p>
                           </div>
                           <div>
@@ -275,7 +367,7 @@ export default function Navbar() {
                             ))}
                           </div>
                           <div>
-                            <button onClick={() => { setDropOpen(false); if (auth) signOut(auth); }}
+                            <button onClick={() => { setDropOpen(false); setLogoutConfirmOpen(true); }}
                               className={cn('w-full text-left px-4 py-2.5 text-sm font-medium transition-colors', dropLogout)}>
                               Keluar
                             </button>
@@ -335,16 +427,43 @@ export default function Navbar() {
                 background:  isLight ? 'rgba(252,252,250,0.99)' : 'rgba(17,31,53,0.99)',
                 borderColor: isLight ? 'rgba(232,228,220,0.9)'  : 'rgba(255,255,255,0.15)',
               }}>
-              <form action="/browse" className="flex items-center gap-3 px-4" style={{ height: '56px' }}
-                onSubmit={() => setSearchOpen(false)}>
+              <form
+                className="flex items-center gap-3 px-4"
+                style={{ height: '56px' }}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const q = mobileQuery.trim();
+                  setSearchOpen(false);
+                  setMobileQuery('');
+                  router.push(`/browse${q ? `?q=${encodeURIComponent(q)}` : ''}`);
+                }}
+              >
                 <Search className={cn('w-4 h-4 flex-shrink-0', isLight ? 'text-navy-400' : 'text-white/50')} />
-                <input ref={searchRef} type="search" name="q" placeholder="Cari judul, penulis, atau genre..."
+                <input
+                  ref={searchRef}
+                  type="search"
+                  name="q"
+                  value={mobileQuery}
+                  onChange={(e) => setMobileQuery(e.target.value)}
+                  placeholder="Cari judul, penulis, atau genre..."
                   className={cn(
                     'flex-1 text-sm bg-transparent focus:outline-none',
                     isLight ? 'text-navy-800 placeholder-navy-400' : 'text-white placeholder-white/40'
-                  )} />
-                <button type="button" onClick={() => setSearchOpen(false)}
-                  className={cn('p-1.5 rounded-lg transition-colors',
+                  )}
+                />
+                {mobileQuery.trim() && (
+                  <button
+                    type="submit"
+                    className={cn(
+                      'px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors flex-shrink-0',
+                      isLight ? 'bg-navy-800 text-white hover:bg-navy-700' : 'bg-gold text-navy-900 hover:bg-gold-light'
+                    )}
+                  >
+                    Cari
+                  </button>
+                )}
+                <button type="button" onClick={() => { setSearchOpen(false); setMobileQuery(''); }}
+                  className={cn('p-1.5 rounded-lg transition-colors flex-shrink-0',
                     isLight ? 'text-navy-400 hover:text-navy-700 hover:bg-navy-100' : 'text-white/40 hover:text-white hover:bg-white/10')}>
                   <X className="w-4 h-4" />
                 </button>
@@ -372,11 +491,16 @@ export default function Navbar() {
 
             {/* User info pill */}
             <div className="flex items-center gap-3 px-4 py-3.5 mb-3 rounded-2xl" style={{ background: 'var(--surface2)' }}>
-              <div className="w-10 h-10 rounded-full bg-gold/[0.25] border border-gold/40 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                {initial}
+                      <div className="w-8 h-8 rounded-full overflow-hidden border border-gold/40 flex-shrink-0">
+                <AvatarImage
+                          src={avatarUrl}
+                  alt={displayName}
+                  initials={initial}
+                  size="md"
+                />
               </div>
               <div className="min-w-0">
-                <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{user.displayName || 'Pengguna'}</p>
+                <p className="font-semibold text-sm truncate" style={{ color: 'var(--text)' }}>{displayName}</p>
                 <p className="text-xs truncate" style={{ color: 'var(--muted)' }}>{user.email}</p>
               </div>
             </div>
@@ -412,7 +536,7 @@ export default function Navbar() {
             <div className="h-px mb-3" style={{ background: 'var(--border)' }} />
 
             {/* Logout */}
-            <button onClick={() => { setMenuOpen(false); if (auth) signOut(auth); }}
+            <button onClick={() => { setMenuOpen(false); setLogoutConfirmOpen(true); }}
               className="w-full flex items-center px-4 py-3 rounded-2xl text-sm font-semibold text-red-400 hover:bg-red-400/[0.08] transition-all">
               Keluar dari Akun
             </button>

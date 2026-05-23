@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft, Star, BookOpen, Users, CheckCircle,
   X, Bookmark, Share2, Clock, ChevronRight, PenLine, Sparkles,
-  Book,
+  Book, Heart,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
@@ -15,10 +15,13 @@ import { useToast } from '@/components/feedback/ToastProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { PageSkeleton } from '@/components/shared/PageSkeleton';
 import ReviewModal from '@/components/shared/ReviewModal';
+import AvatarImage from '@/components/shared/AvatarImage';
 import { useSimilarBooks } from '@/hooks/useSimilarBooks';
-import { fetchBookById } from '@/lib/books';
-import { fetchBookReviewData } from '@/lib/bookReviews';
-import { BookDetail, Review } from '@/types/book';
+import { getBookById, getSimilarBooks } from '@/lib/books';
+import { apiGet } from '@/lib/api';
+import { borrowBookForMe, fetchMyBookShelfStatus, joinQueueForMe, removeSavedBookForMe, saveBookForMe } from '@/lib/shelf';
+import { BookDetail } from '@/types/book';
+import ReviewCard from '@/components/shared/ReviewCard';
 import type { ModalState } from '@/types/bookPage';
 import { useBookCover, useBookCovers } from '@/hooks/useBookCover';
 
@@ -34,6 +37,7 @@ export default function BookDetailPage() {
   const [loadingBook, setLoadingBook] = useState(true);
   const [relatedBooks, setRelatedBooks] = useState<BookDetail[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(true);
+  const [reviews, setReviews] = useState<any[]>([]);
 
   useEffect(() => {
     document.body.classList.add('panel-scroll-lock');
@@ -45,17 +49,14 @@ export default function BookDetailPage() {
   useEffect(() => {
     async function fetchBookDetail() {
       try {
-        console.log(`[BookDetail] 🔄 Fetching book detail for: ${bookKey}`);
-        const found = await fetchBookById(bookKey);
-        console.log(`[BookDetail] 📊 Got book detail:`, found);
+        const found = await getBookById(bookKey);
         if (found) {
           setBook(found);
         } else {
-          console.warn(`[BookDetail] ⚠️ Book not found for: ${bookKey}`);
           router.replace('/not-found');
         }
       } catch (err) {
-        console.error(`[BookDetail] ❌ Gagal narik data buku:`, err);
+        console.error("Gagal narik data buku:", err);
         router.replace('/not-found');
       } finally {
         setLoadingBook(false);
@@ -65,25 +66,30 @@ export default function BookDetailPage() {
     if (bookKey) fetchBookDetail();
   }, [bookKey, router]);
 
-  useEffect(() => {
-    async function fetchReviews() {
-      if (!bookKey) return;
-      setLoadingReviews(true);
-      try {
-        console.log(`[BookDetail] 🔄 Fetching reviews for bookKey: ${bookKey}`);
-        const { reviews: fetchedReviews } = await fetchBookReviewData(bookKey);
-        console.log(`[BookDetail] 📊 Got ${fetchedReviews.length} reviews from API`, fetchedReviews);
-        // fix: Ensure reviews array is always set, even if empty
-        setReviews(Array.isArray(fetchedReviews) ? fetchedReviews : []);
-      } catch (err) {
-        console.error(`[BookDetail] ❌ Gagal narik reviews:`, err);
-        setReviews([]);
-      } finally {
-        setLoadingReviews(false);
-      }
-    }
+  
 
-    if (bookKey) fetchReviews();
+  useEffect(() => {
+    let active = true;
+    if (!bookKey) return;
+
+    setRelatedLoading(true);
+    getSimilarBooks(bookKey)
+      .then((list) => {
+        if (!active) return;
+        setRelatedBooks(list);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRelatedBooks([]);
+      })
+      .finally(() => {
+        if (!active) return;
+        setRelatedLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
   }, [bookKey]);
 
   // Unified book cover: prioritizes database cover_url, falls back to OpenLibrary
@@ -101,12 +107,14 @@ export default function BookDetailPage() {
   const [modal,    setModal]    = useState<ModalState>('none');
   const [shared,   setShared]   = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [loadingReviews, setLoadingReviews] = useState(false);
+  const [editingReview, setEditingReview] = useState<{id: string, rating: number, text: string} | null>(null);
 
   const [wishlisted, setWishlisted] = useState(false);
   const [borrowed,   setBorrowed]   = useState(false);
-  const [actionLoading, setActionLoading] = useState<'borrow' | 'wishlist' | null>(null);
+  const [queued, setQueued] = useState(false);
+  const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [queueCount, setQueueCount] = useState(0);
+  const [actionLoading, setActionLoading] = useState<'borrow' | 'wishlist' | 'queue' | null>(null);
 
   async function refreshBookSnapshot() {
     if (!bookKey) return;
@@ -118,11 +126,42 @@ export default function BookDetailPage() {
     }
   }
 
+  const fetchReviews = async () => {
+    if (!book?.id) {
+      setReviews([]);
+      return;
+    }
+    
+    try {
+      const res = await apiGet<any>(`/books/${book.id}/reviews?limit=5`);
+      if (res) {
+        const actualReviews = Array.isArray(res) 
+          ? res 
+          : (Array.isArray(res?.reviews) 
+              ? res.reviews 
+              : (Array.isArray(res?.data?.reviews) 
+                  ? res.data.reviews 
+                  : (Array.isArray(res?.data) ? res.data : [])));
+                  
+        setReviews(actualReviews);
+      }
+    } catch (error) {
+      console.error('[BOOK DETAIL] EXCEPTION - Failed to fetch reviews:', error);
+      setReviews([]);
+    }
+  };
+
+  useEffect(() => {
+    fetchReviews();
+  }, [book?.id]);
+
   useEffect(() => {
     if (!book) return;
     if (!user) {
       setWishlisted(false);
       setBorrowed(false);
+      setQueued(false);
+      setQueuePosition(null);
       return;
     }
 
@@ -132,11 +171,17 @@ export default function BookDetailPage() {
         if (!active) return;
         setWishlisted(Boolean(status.wishlisted));
         setBorrowed(Boolean(status.borrowed));
+        setQueued(Boolean(status.queued));
+        setQueuePosition(status.queue_position ?? null);
+        setQueueCount(Number(status.queue_count ?? 0));
       })
       .catch(() => {
         if (!active) return;
         setWishlisted(false);
         setBorrowed(false);
+        setQueued(false);
+        setQueuePosition(null);
+        setQueueCount(0);
       });
 
     return () => {
@@ -207,6 +252,8 @@ export default function BookDetailPage() {
     try {
       await borrowBookForMe(book.id);
       setBorrowed(true);
+      setQueued(false);
+      setQueuePosition(null);
       setBook((prev) => {
         if (!prev) return prev;
         return {
@@ -221,70 +268,88 @@ export default function BookDetailPage() {
       const message = error instanceof Error ? error.message : 'Gagal meminjam buku.';
       if (message.includes('409')) {
         showToast('Buku sedang tidak tersedia. Silakan masuk antrean.', 'error');
+        setModal('queue');
       } else if (message.includes('401')) {
         showToast('Sesi login berakhir. Silakan login kembali.', 'error');
+        setModal('none');
       } else {
         showToast('Gagal meminjam buku. Coba lagi sebentar.', 'error');
+        setModal('none');
       }
-      setModal('none');
     } finally {
       setActionLoading(null);
     }
   }
 
-  function handleQueue() { setModal('queue'); }
-
-  // Refetch book and reviews after review submission
-  async function handleReviewSubmitted() {
-    console.log('[STEP 1] handleReviewSubmitted triggered');
-    console.log('[STEP 1] Current book state:', { avg_rating: book?.avg_rating, rating_count: book?.rating_count });
-    
-    // Refetch book data
-    try {
-      console.log('[STEP 2] Calling fetchBookById for book:', bookKey);
-      const updated = await fetchBookById(bookKey);
-      console.log('[STEP 2] Response from fetchBookById:', {
-        avg_rating: updated?.avg_rating,
-        rating_count: updated?.rating_count,
-        fullData: updated
-      });
-      
-      if (updated) {
-        console.log('[STEP 3] Before setBook - current state:', { avg_rating: book?.avg_rating, rating_count: book?.rating_count });
-        console.log('[STEP 3] Setting book to:', { avg_rating: updated.avg_rating, rating_count: updated.rating_count });
-        setBook(updated);
-        console.log('[STEP 3] After setBook called - state should update soon');
-      } else {
-        console.warn('[STEP 2] fetchBookById returned null/undefined');
-      }
-    } catch (err) {
-      console.error("[STEP 2] Error refetching book:", err);
+  function handleQueue() {
+    if (!user) {
+      router.push('/auth/login');
+      return;
     }
-
-    // Refetch reviews
-    setLoadingReviews(true);
-    try {
-      console.log('[STEP 4] Fetching reviews for book:', bookKey);
-      const { reviews: fetchedReviews } = await fetchBookReviewData(bookKey);
-      console.log('[STEP 4] Fetched reviews:', fetchedReviews?.length, 'reviews');
-      setReviews(fetchedReviews);
-    } catch (err) {
-      console.error("[STEP 4] Error refetching reviews:", err);
-    } finally {
-      setLoadingReviews(false);
-    }
+    setModal('queue');
   }
 
-  function handleReviewClose() {
-    // Refetch after modal closes
-    handleReviewSubmitted();
-    setReviewOpen(false);
+  async function handleJoinQueue() {
+    if (!book) return;
+    if (!user) {
+      router.push('/auth/login');
+      return;
+    }
+
+    setActionLoading('queue');
+    try {
+      const result = await joinQueueForMe(book.id);
+      const nextQueueCount = Number(result.queue_count ?? book.queue ?? 0);
+
+      setQueued(Boolean(result.queued ?? true));
+      setQueuePosition(result.queue_position ?? null);
+      setBook((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          queue: nextQueueCount,
+        };
+      });
+
+      showToast(
+        result.queue_position
+          ? `Berhasil masuk antrean. Posisimu #${result.queue_position}.`
+          : 'Berhasil masuk antrean.',
+        'success'
+      );
+      setModal('none');
+      refreshBookSnapshot();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Gagal masuk antrean.';
+      const lowerMessage = message.toLowerCase();
+      if (lowerMessage.includes('already in queue') || lowerMessage.includes('duplicate') || lowerMessage.includes('unique')) {
+        const status = await fetchMyBookShelfStatus(book.id).catch(() => null);
+        setQueued(true);
+        setQueuePosition(status?.queue_position ?? queuePosition ?? null);
+        setQueueCount(Number(status?.queue_count ?? queueCount ?? book.queue ?? 0));
+        setBook((prev) => prev ? { ...prev, queue: Number(status?.queue_count ?? prev.queue ?? 0) } : prev);
+        showToast('Kamu sudah ada di antrean buku ini.', 'success');
+        setModal('none');
+      } else if (message.includes('409')) {
+        showToast('Buku sudah tersedia. Kamu bisa pinjam langsung.', 'error');
+      } else if (message.includes('401')) {
+        showToast('Sesi login berakhir. Silakan login kembali.', 'error');
+      } else {
+        showToast('Gagal masuk antrean. Coba lagi sebentar.', 'error');
+      }
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   if (authLoading || loadingBook || !book) return <PageSkeleton />;
 
   const src         = coverUrl;
   const isAvailable = book.available > 0;
+  const activeQueueCount = Math.max(queueCount, Number(book.queue || 0));
+  const hasQueue = activeQueueCount > 0;
+  const queuePositionLabel = queuePosition ? `#${queuePosition}` : '';
+  const canBorrowNow = borrowed || (!hasQueue && isAvailable) || (queued && queuePosition === 1 && isAvailable);
 
   const borrowDate = new Date();
   const returnDate = new Date(borrowDate);
@@ -408,10 +473,10 @@ export default function BookDetailPage() {
                   onClick={() => router.push('/auth/login')}
                   className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-600 text-white hover:bg-slate-700 transition-colors shadow-lg"
                   whileTap={{ scale: 0.98 }}>
-                  {isAvailable ? <BookOpen className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                  {isAvailable ? 'Login untuk Pinjam' : 'Login untuk Antre'}
+                  {canBorrowNow ? <BookOpen className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                  {canBorrowNow ? 'Login untuk Pinjam' : 'Login untuk Antre'}
                 </motion.button>
-              ) : isAvailable ? (
+              ) : canBorrowNow ? (
                 <motion.button
                   onClick={handleBorrow}
                   disabled={actionLoading === 'borrow'}
@@ -420,13 +485,21 @@ export default function BookDetailPage() {
                   <BookOpen className="w-4 h-4" />
                   {actionLoading === 'borrow' ? 'Memproses...' : 'Pinjam Buku'}
                 </motion.button>
+              ) : queued && queuePosition && queuePosition > 1 ? (
+                <motion.button
+                  disabled
+                  className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-500 text-white/95 cursor-not-allowed shadow-lg"
+                  whileTap={{ scale: 0.98 }}>
+                  <Clock className="w-4 h-4" />
+                  Dalam Antrean {queuePositionLabel}
+                </motion.button>
               ) : (
                 <motion.button
                   onClick={handleQueue}
                   className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-lg"
                   whileTap={{ scale: 0.98 }}>
                   <Clock className="w-4 h-4" />
-                  Masuk Antrean ({book.queue || 0} menunggu)
+                  {hasQueue ? `Masuk Antrean (${activeQueueCount} menunggu)` : 'Masuk Antrean'}
                 </motion.button>
               )}
 
@@ -479,14 +552,8 @@ export default function BookDetailPage() {
                     <Star key={s} className={cn('w-4 h-4', s <= Math.round(book.avg_rating) ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
                   ))}
                 </div>
-                <span className="text-gold font-bold">{book.avg_rating}</span>
-                <span className={cn(
-                  'text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-tighter border',
-                  isLight ? 'bg-slate-100 border-slate-200 text-slate-500' : 'bg-white/5 border-white/10 text-white/40'
-                )}>
-                  Source: Goodreads
-                </span>
-                <span className={cn('text-sm', tk.muted)}>({book.rating_count?.toLocaleString()} ulasan)</span>
+                <span className="text-gold font-bold">{Number(book.avg_rating || 0).toFixed(1)}</span>
+                <span className={cn('text-sm', tk.muted)}>({Number(book.rating_count || 0).toLocaleString()} ulasan)</span>
                 <span className={cn('text-sm', tk.muted)}>· {book.year} · {book.pages} halaman</span>
               </div>
             </div>
@@ -518,76 +585,79 @@ export default function BookDetailPage() {
 
             <section className="mb-8">
               <div className="flex items-center justify-between mb-3">
-                <h2 className={cn('font-serif text-xl font-bold', tk.text)}>Ulasan Pembaca</h2>
+                <h2 className={cn('font-serif text-xl font-bold', tk.text)}>
+                  Ulasan Pembaca
+                </h2>
+
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setReviewOpen(true)}
+                    onClick={() => { setEditingReview(null); setReviewOpen(true); }}
                     className={cn(
                       'flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all',
-                      isLight ? 'border-navy-200 text-navy-700 hover:bg-navy-50 hover:border-gold/40' : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-gold/40'
-                    )}>
+                      isLight
+                        ? 'border-navy-200 text-navy-700 hover:bg-navy-50 hover:border-gold/40'
+                        : 'border-white/10 text-white/70 hover:bg-white/5 hover:border-gold/40'
+                    )}
+                  >
                     <PenLine className="w-3.5 h-3.5" />
                     Tulis Ulasan
                   </button>
-                  {reviews.length > 0 && (
-                    <Link href={`/book/${book.id}/reviews`}
-                      className="text-gold text-xs font-semibold hover:underline">
-                      Lihat Semua
-                    </Link>
-                  )}
+
+                  <Link
+                    href={`/book/${book.id}/reviews`}
+                    className="text-gold text-xs font-semibold hover:underline"
+                  >
+                    Lihat Semua
+                  </Link>
                 </div>
               </div>
+
               <div className="flex flex-col gap-3">
-                {/* fix: Debug logging for reviews */}
-                {(() => {
-                  console.log('[BookDetail] 📋 Reviews rendering state:', { loadingReviews, reviewsCount: reviews.length, reviews });
-                  return null;
-                })()}
-                {loadingReviews
-                  ? Array(3).fill(0).map((_, i) => (
-                      <div key={i} className={cn('rounded-2xl border p-4 animate-pulse', tk.surface, tk.border)}>
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className={cn('w-9 h-9 rounded-full flex-shrink-0', isLight ? 'bg-parchment' : 'bg-navy-700')} />
-                          <div className="flex-1 space-y-2">
-                            <div className={cn('h-4 w-24 rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
-                            <div className="flex gap-0.5">
-                              {[1,2,3].map(s => (
-                                <div key={s} className={cn('w-3 h-3 rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                        <div className={cn('h-4 w-full rounded', isLight ? 'bg-parchment' : 'bg-navy-700')} />
-                      </div>
-                    ))
-                  : reviews.length > 0
-                    ? reviews.slice(0, 5).map((r, i) => (
-                        <motion.div key={i}
-                          className={cn('rounded-2xl border p-4', tk.surface, tk.border)}
-                          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.2 + i * 0.05 }}>
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-9 h-9 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center font-bold text-sm text-gold flex-shrink-0">
-                              {r.avatar}
-                            </div>
-                            <div>
-                              <p className={cn('text-sm font-semibold', tk.text)}>{r.name}</p>
-                              <div className="flex gap-0.5 mt-0.5">
-                                {[1,2,3,4,5].map(s => (
-                                  <Star key={s} className={cn('w-3 h-3', s <= r.rating ? 'text-gold fill-gold' : isLight ? 'text-slate-300' : 'text-slate-700')} />
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                          <p className={cn('text-sm leading-relaxed', tk.muted)}>{r.text}</p>
-                        </motion.div>
-                      ))
-                    : (
-                      <div className={cn('rounded-2xl border p-6 text-center', tk.surface, tk.border)}>
-                        <p className={cn('text-sm', tk.muted)}>Belum ada ulasan. Jadilah yang pertama!</p>
-                      </div>
-                    )
-                }
+                {reviews.length > 0 ? (
+                  reviews.slice(0, 5).map((r: any, i: number) => {
+                    console.log(`BOOK REVIEW ${i} MAPPED:`, { 
+                      id: r.id, 
+                      name: r.name, 
+                      rating: r.rating, 
+                      textLength: r.text?.length || 0,
+                      avatarUrl: !!r.avatar_url,
+                    });
+                    return (
+                      <ReviewCard
+                        key={r.id || i}
+                        reviewId={r.id}
+                        name={r.name || 'Anonim'}
+                        avatarUrl={r.avatar_url || null}
+                        rating={r.rating || 0}
+                        text={r.text || r.body || r.review_text || ''}
+                        initialLikes={r.likes || 0}
+                        initialLiked={Boolean(r.liked ?? r.is_liked ?? false)}
+                        time={r.time}
+                        loc={r.loc || '-'}
+                        firebaseUid={r.firebase_uid}
+                        index={i}
+                        onEdit={(id, rating, text) => {
+                          setEditingReview({ id, rating, text });
+                          setReviewOpen(true);
+                        }}
+                        onDeleted={(id) => {
+                          setReviews(prev => prev.filter(rev => rev.id !== id));
+                        }}
+                      />
+                    );
+                  })
+                ) : (
+                  <div
+                    className={cn(
+                      'rounded-2xl border p-6 text-center text-sm',
+                      tk.surface,
+                      tk.border,
+                      tk.muted
+                    )}
+                  >
+                    Belum ada ulasan untuk buku ini.
+                  </div>
+                )}
               </div>
             </section>
 
@@ -696,7 +766,7 @@ export default function BookDetailPage() {
                     {[
                       ['Durasi Peminjaman', '7 Hari'],
                       ['Akses Sampai',      fmt(returnDate)],
-                      ['Format',            'PDF & ePub'],
+                      ['Format',            'PDF'],
                     ].map(([l, v]) => (
                       <div key={l} className="flex justify-between">
                         <span className={cn('text-sm', tk.modalMuted)}>{l}</span>
@@ -738,18 +808,27 @@ export default function BookDetailPage() {
                   </div>
                   <h3 className="font-serif text-xl font-black mb-1">Buku Sedang Dipinjam</h3>
                   <p className={cn('text-sm leading-relaxed mb-4', tk.modalMuted)}>
-                    Saat ini ada <strong>{book.queue || 0} orang</strong> dalam antrean.
-                    Kamu akan mendapat notifikasi ketika buku tersedia.
+                    Saat ini ada <strong>{activeQueueCount} orang</strong> dalam antrean.
+                    {queued ? ' Kamu sudah masuk antrean dan akan mendapat notifikasi ketika buku tersedia.' : ' Kamu akan mendapat notifikasi ketika buku tersedia.'}
                   </p>
                   <div className={cn('rounded-2xl p-4 mb-5 text-left', tk.modalSub)}>
                     <p className={cn('text-xs font-semibold mb-1', tk.modalMuted)}>Estimasi Waktu Tunggu</p>
-                    <p className="text-lg font-black text-amber-400">~{(book.queue || 0) * 7} Hari</p>
+                    <p className="text-lg font-black text-amber-400">~{Math.max((queued ? ((queuePosition || 1) - 1) : activeQueueCount) * 7, 0)} Hari</p>
                     <p className={cn('text-xs mt-0.5', tk.modalMuted)}>berdasarkan rata-rata peminjaman 7 hari</p>
+                    {queued && queuePosition && (
+                      <p className={cn('text-xs mt-2 font-semibold', tk.modalMuted)}>Posisimu saat ini: #{queuePosition}</p>
+                    )}
                   </div>
-                  <motion.button onClick={() => setModal('none')}
-                    className="w-full py-3.5 rounded-2xl text-sm font-bold bg-amber-500 text-white hover:bg-amber-600 transition-colors"
+                  <motion.button onClick={queued ? () => setModal('none') : handleJoinQueue}
+                    disabled={actionLoading === 'queue'}
+                    className={cn(
+                      'w-full py-3.5 rounded-2xl text-sm font-bold transition-colors',
+                      queued
+                        ? 'bg-slate-400 text-white/95 hover:bg-slate-400'
+                        : 'bg-amber-500 text-white hover:bg-amber-600'
+                    )}
                     whileTap={{ scale: 0.97 }}>
-                    Masuk Antrean
+                    {queued ? 'Sudah Dalam Antrean' : actionLoading === 'queue' ? 'Memproses...' : 'Masuk Antrean'}
                   </motion.button>
                 </div>
               </motion.div>
@@ -805,8 +884,15 @@ export default function BookDetailPage() {
         bookTitle={book.title}
         bookKey={book.id}
         open={reviewOpen}
-        onClose={handleReviewClose}
-        onSubmit={handleReviewSubmitted}
+        initialRating={editingReview?.rating}
+        initialText={editingReview?.text}
+        onClose={() => { setReviewOpen(false); setEditingReview(null); }}
+        onSubmit={() => {
+          setReviewOpen(false);
+          setEditingReview(null);
+          fetchReviews();
+          refreshBookSnapshot();
+        }}
       />
     </div>
   );

@@ -5,15 +5,21 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
 function normalizeReview(raw: Record<string, unknown>): CommunityReview {
   return {
-    user: String(raw.user ?? raw.name ?? 'Anonymous'),
-    avatar: String(raw.avatar ?? 'U').slice(0, 1).toUpperCase(),
+    // review_id is the actual DB UUID used for likes
+    review_id: String(raw.review_id ?? raw.id ?? ''),
+    user_id: raw.user_id ? String(raw.user_id) : undefined,
+    firebase_uid: raw.firebase_uid ? String(raw.firebase_uid) : undefined,
+    // display_name is the human-facing name; fall back to username then name
+    user: String(raw.display_name ?? raw.user ?? raw.username ?? raw.name ?? ''),
+    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
     loc: String(raw.loc ?? '-'),
     rating: Number(raw.rating ?? 0),
-    book: String(raw.book ?? raw.bookTitle ?? '-'),
+    book: String(raw.book ?? raw.book_title ?? raw.bookTitle ?? '-'),
     author: String(raw.author ?? raw.bookAuthor ?? '-'),
-    coverId: Number(raw.coverId ?? 0) || undefined,
-    key: String(raw.key ?? raw.bookId ?? ''),
-    text: String(raw.text ?? raw.reviewText ?? ''),
+    // Direct cover URL from books table (not OpenLibrary coverId)
+    cover_url: raw.cover_url ? String(raw.cover_url) : undefined,
+    key: String(raw.key ?? raw.book_id ?? raw.bookId ?? ''),
+    text: String(raw.text ?? raw.reviewText ?? raw.body ?? ''),
     likes: Number(raw.likes ?? 0),
     comments: Number(raw.comments ?? 0),
     time: String(raw.time ?? '-'),
@@ -21,17 +27,22 @@ function normalizeReview(raw: Record<string, unknown>): CommunityReview {
 }
 
 export async function fetchCommunityReviews(): Promise<CommunityReview[]> {
-  try {
-    const res = await fetch(`${API_URL}/books/1/reviews?limit=100`, { cache: 'no-store' });
-    if (!res.ok) throw new Error('Failed to fetch reviews');
+  const endpoints = ['/reviews/recent', '/community/recent', '/reviews', '/community'];
 
-    const json = await res.json();
-    const raw = Array.isArray(json?.data) ? json.data : [];
-    if (raw.length > 0) {
-      return raw.map((item: Record<string, unknown>) => normalizeReview(item));
+  for (const endpoint of endpoints) {
+    try {
+      const res = await fetch(`${API_URL}${endpoint}`, { cache: 'no-store' });
+      if (!res.ok) continue;
+
+      const json = await res.json();
+      const raw = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+      if (raw.length > 0) {
+        return raw.map((item: Record<string, unknown>) => normalizeReview(item));
+      }
+    } catch {
+      // try next endpoint
     }
-    return DUMMY_ALL_REVIEWS as CommunityReview[];
-  } catch {
-    return DUMMY_ALL_REVIEWS as CommunityReview[];
   }
+
+  return (DUMMY_ALL_REVIEWS as unknown[]).map((r) => normalizeReview(r as Record<string, unknown>));
 }
