@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Bell, BookOpen, Heart, Users, Star, CheckCheck, Trash2, BookMarked, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -272,12 +273,23 @@ export default function NotificationsPage() {
                         alt=""
                       />
                     ) : n.avatar_url ? (
-                      <AvatarImage 
-                        src={n.avatar_url}
-                        alt="User avatar"
-                        initials="U"
-                        size="sm"
-                      />
+                      n.actor_username ? (
+                        <Link href={`/profile/@${n.actor_username}`} className="block w-full h-full" aria-label={`Buka profil ${n.title}`}>
+                          <AvatarImage 
+                            src={n.avatar_url}
+                            alt="User avatar"
+                            initials="U"
+                            size="sm"
+                          />
+                        </Link>
+                      ) : (
+                        <AvatarImage 
+                          src={n.avatar_url}
+                          alt="User avatar"
+                          initials="U"
+                          size="sm"
+                        />
+                      )
                     ) : (
                       <div className={cn('w-full h-full rounded-xl flex items-center justify-center', typeBg(n.type))}>
                         {typeIcon(n.type, dark)}

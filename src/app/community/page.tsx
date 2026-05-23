@@ -215,6 +215,7 @@ export default function CommunityPage() {
                   key={`${tab}-${r.review_id || i}`}
                   reviewId={r.review_id || ''}
                   name={r.user}
+                  username={r.username}
                   avatarUrl={r.avatar_url}
                   rating={r.rating}
                   text={r.text}

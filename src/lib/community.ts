@@ -8,6 +8,7 @@ function normalizeReview(raw: Record<string, unknown>): CommunityReview {
     // review_id is the actual DB UUID used for likes
     review_id: String(raw.review_id ?? raw.id ?? ''),
     user_id: raw.user_id ? String(raw.user_id) : undefined,
+    username: raw.username ? String(raw.username) : undefined,
     firebase_uid: raw.firebase_uid ? String(raw.firebase_uid) : undefined,
     // display_name is the human-facing name; fall back to username then name
     user: String(raw.display_name ?? raw.user ?? raw.username ?? raw.name ?? ''),

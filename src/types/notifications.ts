@@ -12,6 +12,7 @@ export interface NotificationItem extends DBNotification {
   // UI enrichment fields
   time?: string; // Formatted time
   avatar_url?: string | null; // Actor's avatar
+  actor_username?: string | null; // Actor's username when available
   bookCover?: string; // Book cover URL if relevant
   actionUrl?: string; // Link to take action
 }

@@ -801,13 +801,25 @@ export default function FeedPage() {
                 ) : (
                   <>
                     <div className="flex items-center gap-3 mb-4">
-                      <AvatarImage
-                        src={sidebar.profile.avatar_url || null}
-                        alt={sidebar.profile.name || 'User avatar'}
-                        initials={sidebar.profile.initials}
-                        size="md"
-                        className="w-12 h-12 rounded-2xl border border-gold/40 flex-shrink-0"
-                      />
+                      {sidebar.profile.username ? (
+                        <Link href={`/profile/@${sidebar.profile.username}`} className="flex-shrink-0" title={`Buka profil ${sidebar.profile.name}`}>
+                          <AvatarImage
+                            src={sidebar.profile.avatar_url || null}
+                            alt={sidebar.profile.name || 'User avatar'}
+                            initials={sidebar.profile.initials}
+                            size="md"
+                            className="w-12 h-12 rounded-2xl border border-gold/40 flex-shrink-0"
+                          />
+                        </Link>
+                      ) : (
+                        <AvatarImage
+                          src={sidebar.profile.avatar_url || null}
+                          alt={sidebar.profile.name || 'User avatar'}
+                          initials={sidebar.profile.initials}
+                          size="md"
+                          className="w-12 h-12 rounded-2xl border border-gold/40 flex-shrink-0"
+                        />
+                      )}
                       <div>
                         <p className={cn('font-semibold text-sm', tk.text)}>{sidebar.profile.name}</p>
                         <p className={cn('text-xs max-w-[180px] truncate', tk.muted)} title={sidebar.profile.subtitle}>{sidebar.profile.subtitle}</p>
@@ -1041,43 +1053,46 @@ export default function FeedPage() {
                     const displayName = u.display_name || u.name || u.username || 'Pustara User';
                     const initials = displayName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
                     const isPending = followLoadingIds.has(u.id);
+                    const profileHref = `/profile/@${u.username || u.id}`;
 
                     return (
-                    <div key={u.id} className="flex items-center gap-3">
-                      <AvatarImage
-                        src={u.avatar_url}
-                        alt={displayName}
-                        initials={initials}
-                        size="sm"
-                        className="w-9 h-9 rounded-2xl flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className={cn('text-sm font-semibold truncate', tk.text)} title={displayName}>{displayName}</p>
-                        <p className={cn('text-xs truncate', tk.muted)} title={`@${u.username || 'pustara_user'} · ${u.followers_count} pengikut`}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          disabled={isPending}
-                          onClick={() => handleFollowToggle(u)}
-                          className={cn(
-                            'text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all disabled:opacity-60',
-                            u.is_following
-                              ? (dark ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-slate-300 text-slate-700 hover:bg-slate-100')
-                              : (dark ? 'border-gold/30 text-gold hover:bg-gold/10' : 'border-navy-200 text-navy-700 hover:bg-navy-50')
-                          )}
-                        >
-                          {isPending ? '...' : (u.is_following ? 'Mengikuti' : 'Ikuti')}
-                        </button>
-                        <Link
-                          href={`/profile/@${u.username || u.id}`}
-                          className={cn('text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all',
-                            dark ? 'border-white/20 text-white/70 hover:bg-white/10' : 'border-slate-300 text-slate-600 hover:bg-slate-100')}
-                        >
-                          Lihat
+                      <div key={u.id} className="flex items-center gap-3">
+                        <Link href={profileHref} className="flex flex-1 min-w-0 items-center gap-3">
+                          <AvatarImage
+                            src={u.avatar_url}
+                            alt={displayName}
+                            initials={initials}
+                            size="sm"
+                            className="w-9 h-9 rounded-2xl flex-shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <p className={cn('text-sm font-semibold truncate hover:text-gold transition-colors', tk.text)} title={displayName}>{displayName}</p>
+                            <p className={cn('text-xs truncate', tk.muted)} title={`@${u.username || 'pustara_user'} · ${u.followers_count} pengikut`}>@{u.username || 'pustara_user'} · {u.followers_count} pengikut</p>
+                          </div>
                         </Link>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={isPending}
+                            onClick={() => handleFollowToggle(u)}
+                            className={cn(
+                              'text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all disabled:opacity-60',
+                              u.is_following
+                                ? (dark ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-slate-300 text-slate-700 hover:bg-slate-100')
+                                : (dark ? 'border-gold/30 text-gold hover:bg-gold/10' : 'border-navy-200 text-navy-700 hover:bg-navy-50')
+                            )}
+                          >
+                            {isPending ? '...' : (u.is_following ? 'Mengikuti' : 'Ikuti')}
+                          </button>
+                          <Link
+                            href={`/profile/@${u.username || u.id}`}
+                            className={cn('text-xs font-semibold px-2.5 py-1.5 rounded-xl border transition-all',
+                              dark ? 'border-white/20 text-white/70 hover:bg-white/10' : 'border-slate-300 text-slate-600 hover:bg-slate-100')}
+                          >
+                            Lihat
+                          </Link>
+                        </div>
                       </div>
-                    </div>
                   )})}
                   {!suggestionsLoading && recommendedUsers.length === 0 && (
                     <p className={cn('text-xs', tk.muted)}>Belum ada saran mengikuti saat ini.</p>

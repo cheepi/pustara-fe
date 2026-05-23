@@ -895,6 +895,7 @@ function CommunitySection({
                 <ReviewCard
                   reviewId={r.review_id}
                   name={r.user}
+                  username={r.username}
                   avatarUrl={r.avatar_url}
                   rating={r.rating}
                   text={r.text}
@@ -917,6 +918,7 @@ function CommunitySection({
                 key={r.review_id || r.key}
                 reviewId={r.review_id}
                 name={r.user}
+                username={r.username}
                 avatarUrl={r.avatar_url}
                 rating={r.rating}
                 text={r.text}
@@ -965,6 +967,7 @@ function CommunityCard({ review, index, isLight, liked, onLike }: {
   onLike: () => void;
 }) {
   const src = review.cover_url;
+  const profileHref = review.username ? `/profile/@${review.username}` : null;
 
   function formatRelativeTime(t: string | null | undefined) {
     if (!t) return '-';
@@ -996,14 +999,31 @@ function CommunityCard({ review, index, isLight, liked, onLike }: {
       whileHover={{ y: -2 }}
     >
       <div className="flex items-start gap-3 mb-3">
-        <AvatarImage
-          src={review.avatar_url || null}
-          alt={review.user || 'User avatar'}
-          initials={review.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
-          size="sm"
-        />
+        {profileHref ? (
+          <Link href={profileHref} className="flex-shrink-0">
+            <AvatarImage
+              src={review.avatar_url || null}
+              alt={review.user || 'User avatar'}
+              initials={review.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+              size="sm"
+            />
+          </Link>
+        ) : (
+          <AvatarImage
+            src={review.avatar_url || null}
+            alt={review.user || 'User avatar'}
+            initials={review.user.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase()}
+            size="sm"
+          />
+        )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{review.user}</p>
+          {profileHref ? (
+            <Link href={profileHref} className="block text-sm font-semibold truncate hover:text-gold transition-colors" style={{ color: 'var(--text)' }}>
+              {review.user}
+            </Link>
+          ) : (
+            <p className="text-sm font-semibold truncate" style={{ color: 'var(--text)' }}>{review.user}</p>
+          )}
           <div className="flex items-center gap-1.5">
             <div className="flex gap-0.5">
               {[1, 2, 3, 4, 5].map((s) => (
