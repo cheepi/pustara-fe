@@ -1,7 +1,8 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { updateProfile as updateFirebaseProfile } from 'firebase/auth';
 import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import {
   BookOpen, Star, Flame, TrendingUp, Heart,
   CheckCircle, Edit3, X, Check,
@@ -105,6 +106,94 @@ type ProfileStatItem = {
   color: string;
   tooltip?: string;
 };
+
+function StatCard({
+  stat,
+  index,
+  isLight,
+  textClass,
+  mutedClass,
+}: {
+  stat: ProfileStatItem;
+  index: number;
+  isLight: boolean;
+  textClass: string;
+  mutedClass: string;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number; placement: 'top' | 'bottom' } | null>(null);
+
+  const showTooltip = () => {
+    if (!stat.tooltip || !ref.current || typeof window === 'undefined') return;
+    const rect = ref.current.getBoundingClientRect();
+    const tooltipWidth = 208;
+    const tooltipHeight = 112;
+    const margin = 12;
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2, tooltipWidth / 2 + margin),
+      window.innerWidth - tooltipWidth / 2 - margin
+    );
+    const hasRoomBelow = rect.bottom + tooltipHeight + margin < window.innerHeight;
+    setTooltipPos({
+      left,
+      top: hasRoomBelow ? rect.bottom + 10 : rect.top - 10,
+      placement: hasRoomBelow ? 'bottom' : 'top',
+    });
+  };
+
+  const hideTooltip = () => setTooltipPos(null);
+
+  useEffect(() => {
+    if (!tooltipPos) return;
+    window.addEventListener('scroll', hideTooltip, true);
+    window.addEventListener('resize', hideTooltip);
+    return () => {
+      window.removeEventListener('scroll', hideTooltip, true);
+      window.removeEventListener('resize', hideTooltip);
+    };
+  }, [tooltipPos]);
+
+  return (
+    <motion.div
+      ref={ref}
+      tabIndex={stat.tooltip ? 0 : undefined}
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
+      onFocus={showTooltip}
+      onBlur={hideTooltip}
+      onClick={() => stat.tooltip && (tooltipPos ? hideTooltip() : showTooltip())}
+      className={cn(
+        'relative z-10 rounded-2xl p-3.5 text-center outline-none focus-visible:ring-2 focus-visible:ring-gold/50',
+        isLight ? 'bg-parchment' : 'bg-navy-700/40'
+      )}
+      initial={{ opacity: 0, scale: 0.93 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ delay: 0.08 + index * 0.04 }}
+    >
+      <stat.icon className={cn('w-5 h-5 mx-auto mb-2', stat.color)} />
+      <p className={cn('font-serif font-black text-2xl', textClass)}>
+        {stat.value}
+        {stat.suffix && <span className={cn('text-sm font-sans font-normal ml-0.5', mutedClass)}>{stat.suffix}</span>}
+      </p>
+      <p className={cn('text-[11px] mt-0.5', mutedClass)}>{stat.label}</p>
+      {stat.tooltip && tooltipPos && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-[120] w-52 rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2 text-left text-[11px] leading-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] whitespace-pre-line"
+              style={{
+                left: tooltipPos.left,
+                top: tooltipPos.top,
+                transform: tooltipPos.placement === 'top' ? 'translate(-50%, -100%)' : 'translateX(-50%)',
+              }}
+            >
+              {stat.tooltip}
+            </div>,
+            document.body
+          )
+        : null}
+    </motion.div>
+  );
+}
 
 export default function ProfilePage() {
   const { theme } = useTheme();
@@ -298,7 +387,7 @@ export default function ProfilePage() {
               username: item.username ?? null,
               name: displayName,
               avatar_url: item.avatar_url || null,
-              books: Number(item.total_read ?? 0),
+              books: Number(item.total_read ?? 0) || Number(item.reviews_written ?? 0),
             };
           })
         );
@@ -478,7 +567,7 @@ export default function ProfilePage() {
       <main className="max-w-7xl mx-auto px-4 pt-6 pb-20">
 
         {/* ── PROFILE HEADER ── */}
-        <motion.div className={cn('rounded-3xl border p-6 mb-5 relative overflow-hidden', tk.surface)}
+        <motion.div className={cn('rounded-3xl border p-6 mb-5 relative overflow-visible z-20', tk.surface)}
           initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
 
           <div className="absolute -top-12 -right-12 w-48 h-48 bg-gold/8 rounded-full blur-3xl pointer-events-none" />
@@ -629,21 +718,14 @@ export default function ProfilePage() {
               <h2 className={cn('font-serif text-lg font-bold mb-4', tk.text)}>Statistik Baca</h2>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {stats.map((s, i) => (
-                  <motion.div key={s.label}
-                    className={cn('group relative rounded-2xl p-3.5 text-center', isLight ? 'bg-parchment' : 'bg-navy-700/40')}
-                    initial={{ opacity: 0, scale: 0.93 }} animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: 0.08 + i * 0.04 }}>
-                    <s.icon className={cn('w-5 h-5 mx-auto mb-2', s.color)} />
-                    <p className={cn('font-serif font-black text-2xl', tk.text)}>
-                      {s.value}{s.suffix && <span className={cn('text-sm font-sans font-normal ml-0.5', tk.muted)}>{s.suffix}</span>}
-                    </p>
-                    <p className={cn('text-[11px] mt-0.5', tk.muted)}>{s.label}</p>
-                    {s.tooltip ? (
-                      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden -translate-x-1/2 rounded-2xl border border-gold/20 bg-navy-950 px-3 py-2 text-left text-[11px] leading-5 text-white shadow-2xl group-hover:block whitespace-pre-line min-w-52">
-                        {s.tooltip}
-                      </div>
-                    ) : null}
-                  </motion.div>
+                  <StatCard
+                    key={s.label}
+                    stat={s}
+                    index={i}
+                    isLight={isLight}
+                    textClass={tk.text}
+                    mutedClass={tk.muted}
+                  />
                 ))}
               </div>
 

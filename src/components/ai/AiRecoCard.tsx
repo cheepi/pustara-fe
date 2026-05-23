@@ -293,11 +293,11 @@ export default function AiRecoCard({ reco, index = 0, isLight, coverUrl: propCov
       </p>
 
       {/* Secondary reason */}
-      {/* {reco.reason_secondary && (
+      {reco.reason_secondary && (
         <p className="text-[10px] leading-snug mb-2 line-clamp-1" style={{ color: 'var(--muted)' }}>
           ✧ {reco.reason_secondary}
         </p>
-      )} */}
+      )}
 
       {/* Signal button */}
       <button
@@ -382,11 +382,11 @@ export default function AiRecoCard({ reco, index = 0, isLight, coverUrl: propCov
                   <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--text)' }}>
                     ✦ {reco.reason_primary}
                   </p>
-                  {/* {reco.reason_secondary && (
+                  {reco.reason_secondary && (
                     <p className="text-xs" style={{ color: 'var(--muted)' }}>
                       ✧ {reco.reason_secondary}
                     </p>
-                  )} */}
+                  )}
                 </div>
 
                 {/* Breakdown Sinyal */}

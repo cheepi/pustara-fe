@@ -1,8 +1,25 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+
+function resolveAvatarSrc(src: string): string {
+  const value = String(src || '').trim();
+  if (!value) return '';
+
+  if (/^(https?:|data:|blob:)/i.test(value)) {
+    return value;
+  }
+
+  if (value.startsWith('/')) {
+    return `${API_URL.replace(/\/$/, '')}${value}`;
+  }
+
+  return value;
+}
 
 interface AvatarImageProps {
   /**
@@ -58,6 +75,12 @@ export default function AvatarImage({
 }: AvatarImageProps) {
   const [imageError, setImageError] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const resolvedSrc = src ? resolveAvatarSrc(src) : '';
+
+  useEffect(() => {
+    setImageError(false);
+    setIsLoading(Boolean(resolvedSrc));
+  }, [resolvedSrc]);
 
   // Size mappings (width/height in pixels)
   const sizeMap = {
@@ -81,7 +104,7 @@ export default function AvatarImage({
   const { px, container, text } = sizeMap[size];
 
   // If no src or image failed to load, show initials
-  if (!src || imageError) {
+  if (!resolvedSrc || imageError) {
     return (
       <div
         className={cn(
@@ -90,7 +113,7 @@ export default function AvatarImage({
           'flex items-center justify-center font-bold text-gold',
           'flex-shrink-0',
           text,
-          className
+          className,
         )}
         title={alt}
       >
@@ -106,21 +129,22 @@ export default function AvatarImage({
         'relative rounded-full overflow-hidden',
         'flex-shrink-0',
         'border border-gold/20',
-        className
+        className,
       )}
       title={alt}
     >
       <Image
-        src={src}
+        src={resolvedSrc}
         alt={alt}
         fill
         sizes={`${px}px`}
         className={cn(
           'object-cover w-full h-full',
           'transition-opacity duration-300',
-          isLoading ? 'opacity-0' : 'opacity-100'
+          isLoading ? 'opacity-0' : 'opacity-100',
         )}
         onError={() => setImageError(true)}
+        onLoad={() => setIsLoading(false)}
         onLoadingComplete={() => setIsLoading(false)}
         priority={false}
         unoptimized={true}

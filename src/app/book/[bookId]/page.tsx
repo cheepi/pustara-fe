@@ -113,6 +113,7 @@ export default function BookDetailPage() {
   const [borrowed,   setBorrowed]   = useState(false);
   const [queued, setQueued] = useState(false);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
+  const [queueCount, setQueueCount] = useState(0);
   const [actionLoading, setActionLoading] = useState<'borrow' | 'wishlist' | 'queue' | null>(null);
 
   async function refreshBookSnapshot() {
@@ -172,6 +173,7 @@ export default function BookDetailPage() {
         setBorrowed(Boolean(status.borrowed));
         setQueued(Boolean(status.queued));
         setQueuePosition(status.queue_position ?? null);
+        setQueueCount(Number(status.queue_count ?? 0));
       })
       .catch(() => {
         if (!active) return;
@@ -179,6 +181,7 @@ export default function BookDetailPage() {
         setBorrowed(false);
         setQueued(false);
         setQueuePosition(null);
+        setQueueCount(0);
       });
 
     return () => {
@@ -334,6 +337,10 @@ export default function BookDetailPage() {
 
   const src         = coverUrl;
   const isAvailable = book.available > 0;
+  const activeQueueCount = Math.max(queueCount, Number(book.queue || 0));
+  const hasQueue = activeQueueCount > 0;
+  const queuePositionLabel = queuePosition ? `#${queuePosition}` : '';
+  const canBorrowNow = borrowed || (!hasQueue && isAvailable) || (queued && queuePosition === 1);
 
   const borrowDate = new Date();
   const returnDate = new Date(borrowDate);
@@ -457,10 +464,10 @@ export default function BookDetailPage() {
                   onClick={() => router.push('/auth/login')}
                   className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-600 text-white hover:bg-slate-700 transition-colors shadow-lg"
                   whileTap={{ scale: 0.98 }}>
-                  {isAvailable ? <BookOpen className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
-                  {isAvailable ? 'Login untuk Pinjam' : 'Login untuk Antre'}
+                  {canBorrowNow ? <BookOpen className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                  {canBorrowNow ? 'Login untuk Pinjam' : 'Login untuk Antre'}
                 </motion.button>
-              ) : isAvailable ? (
+              ) : canBorrowNow ? (
                 <motion.button
                   onClick={handleBorrow}
                   disabled={actionLoading === 'borrow'}
@@ -469,13 +476,13 @@ export default function BookDetailPage() {
                   <BookOpen className="w-4 h-4" />
                   {actionLoading === 'borrow' ? 'Memproses...' : 'Pinjam Buku'}
                 </motion.button>
-              ) : queued ? (
+              ) : queued && queuePosition && queuePosition > 1 ? (
                 <motion.button
                   disabled
                   className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-500 text-white/95 cursor-not-allowed shadow-lg"
                   whileTap={{ scale: 0.98 }}>
                   <Clock className="w-4 h-4" />
-                  Dalam Antrean{queuePosition ? ` #${queuePosition}` : ''}
+                  Dalam Antrean {queuePositionLabel}
                 </motion.button>
               ) : (
                 <motion.button
@@ -483,7 +490,7 @@ export default function BookDetailPage() {
                   className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-amber-500 text-white hover:bg-amber-600 transition-colors shadow-lg"
                   whileTap={{ scale: 0.98 }}>
                   <Clock className="w-4 h-4" />
-                  Masuk Antrean ({book.queue || 0} menunggu)
+                  {hasQueue ? `Masuk Antrean (${activeQueueCount} menunggu)` : 'Masuk Antrean'}
                 </motion.button>
               )}
 

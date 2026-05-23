@@ -165,6 +165,7 @@ function normalizeRecommendedUser(raw: Record<string, unknown>): RecommendedUser
   const identity = normalizePublicIdentity(raw);
   return {
     id: String(raw.id ?? ''),
+    firebase_uid: raw.firebase_uid ? String(raw.firebase_uid) : null,
     username: identity.username,
     display_name: identity.displayName,
     name: identity.displayName,
@@ -173,6 +174,7 @@ function normalizeRecommendedUser(raw: Record<string, unknown>): RecommendedUser
     preferred_genres: parseStringArray(raw.preferred_genres),
     followers_count: Number(raw.followers_count ?? 0),
     total_read: Number(raw.total_read ?? 0),
+    reviews_written: Number(raw.reviews_written ?? 0),
     reading_streak: Number(raw.reading_streak ?? 0),
     is_following: Boolean(raw.is_following),
   };

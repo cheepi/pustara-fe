@@ -6,20 +6,36 @@ import { cn } from '@/lib/utils';
 import Navbar from '@/components/layout/Navbar';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { fetchCommunityReviews } from '@/lib/community';
+import { getMyFollowingUsers } from '@/lib/users';
+import { useAuthStore } from '@/store/authStore';
 import ReviewCard from '@/components/shared/ReviewCard';
 import type { CommunityReview } from '@/types/community';
+import type { RecommendedUser } from '@/types/user';
 
 const TABS = ['Terbaru', 'Terpopuler', 'Diikuti'];
 const PAGE_SIZE = 4;
 
+const normalizeComparable = (value?: string | null) => (value || '').trim().toLowerCase();
+
+function buildFollowingIdentitySet(users: RecommendedUser[]) {
+  return new Set(
+    users
+      .flatMap((user) => [user.id, user.firebase_uid, user.username, user.display_name, user.name])
+      .map((value) => normalizeComparable(value))
+      .filter(Boolean)
+  );
+}
+
 export default function CommunityPage() {
   const { theme } = useTheme();
   const isLight = theme === 'light';
+  const { user, loading: authLoading } = useAuthStore();
 
   const [tab, setTab]         = useState('Terbaru');
   const [visible, setVisible] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(false);
   const [reviews, setReviews] = useState<CommunityReview[]>([]);
+  const [followingUsers, setFollowingUsers] = useState<RecommendedUser[]>([]);
 
   const [communityStats, setCommunityStats] = useState<{
     readers: string; reviews: string; positive_pct: string;
@@ -30,10 +46,45 @@ export default function CommunityPage() {
   useEffect(() => { document.title = 'Pustara | Komunitas'; }, []);
 
   useEffect(() => {
+    let active = true;
+
     fetchCommunityReviews()
-      .then(setReviews)
-      .catch(() => setReviews([]));
+      .then((result) => {
+        if (active) setReviews(result);
+      })
+      .catch(() => {
+        if (active) setReviews([]);
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    if (authLoading) return;
+
+    if (!user?.uid) {
+      setFollowingUsers([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    getMyFollowingUsers(100)
+      .then((result) => {
+        if (active) setFollowingUsers(result);
+      })
+      .catch(() => {
+        if (active) setFollowingUsers([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [authLoading, user?.uid]);
 
   useEffect(() => {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || '';
@@ -46,11 +97,25 @@ export default function CommunityPage() {
 
   useEffect(() => { setVisible(PAGE_SIZE); }, [tab]);
 
+  const followingIdentitySet = buildFollowingIdentitySet(followingUsers);
+
+  const followingReviews = reviews.filter((review) => {
+    const reviewId = normalizeComparable(review.user_id);
+    const reviewUid = normalizeComparable(review.firebase_uid);
+    const reviewUser = normalizeComparable(review.user);
+    return (
+      (reviewId && followingIdentitySet.has(reviewId)) ||
+      (reviewUid && followingIdentitySet.has(reviewUid)) ||
+      (reviewUser && followingIdentitySet.has(reviewUser))
+    );
+  });
+
   // "Terpopuler" sorts by current likes count — ReviewCard manages live counts internally
   // so for initial sort we use the seed value from the API
+  const scopedReviews = tab === 'Diikuti' ? followingReviews : reviews;
   const sorted = tab === 'Terpopuler'
-    ? [...reviews].sort((a, b) => b.likes - a.likes)
-    : reviews;
+    ? [...scopedReviews].sort((a, b) => b.likes - a.likes)
+    : scopedReviews;
 
   const displayed = sorted.slice(0, visible);
   const hasMore   = visible < sorted.length;
@@ -125,14 +190,18 @@ export default function CommunityPage() {
         </div>
 
         {/* Diikuti empty state */}
-        {tab === 'Diikuti' && (
+        {tab === 'Diikuti' && displayed.length === 0 && (
           <motion.div
             className={cn('rounded-3xl border p-10 text-center', tk.surface)}
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
             <BookHeart className="w-10 h-10 text-gold/50 mx-auto mb-3" />
-            <p className={cn('font-semibold text-sm mb-1', tk.text)}>Belum ada yang diikuti</p>
+            <p className={cn('font-semibold text-sm mb-1', tk.text)}>
+              {followingUsers.length === 0 ? 'Belum ada yang diikuti' : 'Belum ada ulasan dari yang diikuti'}
+            </p>
             <p className={cn('text-xs leading-relaxed', tk.muted)}>
-              Ikuti pengguna lain untuk melihat ulasan mereka di sini.
+              {followingUsers.length === 0
+                ? 'Ikuti pengguna lain untuk melihat ulasan mereka di sini.'
+                : 'Ulasan dari orang yang kamu ikuti akan muncul otomatis di tab ini.'}
             </p>
           </motion.div>
         )}

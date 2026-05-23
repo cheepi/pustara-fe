@@ -58,6 +58,7 @@ export interface UserProfile {
  */
 export interface RecommendedUser {
   id: string;
+  firebase_uid?: string | null;
   username: string | null;
   display_name: string | null;
   // Backward-compat alias because some cards still render `name`.
@@ -67,6 +68,7 @@ export interface RecommendedUser {
   preferred_genres: string[];
   followers_count: number;
   total_read: number;
+  reviews_written?: number;
   reading_streak: number;
   is_following: boolean;
 }

@@ -866,7 +866,10 @@ function CommunitySection({
     <>
       {loading ? (
         <>
-          <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+          <div
+            className="lg:hidden -mx-4 px-4 flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory"
+            style={{ scrollbarWidth: 'none' }}
+          >
             {Array.from({ length: 3 }).map((_, i) => <CommunityCardSkeleton key={i} isLight={isLight} />)}
           </div>
           <div className="hidden lg:grid grid-cols-3 gap-3">
@@ -879,25 +882,30 @@ function CommunitySection({
         </div>
       ) : (
         <>
-          <div className="lg:hidden flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
-           {reviews.slice(0, 5).map((r, i) => (
-            <ReviewCard
-              key={r.review_id || r.key}
-              reviewId={r.review_id}
-              name={r.user}
-              avatarUrl={r.avatar_url}
-              rating={r.rating}
-              text={r.text}
-              initialLikes={r.likes}
-              time={r.time}
-              bookTitle={r.book}
-              bookAuthor={r.author}
-              bookCoverUrl={r.cover_url}
-              bookId={r.key}
-              firebaseUid={r.firebase_uid}
-              index={i}
-            />
-          ))}
+          <div
+            className="lg:hidden -mx-4 px-4 flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory"
+            style={{ scrollbarWidth: 'none' }}
+          >
+            {reviews.slice(0, 5).map((r, i) => (
+              <div key={r.review_id || r.key} className="flex-shrink-0 w-[84vw] max-w-[300px] snap-start">
+                <ReviewCard
+                  reviewId={r.review_id}
+                  name={r.user}
+                  avatarUrl={r.avatar_url}
+                  rating={r.rating}
+                  text={r.text}
+                  initialLikes={r.likes}
+                  time={r.time}
+                  bookTitle={r.book}
+                  bookAuthor={r.author}
+                  bookCoverUrl={r.cover_url}
+                  bookId={r.key}
+                  firebaseUid={r.firebase_uid}
+                  variant="compact"
+                  index={i}
+                />
+              </div>
+            ))}
           </div>
           <div className="hidden lg:grid grid-cols-3 gap-3">
             {reviews.slice(0, 8).map((r, i) => (

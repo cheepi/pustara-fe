@@ -466,7 +466,7 @@ export default function FeedPage() {
   const { books: similarUserBooks } = useSimilarUsers(2);
   const [filter, setFilter]               = useState('all');
   const [liked,  setLiked]                = useState<Set<string>>(new Set());
-  const [visibleCount, setVisibleCount]   = useState(5);
+  const [visibleCount, setVisibleCount]   = useState(8);
   const [loadingMore, setLoadingMore]     = useState(false);
   const [trendingItems, setTrendingItems] = useState<FeedItem[]>([]);
   const [activityItems, setActivityItems] = useState<FeedItem[]>([]);
@@ -502,11 +502,9 @@ export default function FeedPage() {
     }
   }, [recentReadsCollapsed]);
 
-  async function loadFeedData() {
+  async function loadMainFeedData() {
     if (!ready || !user) return;
     setFeedLoading(true);
-    setSidebarLoading(true);
-    setSuggestionsLoading(true);
 
     const authDisplayName = (user.displayName || user.email?.split('@')[0] || '').trim();
     const authName = normalizeComparable(authDisplayName);
@@ -515,9 +513,6 @@ export default function FeedPage() {
 
     // Determine scope based on selected filter tab
     const includeNetwork = filter === 'activity';
-
-    const sidebarPromise = fetchFeedSidebarPayload();
-    const usersPromise = getRecommendedUsers(8);
     const notificationsPromise = fetchNotifications();
 
     try {
@@ -562,6 +557,21 @@ export default function FeedPage() {
     } catch {
       setNotificationItems([]);
     }
+  }
+
+  async function loadSidebarData() {
+    if (!ready || !user) return;
+
+    setSidebarLoading(true);
+    setSuggestionsLoading(true);
+
+    const authDisplayName = (user.displayName || user.email?.split('@')[0] || '').trim();
+    const authName = normalizeComparable(authDisplayName);
+    const authEmailPrefix = normalizeComparable(user.email?.split('@')[0]);
+    const authUid = String(user.uid || '').trim();
+
+    const sidebarPromise = fetchFeedSidebarPayload();
+    const usersPromise = getRecommendedUsers(8);
 
     const [payloadResult, usersResult] = await Promise.allSettled([sidebarPromise, usersPromise]);
 
@@ -611,10 +621,15 @@ export default function FeedPage() {
     setSuggestionsLoading(false);
   }
 
-  // Fetch live data
+  // Fetch main feed whenever the tab changes.
   useEffect(() => {
-    void loadFeedData();
+    void loadMainFeedData();
   }, [ready, user?.uid, user?.displayName, user?.email, filter]);
+
+  // Sidebar data only depends on the authenticated user, not the active tab.
+  useEffect(() => {
+    void loadSidebarData();
+  }, [ready, user?.uid, user?.displayName, user?.email]);
 
   // Fetch like statuses for all review activities in the feed
   useEffect(() => {
@@ -728,16 +743,16 @@ export default function FeedPage() {
     ? sidebar.recentReads.slice(0, 3)
     : sidebar.recentReads;
 
-  useEffect(() => { setVisibleCount(5); }, [filter]);
+  useEffect(() => { setVisibleCount(8); }, [filter]);
 
   useEffect(() => {
     const obs = new IntersectionObserver(entries => {
       if (entries[0].isIntersecting && !loadingMore && visibleCount < allFiltered.length) {
         setLoadingMore(true);
         setTimeout(() => {
-          setVisibleCount(v => Math.min(v + 3, FEED.length));
+          setVisibleCount(v => Math.min(v + 5, FEED.length));
           setLoadingMore(false);
-        }, 600);
+        }, 350);
       }
     }, { threshold: 0.1 });
     if (loaderRef.current) obs.observe(loaderRef.current);
@@ -893,8 +908,9 @@ export default function FeedPage() {
               <h1 className={cn('font-serif text-2xl font-black', tk.text)}>Feed</h1>
               <button
                 onClick={() => {
-                  setVisibleCount(5);
-                  void loadFeedData();
+                  setVisibleCount(8);
+                  void loadMainFeedData();
+                  void loadSidebarData();
                 }}
                 className={cn('p-2 rounded-xl transition-colors', tk.muted, 'hover:text-gold', dark ? 'hover:bg-white/5' : 'hover:bg-navy-50')}>
                 <RefreshCw className="w-4 h-4" />

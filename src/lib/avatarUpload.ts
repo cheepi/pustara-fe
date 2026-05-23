@@ -13,10 +13,8 @@ interface UploadResult {
  * Flow:
  * 1. Validate file (image/* type, max 5MB)
  * 2. Upload to Supabase Storage (avatars/ bucket)
- * 3. Get public URL
- * 4. Add cache busting query param (?v=timestamp)
- * 5. Send to backend to update database
- * 6. Return full avatar URL for UI update
+ * 3. Send storage path to backend so the app can serve avatars through a proxy route
+ * 4. Return the application avatar URL for UI update
  */
 export async function uploadAvatarToSupabase(
   file: File,
@@ -75,32 +73,10 @@ export async function uploadAvatarToSupabase(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 3. Get public URL
-    // ─────────────────────────────────────────────────────────────
-    const { data: publicUrlData } = supabase.storage
-      .from('pustara-storage')
-      .getPublicUrl(filePath);
-
-    let publicUrl = publicUrlData.publicUrl;
-
-    if (!publicUrl) {
-      return {
-        success: false,
-        error: 'Failed to get public URL from Supabase',
-      };
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 4. Cache busting: Add timestamp query param
-    // ─────────────────────────────────────────────────────────────
-    // This ensures next.js Image component always fetches fresh
-    const urlWithCacheBust = `${publicUrl}?v=${timestamp}`;
-
-    // ─────────────────────────────────────────────────────────────
-    // 5. Save to backend database
+    // 3. Save storage path to backend database
     // ─────────────────────────────────────────────────────────────
     const backendResult = await updateMyProfile({
-      avatar_url: urlWithCacheBust,
+      avatar_url: filePath,
     });
 
     if (!backendResult) {
@@ -112,11 +88,11 @@ export async function uploadAvatarToSupabase(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 6. Return success with new avatar URL
+    // 4. Return application avatar URL (served by backend proxy)
     // ─────────────────────────────────────────────────────────────
     return {
       success: true,
-      avatarUrl: urlWithCacheBust,
+      avatarUrl: `/users/${encodeURIComponent(userId)}/avatar?v=${timestamp}`,
     };
   } catch (error) {
     console.error('Avatar upload error:', error);

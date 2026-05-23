@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="id" suppressHydrationWarning>
       <head />
-      <body className="min-h-screen overflow-x-hidden overflow-y-auto">
+      <body className="min-h-screen overflow-x-hidden overflow-y-auto no-scrollbar">
         <ThemeProvider>
           <ToastProvider>
             <div className="min-h-screen w-full flex flex-col">

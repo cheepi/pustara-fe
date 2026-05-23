@@ -1,8 +1,9 @@
 'use client';
  
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BookOpen, Heart, UserPlus, UserCheck,
@@ -123,13 +124,53 @@ function StatPill({
   isLight: boolean;
   tooltip?: string;
 }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number; placement: 'top' | 'bottom' } | null>(null);
+
+  const showTooltip = () => {
+    if (!tooltip || !ref.current || typeof window === 'undefined') return;
+    const rect = ref.current.getBoundingClientRect();
+    const tooltipWidth = 208;
+    const margin = 12;
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2, tooltipWidth / 2 + margin),
+      window.innerWidth - tooltipWidth / 2 - margin
+    );
+    const tooltipHeight = 112;
+    const hasRoomBelow = rect.bottom + tooltipHeight + margin < window.innerHeight;
+    setTooltipPos({
+      left,
+      top: hasRoomBelow ? rect.bottom + 10 : rect.top - 10,
+      placement: hasRoomBelow ? 'bottom' : 'top',
+    });
+  };
+
+  const hideTooltip = () => setTooltipPos(null);
+
+  useEffect(() => {
+    if (!tooltipPos) return;
+    window.addEventListener('scroll', hideTooltip, true);
+    window.addEventListener('resize', hideTooltip);
+    return () => {
+      window.removeEventListener('scroll', hideTooltip, true);
+      window.removeEventListener('resize', hideTooltip);
+    };
+  }, [tooltipPos]);
+
   return (
     <motion.div
+      ref={ref}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }}
+      tabIndex={tooltip ? 0 : undefined}
+      onMouseEnter={showTooltip}
+      onMouseLeave={hideTooltip}
+      onFocus={showTooltip}
+      onBlur={hideTooltip}
+      onClick={() => tooltip && (tooltipPos ? hideTooltip() : showTooltip())}
       className={cn(
-        'group relative flex flex-col items-center gap-1.5 px-5 py-4 rounded-2xl flex-1',
+        'group relative z-10 flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-3 py-4 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-gold/50 sm:flex-1 sm:px-5',
         isLight ? 'bg-white/60 backdrop-blur border border-parchment-darker' : 'bg-white/5 backdrop-blur border border-white/8'
       )}
     >
@@ -138,11 +179,21 @@ function StatPill({
         {value}
       </span>
       <span className={cn('text-[11px] text-center', isLight ? 'text-slate-500' : 'text-slate-400')}>{label}</span>
-      {tooltip ? (
-        <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden -translate-x-1/2 rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2 text-left text-[11px] leading-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] group-hover:block whitespace-pre-line min-w-52">
-          {tooltip}
-        </div>
-      ) : null}
+      {tooltip && tooltipPos && typeof document !== 'undefined'
+        ? createPortal(
+            <div
+              className="pointer-events-none fixed z-[120] w-52 rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2 text-left text-[11px] leading-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] whitespace-pre-line"
+              style={{
+                left: tooltipPos.left,
+                top: tooltipPos.top,
+                transform: tooltipPos.placement === 'top' ? 'translate(-50%, -100%)' : 'translateX(-50%)',
+              }}
+            >
+              {tooltip}
+            </div>,
+            document.body
+          )
+        : null}
     </motion.div>
   );
 }
@@ -418,18 +469,18 @@ export default function UserProfilePage() {
     <div className="min-h-screen" style={{ background: 'var(--bg)' }}>
       <Navbar />
  
-      <main className="max-w-6xl mx-auto px-4 pb-24">
+      <main className="max-w-7xl mx-auto px-4 pt-4 pb-20 sm:pt-6">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.5 }}
-          className="relative pt-8 pb-6 mb-6 overflow-hidden"
+          className="relative z-20 pt-6 pb-6 mb-6 overflow-visible sm:pt-8"
         >
           <div className="pointer-events-none absolute -top-10 -left-20 w-72 h-72 rounded-full bg-gold/10 blur-[80px]" />
           <div className="pointer-events-none absolute top-0 right-10 w-56 h-56 rounded-full bg-blue-500/10 blur-[60px]" />
           <div className="pointer-events-none absolute bottom-0 left-1/2 w-40 h-40 rounded-full bg-gold/5 blur-[50px]" />
  
-          <div className="relative flex flex-col sm:flex-row items-start sm:items-end gap-6">
+          <div className="relative flex flex-col items-center gap-4 text-center sm:flex-row sm:items-end sm:gap-6 sm:text-left">
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -437,7 +488,7 @@ export default function UserProfilePage() {
               className="relative flex-shrink-0"
             >
               <div className={cn(
-                'w-24 h-24 lg:w-28 lg:h-28 rounded-3xl flex items-center justify-center shadow-2xl overflow-hidden',
+                'w-28 h-28 lg:w-28 lg:h-28 rounded-3xl flex items-center justify-center shadow-2xl overflow-hidden',
                 'bg-gradient-to-br from-gold/30 via-gold/10 to-transparent border-2 border-gold/40'
               )}>
                 {avatarUrl ? (
@@ -457,7 +508,7 @@ export default function UserProfilePage() {
               <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-gold/60 shadow-sm shadow-gold/50" />
             </motion.div>
  
-            <div className="flex-1 min-w-0">
+            <div className="w-full min-w-0 flex-1">
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -466,14 +517,14 @@ export default function UserProfilePage() {
                 <p className={cn('text-xs font-semibold uppercase tracking-[0.2em] mb-1', isLight ? 'text-gold' : 'text-gold/80')}>
                   Pustara Reader
                 </p>
-                <h1 className={cn('font-serif text-4xl lg:text-5xl font-black leading-none', tk.text)}>
+                <h1 className={cn('font-serif text-4xl lg:text-5xl font-black leading-none break-words', tk.text)}>
                   {profile.name}
                 </h1>
                 {profile.username && (
                   <p className={cn('text-sm mt-1 font-mono', tk.muted)}>@{profile.username}</p>
                 )}
                 {profile.bio && (
-                  <p className={cn('text-sm mt-2 max-w-md leading-relaxed', tk.muted)}>{profile.bio}</p>
+                  <p className={cn('mx-auto text-sm mt-2 max-w-md leading-relaxed sm:mx-0', tk.muted)}>{profile.bio}</p>
                 )}
               </motion.div>
             </div>
@@ -482,13 +533,13 @@ export default function UserProfilePage() {
               initial={{ opacity: 0, x: 10 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.2, duration: 0.4 }}
-              className="flex-shrink-0"
+              className="w-full flex-shrink-0 sm:w-auto"
             >
               <button
                 onClick={handleFollow}
                 disabled={loadingFollow || !user}
                 className={cn(
-                  'px-5 py-2.5 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-60',
+                  'w-full justify-center px-5 py-2.5 rounded-2xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-60 sm:w-auto',
                   profile.is_following
                     ? isLight
                       ? 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
@@ -509,7 +560,7 @@ export default function UserProfilePage() {
             </motion.div>
           </div>
  
-          <div className="flex gap-2.5 mt-6 overflow-x-auto pb-1 scrollbar-hide">
+          <div className="grid grid-cols-2 gap-2.5 mt-6 overflow-visible [&>*:last-child]:col-span-2 sm:flex sm:[&>*:last-child]:col-span-1">
             <StatPill icon={BookOpen}   value={totalRead}    label="Buku Dibaca" color="text-gold"        delay={0.18} isLight={isLight} />
             <StatPill icon={Flame}      value={streak}       label="Hari Streak" color="text-orange-400"  delay={0.22} isLight={isLight} tooltip={streakTooltip} />
             <StatPill icon={Heart}      value={likedCount}   label="Disukai"     color="text-rose-400"    delay={0.26} isLight={isLight} />

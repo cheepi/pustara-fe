@@ -41,11 +41,15 @@
     /* Sembunyiin scrollbar di Firefox, IE & Edge */
     -ms-overflow-style: none !important;
     scrollbar-width: none !important;
+    scrollbar-color: transparent transparent;
   }
 
   html,
   body {
     height: 100%;
+    overscroll-behavior: none;
+    -ms-overflow-style: none !important;
+    scrollbar-width: none !important;
   }
 
   body {
@@ -53,6 +57,15 @@
     color: var(--text);
     @apply font-sans;
     -webkit-font-smoothing: antialiased;
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+    -webkit-appearance: none !important;
   }
 
   *::-webkit-scrollbar { 

@@ -1334,7 +1334,7 @@ function TabRiwayat({ books, tk, isLight }: { books: RiwayatBook[]; tk: any; isL
                   <span className="whitespace-nowrap">{book.returnedAt}</span>
                 </div>
                 <span>·</span>
-                <span className="whitespace-nowrap flex-shrink-0">{book.readDays}h baca</span>
+                <span className="whitespace-nowrap flex-shrink-0">{book.readDays} hari baca</span>
                 {book.userRating && (
                   <>
                     <span>·</span>
