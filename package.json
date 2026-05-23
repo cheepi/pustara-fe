@@ -10,6 +10,7 @@
     "postinstall": "node -e \"require('fs').cpSync('node_modules/pdfjs-dist/build/pdf.worker.min.mjs', 'public/pdf.worker.min.mjs')\""
   },
   "dependencies": {
+    "@ducanh2912/next-pwa": "^10.2.9",
     "@supabase/supabase-js": "^2.105.4",
     "autoprefixer": "^10.4.27",
     "canvas-confetti": "^1.9.4",

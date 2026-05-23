@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 import { AuthProvider } from '@/components/auth/AuthProvider';
@@ -10,6 +10,12 @@ export const metadata: Metadata = {
   title: 'Pustara | Perpustakaan Digital Nusantara',
   description: 'Perpustakaan Digital Milik Masyarakat Indonesia',
   icons: '/Logo.svg',
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Pustara",
+  },
   openGraph: {
     title: 'Pustara | Perpustakaan Digital Nusantara',
     description: 'Perpustakaan Digital Milik Masyarakat Indonesia',
@@ -22,6 +28,10 @@ export const metadata: Metadata = {
     title: 'Pustara',
     description: 'Perpustakaan Digital Milik Masyarakat Indonesia',
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#C9A84C',
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
