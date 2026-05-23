@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Pustara",
   },
   openGraph: {
@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   },
 };
 
-export const viewport = {
+export const viewport: Viewport = {
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#f8f6f1' }, 
     { media: '(prefers-color-scheme: dark)', color: '#0f172a' },
