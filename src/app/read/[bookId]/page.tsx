@@ -17,6 +17,7 @@ import { fetchReaderBook } from '@/lib/reader';
 import { uploadPdfFile } from '@/lib/supabase-admin';
 import type { ReaderBook } from '@/types/reader';
 import { auth } from '@/lib/firebase';
+import { getOrCreateDeviceId } from '@/lib/deviceDetection';
 import confetti from 'canvas-confetti';
 import { invalidateShelfCache } from '@/lib/shelf';
 
@@ -120,16 +121,17 @@ export default function ReadPage() {
     if (!token || !bookKey) return null;
 
     const resolvedPdfUrl = book?.pdfUrl || book?.file_url || null;
+    const deviceHeader = { 'x-device-id': getOrCreateDeviceId() };
     if (resolvedPdfUrl) {
       return {
         url: resolvedPdfUrl,
-        httpHeaders: { Authorization: `Bearer ${token}` }
+        httpHeaders: { Authorization: `Bearer ${token}`, ...deviceHeader }
       };
     }
 
     return {
       url: `${API_URL}/books/${bookKey}/file`,
-      httpHeaders: { Authorization: `Bearer ${token}` }
+      httpHeaders: { Authorization: `Bearer ${token}`, ...deviceHeader }
     };
   }, [API_URL, book?.file_url, book?.pdfUrl, bookKey, token]);
 

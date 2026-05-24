@@ -9,6 +9,7 @@ import {
   FileText, Loader,
 } from 'lucide-react';
 import { auth } from '@/lib/firebase';
+import { getOrCreateDeviceId } from '@/lib/deviceDetection';
 import { uploadPdfFile } from '@/lib/supabase-admin';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { cn } from '@/lib/utils';
@@ -834,7 +835,10 @@ function PreviewPdfModal({
 
         const token = await auth?.currentUser?.getIdToken();
         const res = await fetch(`${API}/admin/books/${book.id}/file`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-device-id': getOrCreateDeviceId(),
+          },
           cache: 'no-store',
         });
 
