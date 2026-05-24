@@ -13,8 +13,8 @@ interface UploadResult {
  * Flow:
  * 1. Validate file (image/* type, max 5MB)
  * 2. Upload to Supabase Storage (avatars/ bucket)
- * 3. Send storage path to backend so the app can serve avatars through a proxy route
- * 4. Return the application avatar URL for UI update
+ * 3. Save the public avatar URL to backend so the profile can render it directly
+ * 4. Return the avatar URL for UI update
  */
 export async function uploadAvatarToSupabase(
   file: File,
@@ -73,10 +73,16 @@ export async function uploadAvatarToSupabase(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 3. Save storage path to backend database
+    const { data: publicUrlData } = supabase.storage
+      .from('pustara-storage')
+      .getPublicUrl(filePath);
+
+    const avatarUrl = publicUrlData.publicUrl;
+
+    // 3. Save public avatar URL to backend database
     // ─────────────────────────────────────────────────────────────
     const backendResult = await updateMyProfile({
-      avatar_url: filePath,
+      avatar_url: avatarUrl,
     });
 
     if (!backendResult) {
@@ -88,11 +94,11 @@ export async function uploadAvatarToSupabase(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 4. Return application avatar URL (served by backend proxy)
+    // 4. Return application avatar URL
     // ─────────────────────────────────────────────────────────────
     return {
       success: true,
-      avatarUrl: `/users/${encodeURIComponent(userId)}/avatar?v=${timestamp}`,
+      avatarUrl,
     };
   } catch (error) {
     console.error('Avatar upload error:', error);
