@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="Dokumentasi frontend Pustara yang siap dipublikasikan lewat GitHub Pages." />
+    <meta name="description" content="Dokumentasi showcase frontend Pustara: arsitektur, route map, flow auth, komponen inti, dan kesiapan PWA." />
     <meta name="theme-color" content="#0d1829" />
-    <title>Pustara Frontend | Docs</title>
+    <title>Pustara Frontend | Documentation Showcase</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,700;0,9..144,900;1,9..144,400&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
@@ -22,15 +22,17 @@
           <div class="brand-mark">P</div>
           <div>
             <p class="eyebrow">Pustara Frontend</p>
-            <p class="brand-sub">Docs untuk GitHub Pages</p>
+            <p class="brand-sub">Product documentation for contributors and reviewers</p>
           </div>
         </div>
 
         <nav class="nav-links" aria-label="Docs navigation">
           <a href="#overview">Overview</a>
-          <a href="#stack">Stack</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#routes">Routes</a>
           <a href="#flow">Flow</a>
-          <a href="#deploy">Deploy</a>
+          <a href="#showcase">Showcase</a>
+          <a href="#pwa">PWA</a>
         </nav>
       </header>
 
@@ -38,60 +40,66 @@
         <div class="hero-copy">
           <div class="pill-row">
             <span class="pill">Next.js</span>
-            <span class="pill">Tailwind</span>
+            <span class="pill">React 19</span>
+            <span class="pill">Tailwind CSS</span>
             <span class="pill">Firebase Auth</span>
             <span class="pill">Framer Motion</span>
           </div>
 
-          <h1>Dokumentasi frontend Pustara yang rapi, gelap, dan tetap classy.</h1>
+          <h1>Dokumentasi frontend Pustara yang merangkum produk, arsitektur, dan pengalaman pengguna secara jelas.</h1>
           <p class="hero-text">
-            Halaman ini merangkum struktur frontend, alur auth, styling, dan cara deploy ke GitHub Pages tanpa ngubah karakter visual Pustara yang lama.
+            Halaman ini berfungsi sebagai referensi singkat untuk memahami struktur frontend, alur autentikasi, sistem UI, dan kapabilitas rilis utama Pustara.
           </p>
 
           <div class="cta-row">
-            <a class="btn btn-primary" href="#stack">Lihat stack</a>
-            <a class="btn btn-secondary" href="#deploy">Cara publish</a>
+            <a class="btn btn-primary" href="#architecture">Lihat arsitektur</a>
+            <a class="btn btn-secondary" href="#showcase">Lihat showcase</a>
           </div>
 
           <div class="metric-grid">
             <article class="metric glass">
-              <span class="metric-label">Framework</span>
-              <strong>Next.js</strong>
+              <span class="metric-label">Route groups</span>
+              <strong>Public, User, Admin, API</strong>
             </article>
             <article class="metric glass">
-              <span class="metric-label">Styling</span>
-              <strong>Tailwind</strong>
+              <span class="metric-label">Auth core</span>
+              <strong>Firebase ID token</strong>
             </article>
             <article class="metric glass">
-              <span class="metric-label">Auth</span>
-              <strong>Firebase</strong>
+              <span class="metric-label">State layer</span>
+              <strong>Zustand</strong>
+            </article>
+            <article class="metric glass">
+              <span class="metric-label">Delivery format</span>
+              <strong>Static showcase</strong>
             </article>
           </div>
         </div>
 
         <aside class="hero-panel glass">
           <div class="panel-head">
-            <span class="panel-chip">Theme</span>
-            <span class="panel-state">Pustara classic</span>
+            <span class="panel-chip">Scope</span>
+            <span class="panel-state">Frontend documentation</span>
           </div>
 
           <div class="panel-stack">
             <div class="stack-card">
-              <p>Palette</p>
-              <strong>Navy, parchment, gold</strong>
+              <p>Source of truth</p>
+              <strong>README, src/app, docs, dan screenshot assets</strong>
             </div>
             <div class="stack-card">
-              <p>UI language</p>
-              <strong>Glassmorphism + minimal contrast</strong>
+              <p>Audience</p>
+              <strong>Teams, reviewers, and future maintainers</strong>
             </div>
             <div class="stack-card">
-              <p>Goal</p>
-              <strong>Docs yang enak dibaca dan gampang dipublish</strong>
+              <p>Outcome</p>
+              <strong>Ringkasan yang bisa dipakai untuk onboarding, review, dan handoff</strong>
             </div>
           </div>
 
           <div class="code-block">
-<pre><code>npm run dev</code></pre>
+<pre><code>npm install
+npm run dev</code></pre>
           </div>
         </aside>
       </section>
@@ -99,43 +107,69 @@
       <section id="overview" class="section">
         <div class="section-head">
           <p class="eyebrow">Overview</p>
-          <h2>Pustara FE itu web app utama untuk user-facing experience.</h2>
+          <h2>Pustara FE adalah aplikasi utama untuk pengalaman pembaca, komunitas, dan administrasi konten.</h2>
         </div>
 
         <div class="card-grid">
           <article class="feature glass">
-            <h3>App Router</h3>
-            <p>Routing utama ada di `src/app`, termasuk login, katalog, profil, baca buku, dan halaman komunitas.</p>
+            <h3>App Router sebagai struktur utama</h3>
+            <p>Seluruh route utama berada di <code>src/app</code>, mencakup area login, katalog, reader, komunitas, settings, dan panel admin.</p>
           </article>
           <article class="feature glass">
-            <h3>Auth flow</h3>
-            <p>Firebase Client SDK dipakai di frontend, lalu token dikirim ke backend buat verifikasi sesi dan akses data.</p>
+            <h3>Layer data dan auth</h3>
+            <p>Firebase Client SDK menangani identitas pengguna, lalu token dikirim ke backend untuk verifikasi sesi dan akses data yang terlindungi.</p>
           </article>
           <article class="feature glass">
-            <h3>Motion & polish</h3>
-            <p>Framer Motion dipakai buat transisi halus, sementara komponen visual utama tetap konsisten dengan tema lama.</p>
+            <h3>UI yang konsisten</h3>
+            <p>Visual mempertahankan tema gelap, glassy, dan elegan, dengan motion seperlunya agar tetap modern tanpa mengganggu identitas Pustara.</p>
           </article>
         </div>
       </section>
 
-      <section id="stack" class="section section-wide glass">
+      <section id="architecture" class="section section-wide glass">
         <div class="section-head compact">
-          <p class="eyebrow">Stack</p>
-          <h2>Komponen yang dipakai di frontend ini.</h2>
+          <p class="eyebrow">Architecture</p>
+          <h2>Komponen inti yang membentuk frontend ini.</h2>
         </div>
 
         <div class="setup-grid">
           <article class="setup-card">
-            <p>Framework</p>
-            <pre><code>Next.js 14 App Router</code></pre>
-          </article>
-          <article class="setup-card">
-            <p>Styling</p>
-            <pre><code>Tailwind CSS + globals.css</code></pre>
+            <p>Routing</p>
+            <pre><code>src/app -> pages, layouts, metadata, API routes</code></pre>
           </article>
           <article class="setup-card">
             <p>State & auth</p>
-            <pre><code>Zustand + Firebase Auth</code></pre>
+            <pre><code>Zustand + Firebase Auth + protected fetch flow</code></pre>
+          </article>
+          <article class="setup-card">
+            <p>Presentation</p>
+            <pre><code>Tailwind CSS, globals.css, Framer Motion, shared UI</code></pre>
+          </article>
+        </div>
+      </section>
+
+      <section id="routes" class="section">
+        <div class="section-head">
+          <p class="eyebrow">Routes</p>
+          <h2>Route map disusun berdasarkan kebutuhan pengguna dan area operasional aplikasi.</h2>
+        </div>
+
+        <div class="card-grid">
+          <article class="feature glass">
+            <h3>Public and auth</h3>
+            <p><code>/catalog</code><br /><code>/auth/login</code><br /><code>/auth/register</code><br /><code>/auth/personalization</code></p>
+          </article>
+          <article class="feature glass">
+            <h3>User experience</h3>
+            <p><code>/</code><br /><code>/feed</code><br /><code>/browse</code><br /><code>/browse-genre</code><br /><code>/community</code><br /><code>/notifications</code><br /><code>/popular</code><br /><code>/profile</code><br /><code>/shelf</code><br /><code>/settings</code><br /><code>/book/[bookId]</code><br /><code>/read/[bookId]</code><br /><code>/pustarai/chat</code></p>
+          </article>
+          <article class="feature glass">
+            <h3>Admin workspace</h3>
+            <p><code>/dashboard-all-things</code><br /><code>/books-management</code><br /><code>/users-management</code><br /><code>/contents-management</code><br /><code>/loans-management</code></p>
+          </article>
+          <article class="feature glass">
+            <h3>API routes</h3>
+            <p><code>/api/auth/verify-token</code><br /><code>/api/users</code><br /><code>/api/users/[uid]</code><br /><code>/api/admin/users/[uid]</code><br /><code>/api/verify-role</code></p>
           </article>
         </div>
       </section>
@@ -143,50 +177,106 @@
       <section id="flow" class="section">
         <div class="section-head">
           <p class="eyebrow">Flow</p>
-          <h2>Alur utama aplikasi cukup simpel.</h2>
+          <h2>Alur autentikasi dan data dirancang linear agar mudah diverifikasi dan dipelihara.</h2>
         </div>
 
         <div class="flow">
           <div class="flow-step">
             <span>01</span>
-            <strong>User login</strong>
-            <p>Firebase ngeluarin ID token setelah login/register berhasil.</p>
+            <strong>Identity established</strong>
+            <p>Pengguna login atau register via Firebase, lalu frontend menerima ID token yang valid.</p>
           </div>
           <div class="flow-step">
             <span>02</span>
-            <strong>Token ke backend</strong>
-            <p>Frontend kirim token ke backend buat ambil profil, buku, dan data personalisasi.</p>
+            <strong>Token verified</strong>
+            <p>Token diteruskan ke backend dengan header Bearer untuk memastikan sesi, role, dan hak akses data.</p>
           </div>
           <div class="flow-step">
             <span>03</span>
-            <strong>Render experience</strong>
-            <p>Halaman utama, katalog, dan reader tampil dengan navigasi yang cepat dan stabil.</p>
+            <strong>Experience rendered</strong>
+            <p>Data yang lolos verifikasi digunakan untuk merender home, katalog, reader, profil, dan admin panel.</p>
           </div>
         </div>
       </section>
 
-      <section id="deploy" class="section section-wide glass">
+      <section id="showcase" class="section section-wide glass">
         <div class="section-head compact">
-          <p class="eyebrow">Deploy</p>
-          <h2>Cara publish docs ini ke GitHub Pages.</h2>
+          <p class="eyebrow">Showcase</p>
+          <h2>Cuplikan UI utama untuk menunjukkan kualitas presentasi frontend.</h2>
+        </div>
+
+        <div class="card-grid">
+          <figure class="feature glass" style="margin: 0;">
+            <img src="screenshots/home.png" alt="Tampilan home Pustara" loading="lazy" style="width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);" />
+            <figcaption>
+              <h3>Home</h3>
+              <p>Landing dashboard yang menonjolkan personalisasi, rekomendasi, dan entry point utama aplikasi.</p>
+              <p>Halaman utama yang menegaskan orientasi produk ke pembaca aktif.</p>
+            </figcaption>
+          </figure>
+          <figure class="feature glass" style="margin: 0;">
+            <img src="screenshots/browse.png" alt="Tampilan browse Pustara" loading="lazy" style="width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);" />
+            <figcaption>
+              <h3>Browse</h3>
+              <p>Area eksplorasi untuk menemukan buku dengan tata letak yang tetap ringan dan konsisten.</p>
+              <p>Menjaga proses penelusuran tetap cepat dan terstruktur.</p>
+            </figcaption>
+          </figure>
+          <figure class="feature glass" style="margin: 0;">
+            <img src="screenshots/feed.png" alt="Tampilan feed komunitas Pustara" loading="lazy" style="width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);" />
+            <figcaption>
+              <h3>Feed</h3>
+              <p>Ruang komunitas untuk aktivitas sosial, rekomendasi, dan update yang relevan.</p>
+              <p>Menyatukan interaksi komunitas dalam tampilan yang tetap terkurasi.</p>
+            </figcaption>
+          </figure>
+          <figure class="feature glass" style="margin: 0;">
+            <img src="screenshots/shelf.png" alt="Tampilan shelf Pustara" loading="lazy" style="width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);" />
+            <figcaption>
+              <h3>Shelf</h3>
+              <p>Halaman koleksi pribadi untuk menyimpan dan melanjutkan bacaan tanpa kehilangan konteks.</p>
+              <p>Dirancang untuk akses cepat ke bacaan yang sedang berlangsung.</p>
+            </figcaption>
+          </figure>
+          <figure class="feature glass" style="margin: 0;">
+            <img src="screenshots/chat.png" alt="Tampilan PustarAI chat" loading="lazy" style="width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);" />
+            <figcaption>
+              <h3>PustarAI Chat</h3>
+              <p>Contoh fitur percakapan yang memperluas pengalaman membaca ke arah asisten interaktif.</p>
+              <p>Memberi lapisan interaksi tambahan untuk eksplorasi konten.</p>
+            </figcaption>
+          </figure>
+          <figure class="feature glass" style="margin: 0;">
+            <img src="screenshots/admin-dashboard.png" alt="Tampilan dashboard admin Pustara" loading="lazy" style="width: 100%; display: block; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.08);" />
+            <figcaption>
+              <h3>Admin dashboard</h3>
+              <p>Panel operasional untuk pengelolaan user, books, contents, dan loans dengan visual yang tetap seragam.</p>
+              <p>Memisahkan tugas administratif tanpa keluar dari bahasa visual produk.</p>
+            </figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="pwa" class="section section-wide glass">
+        <div class="section-head compact">
+          <p class="eyebrow">PWA</p>
+          <h2>Kesiapan Progressive Web App sudah tersedia di konfigurasi aplikasi.</h2>
         </div>
 
         <div class="deploy-grid">
           <div class="deploy-box">
-            <p>1. Buka repo `pustara-fe` di GitHub</p>
-            <p>2. Masuk ke `Settings` → `Pages`</p>
-            <p>3. Pilih `Deploy from a branch`</p>
-            <p>4. Set `Branch: main` dan `Folder: /docs`</p>
+            <p><code>next.config.mjs</code> sudah membungkus konfigurasi dengan <code>@ducanh2912/next-pwa</code>.</p>
+            <p><code>public/manifest.json</code> tersedia untuk metadata aplikasi, ikon, dan mode tampilan standalone.</p>
           </div>
           <div class="deploy-box">
-            <p>Kalau sudah aktif, GitHub Pages bakal ambil file langsung dari folder `docs`.</p>
-            <p>Kalau mau aman dari file tersembunyi, `docs/.nojekyll` juga bisa ditambah.</p>
+            <p>Manifest, ikon, dan konfigurasi PWA menunjukkan bahwa aplikasi sudah berada pada jalur PWA-ready.</p>
+            <p>Selama build production dijalankan, pengalaman instalasi dan penggunaan standalone dapat diaktifkan sesuai dukungan browser.</p>
           </div>
         </div>
       </section>
 
       <footer class="footer">
-        <p>Dokumentasi ini ngikut tone Pustara lama: gelap, elegan, dan fokus ke konten.</p>
+        <p>Dokumentasi ini dirancang sebagai ringkasan produk yang profesional, konsisten, dan mudah dipakai untuk referensi tim.</p>
       </footer>
     </main>
   </body>
