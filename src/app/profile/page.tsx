@@ -172,6 +172,7 @@ export default function ProfilePage() {
   const [name,      setName]      = useState('');
   const [bio,       setBio]       = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [draftAvatarUrl, setDraftAvatarUrl] = useState<string | null>(null);
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [profileLoading, setProfileLoading] = useState(true);
   const [draftName, setDraftName] = useState('');
@@ -236,6 +237,7 @@ export default function ProfilePage() {
         setDraftBio(resolvedBio);
         console.log('[DEBUG] profile page fetched profile:', { avatar_url: profile.avatar_url });
         setAvatarUrl(profile.avatar_url || null);
+        setDraftAvatarUrl(profile.avatar_url || null);
         console.log('[DEBUG] profile page set avatarUrl to:', profile.avatar_url || null);
 
         setProfileCounts({
@@ -399,10 +401,16 @@ export default function ProfilePage() {
     setSaving(true);
 
     try {
-      const updated = await updateMyProfile({
+      const payload: any = {
         name: draftName,
         bio: draftBio,
-      });
+      };
+
+      if (draftAvatarUrl !== avatarUrl && draftAvatarUrl) {
+        payload.avatar_url = draftAvatarUrl;
+      }
+
+      const updated = await updateMyProfile(payload);
 
       const finalName = updated?.name || draftName;
 
@@ -421,6 +429,7 @@ export default function ProfilePage() {
         setDraftBio(updated.bio || draftBio);
         if (updated.avatar_url) {
           setAvatarUrl(updated.avatar_url);
+          setDraftAvatarUrl(updated.avatar_url);
         }
         if (user) {
           setProfileCache({
@@ -440,7 +449,12 @@ export default function ProfilePage() {
       setSaving(false);
     }
   }
-  function cancelEdit() { setDraftName(name); setDraftBio(bio); setEditing(false); }
+  function cancelEdit() {
+    setDraftName(name);
+    setDraftBio(bio);
+    setDraftAvatarUrl(avatarUrl);
+    setEditing(false);
+  }
 
   async function handleFollowToggle(user: RecommendedUser) {
     if (followLoadingIds.has(user.id)) return;
@@ -556,9 +570,9 @@ export default function ProfilePage() {
             {/* Avatar */}
             <div className="relative flex-shrink-0">
               <div className="w-20 h-20 lg:w-24 lg:h-24 rounded-2xl bg-gradient-to-br from-gold/30 to-gold/10 border-2 border-gold/30 flex items-center justify-center shadow-lg overflow-hidden">
-                {avatarUrl ? (
+                {(editing ? draftAvatarUrl : avatarUrl) ? (
                   <AvatarImage
-                    src={avatarUrl}
+                    src={editing ? draftAvatarUrl : avatarUrl}
                     alt="Your avatar"
                     initials={initials}
                     size="lg"
@@ -675,8 +689,9 @@ export default function ProfilePage() {
               {/* Upload component */}
               <AvatarUploadDialog
                 userId={user.uid}
+                draftMode={true}
                 onUploadSuccess={(newUrl) => {
-                  setAvatarUrl(newUrl);
+                  setDraftAvatarUrl(newUrl);
                   setUploadDialogOpen(false);
                 }}
                 isLight={isLight}
