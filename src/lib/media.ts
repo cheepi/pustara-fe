@@ -48,3 +48,28 @@ export function proxyMediaUrl(input?: string | null): string | null {
     return value;
   }
 }
+
+export function avatarProxyUrl(original?: string | null, userId?: string | null): string | null {
+  if (!original) return null;
+  const base = API_URL.replace(/\/$/, '');
+  const value = String(original).trim();
+
+  // If the backend already returned a relative proxy path like /users/:id/avatar
+  // or /media/avatar/:id, just resolve it to an absolute URL — don't re-wrap.
+  if (value.startsWith('/users/') || value.startsWith('/media/avatar/')) {
+    return `${base}${value}`;
+  }
+
+  // If it's already an absolute URL pointing at our own backend proxy, pass through
+  if (value.startsWith(`${base}/users/`) || value.startsWith(`${base}/media/avatar/`)) {
+    return value;
+  }
+
+  // Build a fresh proxy URL using the canonical /users/:id/avatar route
+  if (userId) {
+    return `${base}/users/${encodeURIComponent(String(userId))}/avatar`;
+  }
+
+  // Fallback to regular proxy for unknown user id
+  return proxyMediaUrl(original);
+}

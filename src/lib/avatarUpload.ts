@@ -94,11 +94,13 @@ export async function uploadAvatarToSupabase(
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 4. Return application avatar URL
+    // 4. Return proxied avatar URL from backend (not raw Supabase URL)
+    //    backendResult.avatar_url is already resolved to /users/:id/avatar proxy path
     // ─────────────────────────────────────────────────────────────
     return {
       success: true,
-      avatarUrl,
+      // Prefer the backend-proxied URL so we never expose raw Supabase URLs in the UI
+      avatarUrl: backendResult.avatar_url || avatarUrl,
     };
   } catch (error) {
     console.error('Avatar upload error:', error);

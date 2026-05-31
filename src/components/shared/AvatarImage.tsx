@@ -130,17 +130,21 @@ export default function AvatarImage({
         'relative rounded-full overflow-hidden',
         'flex-shrink-0',
         'border border-gold/20',
+        'bg-gold/25 flex items-center justify-center font-bold text-gold',
         className,
       )}
       title={alt}
     >
+      <span className={cn('absolute inset-0 flex items-center justify-center select-none pointer-events-none', text)}>
+        {initials.slice(0, 2).toUpperCase()}
+      </span>
       <Image
         src={resolvedSrc}
         alt={alt}
         fill
         sizes={`${px}px`}
         className={cn(
-          'object-cover w-full h-full',
+          'object-cover w-full h-full z-10',
           'transition-opacity duration-300',
           isLoading ? 'opacity-0' : 'opacity-100',
         )}

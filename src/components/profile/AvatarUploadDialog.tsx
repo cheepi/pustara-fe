@@ -41,15 +41,16 @@ export default function AvatarUploadDialog({
 
       // Success
       setSuccess('Avatar berhasil diperbarui!');
+      const cacheBustedUrl = `${result.avatarUrl!}${result.avatarUrl!.includes('?') ? '&' : '?'}t=${Date.now()}`;
       if (user) {
         setProfileCache({
           uid: user.uid,
           displayName: user.displayName || user.email || 'Pengguna',
-          avatarUrl: result.avatarUrl!,
+          avatarUrl: cacheBustedUrl,
           email: user.email || null,
         });
       }
-      onUploadSuccess(result.avatarUrl!);
+      onUploadSuccess(cacheBustedUrl);
 
       // Clear success message after 2s
       setTimeout(() => setSuccess(null), 2000);

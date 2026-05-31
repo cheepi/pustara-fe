@@ -120,50 +120,18 @@ function StatCard({
   textClass: string;
   mutedClass: string;
 }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number; placement: 'top' | 'bottom' } | null>(null);
-
-  const showTooltip = () => {
-    if (!stat.tooltip || !ref.current || typeof window === 'undefined') return;
-    const rect = ref.current.getBoundingClientRect();
-    const tooltipWidth = 208;
-    const tooltipHeight = 112;
-    const margin = 12;
-    const left = Math.min(
-      Math.max(rect.left + rect.width / 2, tooltipWidth / 2 + margin),
-      window.innerWidth - tooltipWidth / 2 - margin
-    );
-    const hasRoomBelow = rect.bottom + tooltipHeight + margin < window.innerHeight;
-    setTooltipPos({
-      left,
-      top: hasRoomBelow ? rect.bottom + 10 : rect.top - 10,
-      placement: hasRoomBelow ? 'bottom' : 'top',
-    });
-  };
-
-  const hideTooltip = () => setTooltipPos(null);
-
-  useEffect(() => {
-    if (!tooltipPos) return;
-    window.addEventListener('scroll', hideTooltip, true);
-    window.addEventListener('resize', hideTooltip);
-    return () => {
-      window.removeEventListener('scroll', hideTooltip, true);
-      window.removeEventListener('resize', hideTooltip);
-    };
-  }, [tooltipPos]);
+  const [hovered, setHovered] = useState(false);
 
   return (
     <motion.div
-      ref={ref}
       tabIndex={stat.tooltip ? 0 : undefined}
-      onMouseEnter={showTooltip}
-      onMouseLeave={hideTooltip}
-      onFocus={showTooltip}
-      onBlur={hideTooltip}
-      onClick={() => stat.tooltip && (tooltipPos ? hideTooltip() : showTooltip())}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+      onClick={() => stat.tooltip && setHovered((prev) => !prev)}
       className={cn(
-        'relative z-10 rounded-2xl p-3.5 text-center outline-none focus-visible:ring-2 focus-visible:ring-gold/50',
+        'relative z-10 rounded-2xl p-3.5 text-center outline-none focus-visible:ring-2 focus-visible:ring-gold/50 cursor-default select-none',
         isLight ? 'bg-parchment' : 'bg-navy-700/40'
       )}
       initial={{ opacity: 0, scale: 0.93 }}
@@ -176,28 +144,28 @@ function StatCard({
         {stat.suffix && <span className={cn('text-sm font-sans font-normal ml-0.5', mutedClass)}>{stat.suffix}</span>}
       </p>
       <p className={cn('text-[11px] mt-0.5', mutedClass)}>{stat.label}</p>
-      {stat.tooltip && tooltipPos && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className="pointer-events-none fixed z-[120] w-52 rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2 text-left text-[11px] leading-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] whitespace-pre-line"
-              style={{
-                left: tooltipPos.left,
-                top: tooltipPos.top,
-                transform: tooltipPos.placement === 'top' ? 'translate(-50%, -100%)' : 'translateX(-50%)',
-              }}
-            >
-              {stat.tooltip}
-            </div>,
-            document.body
-          )
-        : null}
+
+      <AnimatePresence>
+        {stat.tooltip && hovered && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.95, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+            exit={{ opacity: 0, y: 4, scale: 0.95, x: '-50%' }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            className="pointer-events-none absolute bottom-full left-1/2 mb-3 z-50 w-max max-w-[210px] rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2.5 text-left text-[11px] leading-[1.6] text-white shadow-[0_16px_40px_rgba(0,0,0,0.5)] whitespace-pre-line origin-bottom"
+          >
+            {stat.tooltip}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
 
+
 export default function ProfilePage() {
   const { theme } = useTheme();
-  const { user }  = useAuthStore();
+  const { user, setProfileCache }  = useAuthStore();
   const isLight   = theme === 'light';
 
   const [editing,   setEditing]   = useState(false);
@@ -451,6 +419,17 @@ export default function ProfilePage() {
         setBio(updated.bio || draftBio);
         setDraftName(finalName);
         setDraftBio(updated.bio || draftBio);
+        if (updated.avatar_url) {
+          setAvatarUrl(updated.avatar_url);
+        }
+        if (user) {
+          setProfileCache({
+            uid: user.uid,
+            displayName: finalName,
+            avatarUrl: updated.avatar_url || avatarUrl,
+            email: user.email || null,
+          });
+        }
       } else {
         setName(draftName);
         setBio(draftBio);
@@ -592,7 +571,7 @@ export default function ProfilePage() {
               {editing && (
                 <button 
                   onClick={() => setUploadDialogOpen(true)}
-                  className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-xl bg-gold text-navy-900 flex items-center justify-center shadow-md hover:bg-gold-light transition-colors"
+                  className="absolute -bottom-1.5 -right-1.5 z-20 w-7 h-7 rounded-xl bg-gold text-navy-900 flex items-center justify-center shadow-md hover:bg-gold-light transition-colors"
                 >
                   <Camera className="w-3.5 h-3.5" />
                 </button>
@@ -600,7 +579,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Info */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 w-full sm:w-auto">
               <AnimatePresence mode="wait">
                 {editing ? (
                   <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -640,7 +619,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Follow counts — clickable, opens modal */}
-            <div className="flex gap-5 flex-shrink-0">
+            <div className="flex gap-5 flex-shrink-0 mt-4 sm:mt-0">
               {([
                 { val: String(profileCounts.following), lbl: 'Mengikuti', tab: 'following' },
                 { val: String(profileCounts.followers), lbl: 'Pengikut',  tab: 'followers' },

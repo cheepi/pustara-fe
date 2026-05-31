@@ -1,7 +1,7 @@
 import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
 import type { NotificationItem } from '@/types/notifications';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
-import { proxyMediaUrl } from '@/lib/media';
+import { proxyMediaUrl, avatarProxyUrl } from '@/lib/media';
 
 export const NOTIFICATIONS_CHANGED_EVENT = 'pustara:notifications-changed';
 
@@ -45,7 +45,7 @@ function normalizeNotification(raw: Record<string, unknown>, idx: number): Notif
     time: formatNotificationTime(createdAt),
     created_at: createdAt || '-',
     read: Boolean(raw.read ?? raw.is_read ?? false),
-    avatar_url: raw.avatar_url ? proxyMediaUrl(String(raw.avatar_url)) : null,
+    avatar_url: raw.avatar_url ? avatarProxyUrl(String(raw.avatar_url), raw.user_id ? String(raw.user_id) : null) : null,
     actor_username: raw.actor_username ? String(raw.actor_username) : raw.actorUsername ? String(raw.actorUsername) : null,
     bookCover: String(raw.bookCover ?? raw.coverId ?? '') || undefined,
   };
