@@ -400,7 +400,7 @@ export default function HomePage() {
               </motion.p>
             </div>
 
-            <motion.div className="hidden sm:flex items-center gap-5 flex-shrink-0"
+            <motion.div className="hidden sm:flex items-center gap-5 flex-shrink-0 overflow-visible"
               initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
               {[
                 { icon: BookCopy,       val: String(greetingStats.dipinjam),  label: 'Dipinjam',   tooltip: borrowedTooltip },
@@ -412,7 +412,7 @@ export default function HomePage() {
                   <p className="font-black text-sm leading-none mt-1.5" style={{ color: 'var(--text)' }}>{val}</p>
                   <p className="text-[10px] mt-0.5 whitespace-nowrap" style={{ color: 'var(--muted)' }}>{label}</p>
                   {tooltip ? (
-                    <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 hidden -translate-x-1/2 rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2 text-left text-[11px] leading-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] group-hover:block whitespace-pre-line min-w-44">
+                    <div className="pointer-events-none absolute bottom-full left-1/2 mb-2.5 z-50 -translate-x-1/2 w-max max-w-[200px] rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2.5 text-left text-[11px] leading-[1.6] text-white shadow-[0_16px_40px_rgba(0,0,0,0.5)] whitespace-pre-line opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 origin-bottom">
                       {tooltip}
                     </div>
                   ) : null}
