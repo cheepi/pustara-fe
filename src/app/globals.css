@@ -128,21 +128,26 @@
 
   /* drag-scroll helper: hint cursor and enable smooth pointer dragging on fine pointers */
   .drag-scroll {
-    cursor: grab;
     -webkit-overflow-scrolling: touch;
-    /* pan-y pinch-zoom: lets vertical and pinch-zoom pass through to the browser,
-       but does NOT block horizontal pointer events — the JS DragScrollProvider
-       sets touch-action:none dynamically while actively dragging. */
-    touch-action: pan-y pinch-zoom;
-    user-select: none;
-    -webkit-user-select: none;
   }
 
-  /* Only apply grabbing cursor via JS now (DragScrollProvider sets it inline).
-     Keep :active as a fallback for elements without the provider. */
-  .drag-scroll.is-dragging,
-  .drag-scroll:active {
-    cursor: grabbing;
+  @media (pointer: fine) {
+    .drag-scroll {
+      cursor: grab;
+      /* pan-y pinch-zoom: lets vertical and pinch-zoom pass through to the browser,
+         but does NOT block horizontal pointer events — the JS DragScrollProvider
+         sets touch-action:none dynamically while actively dragging. */
+      touch-action: pan-y pinch-zoom;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    /* Only apply grabbing cursor via JS now (DragScrollProvider sets it inline).
+       Keep :active as a fallback for elements without the provider. */
+    .drag-scroll.is-dragging,
+    .drag-scroll:active {
+      cursor: grabbing;
+    }
   }
 }
 
