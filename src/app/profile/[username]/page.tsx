@@ -124,53 +124,21 @@ function StatPill({
   isLight: boolean;
   tooltip?: string;
 }) {
-  const ref = useRef<HTMLDivElement | null>(null);
-  const [tooltipPos, setTooltipPos] = useState<{ left: number; top: number; placement: 'top' | 'bottom' } | null>(null);
-
-  const showTooltip = () => {
-    if (!tooltip || !ref.current || typeof window === 'undefined') return;
-    const rect = ref.current.getBoundingClientRect();
-    const tooltipWidth = 208;
-    const margin = 12;
-    const left = Math.min(
-      Math.max(rect.left + rect.width / 2, tooltipWidth / 2 + margin),
-      window.innerWidth - tooltipWidth / 2 - margin
-    );
-    const tooltipHeight = 112;
-    const hasRoomBelow = rect.bottom + tooltipHeight + margin < window.innerHeight;
-    setTooltipPos({
-      left,
-      top: hasRoomBelow ? rect.bottom + 10 : rect.top - 10,
-      placement: hasRoomBelow ? 'bottom' : 'top',
-    });
-  };
-
-  const hideTooltip = () => setTooltipPos(null);
-
-  useEffect(() => {
-    if (!tooltipPos) return;
-    window.addEventListener('scroll', hideTooltip, true);
-    window.addEventListener('resize', hideTooltip);
-    return () => {
-      window.removeEventListener('scroll', hideTooltip, true);
-      window.removeEventListener('resize', hideTooltip);
-    };
-  }, [tooltipPos]);
+  const [hovered, setHovered] = useState(false);
 
   return (
     <motion.div
-      ref={ref}
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay, duration: 0.4 }}
       tabIndex={tooltip ? 0 : undefined}
-      onMouseEnter={showTooltip}
-      onMouseLeave={hideTooltip}
-      onFocus={showTooltip}
-      onBlur={hideTooltip}
-      onClick={() => tooltip && (tooltipPos ? hideTooltip() : showTooltip())}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      onFocus={() => setHovered(true)}
+      onBlur={() => setHovered(false)}
+      onClick={() => tooltip && setHovered((prev) => !prev)}
       className={cn(
-        'group relative z-10 flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-3 py-4 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-gold/50 sm:flex-1 sm:px-5',
+        'group relative z-10 flex min-w-0 flex-col items-center gap-1.5 rounded-2xl px-3 py-4 outline-none transition-transform focus-visible:ring-2 focus-visible:ring-gold/50 cursor-default select-none sm:flex-1 sm:px-5',
         isLight ? 'bg-white/60 backdrop-blur border border-parchment-darker' : 'bg-white/5 backdrop-blur border border-white/8'
       )}
     >
@@ -179,24 +147,24 @@ function StatPill({
         {value}
       </span>
       <span className={cn('text-[11px] text-center', isLight ? 'text-slate-500' : 'text-slate-400')}>{label}</span>
-      {tooltip && tooltipPos && typeof document !== 'undefined'
-        ? createPortal(
-            <div
-              className="pointer-events-none fixed z-[120] w-52 rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2 text-left text-[11px] leading-5 text-white shadow-[0_16px_40px_rgba(0,0,0,0.45)] whitespace-pre-line"
-              style={{
-                left: tooltipPos.left,
-                top: tooltipPos.top,
-                transform: tooltipPos.placement === 'top' ? 'translate(-50%, -100%)' : 'translateX(-50%)',
-              }}
-            >
-              {tooltip}
-            </div>,
-            document.body
-          )
-        : null}
+
+      <AnimatePresence>
+        {tooltip && hovered && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.95, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+            exit={{ opacity: 0, y: 4, scale: 0.95, x: '-50%' }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            className="pointer-events-none absolute bottom-full left-1/2 mb-3 z-50 w-max max-w-[210px] rounded-2xl border border-gold/20 bg-[rgba(8,15,26,0.97)] px-3 py-2.5 text-left text-[11px] leading-[1.6] text-white shadow-[0_16px_40px_rgba(0,0,0,0.5)] whitespace-pre-line origin-bottom"
+          >
+            {tooltip}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
+
  
 function GenreBar({
   genre,
