@@ -48,3 +48,14 @@ export function proxyMediaUrl(input?: string | null): string | null {
     return value;
   }
 }
+
+export function avatarProxyUrl(original?: string | null, userId?: string | null): string | null {
+  if (!original) return null;
+  const base = API_URL.replace(/\/$/, '');
+  if (userId) {
+    return `${base}/media/avatar/${encodeURIComponent(String(userId))}`;
+  }
+
+  // Fallback to regular proxy for unknown user id
+  return proxyMediaUrl(original);
+}

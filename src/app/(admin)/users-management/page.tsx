@@ -133,7 +133,12 @@ function normalizeUser(raw: Record<string, unknown>): AdminUser {
     email,
     username,
     displayName,
-    avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : (raw.avatar_url ? String(raw.avatar_url) : (raw.photoURL ? String(raw.photoURL) : null)),
+    avatarUrl: (() => {
+      const rawUrl = raw.avatarUrl ? String(raw.avatarUrl) : (raw.avatar_url ? String(raw.avatar_url) : (raw.photoURL ? String(raw.photoURL) : null));
+      const uidVal = String(raw.uid ?? raw.firebase_uid ?? raw.id ?? '');
+      if (rawUrl && uidVal) return `${API_BASE.replace(/\/$/, '')}/media/avatar/${encodeURIComponent(uidVal)}`;
+      return rawUrl || null;
+    })(),
     role,
     status,
     totalRead: Number(totalRead || 0),
