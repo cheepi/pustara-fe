@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
 import { useGenreShelves } from '@/hooks/useGenreShelves';
 import { fetchBrowseBooks, fetchTopPustakrew } from '@/lib/browse';
+import { proxyMediaUrl } from '@/lib/media';
 import type { BrowseBook } from '@/types/browse';
 
 // ── Types & constants ──────────────────────────────────────────────────────────
@@ -155,7 +156,7 @@ export default function CatalogView() {
             ? b.genres.map(String).filter(Boolean)[0] ?? '-'
             : String(b.genre ?? b.genres ?? '-').split(',')[0].trim(),
           rating: Number(b.rating ?? b.avg_rating ?? 0),
-          cover_url: b.cover_url ? String(b.cover_url) : null,
+          cover_url: b.cover_url ? proxyMediaUrl(String(b.cover_url)) : null,
           description: String(b.description ?? ''),
         })));
       })

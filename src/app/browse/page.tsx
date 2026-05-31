@@ -237,7 +237,7 @@ export function AISection({ dark, tk }: { dark: boolean; tk: any }) {
   return (
     <div>
       <section className="mt-8 max-w-7xl mx-auto">
-        <div className="flex gap-4 px-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-4 overflow-x-auto pb-3 drag-scroll" style={{ scrollbarWidth: 'none' }}>
           {aiLoading
             ? Array(5).fill(0).map((_, i) => <AiRecoCardSkeleton key={i} isLight={isLight} />)
             : aiReco.length > 0
@@ -1538,7 +1538,7 @@ const pseudo2 = (n: number, mn: number, mx: number) => mn + ((n * 9301 + 49297) 
 function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; books: BrowseBook[]; loading: boolean }) {
   if (loading) {
     return (
-      <div className="flex gap-4 px-4 overflow-x-auto overscroll-x-contain pb-3" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+      <div className="flex gap-4 overflow-x-auto overscroll-x-contain pb-3 drag-scroll" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         {Array(6).fill(0).map((_, i) => (
           <div key={i} className="flex-shrink-0 w-36 animate-pulse">
             <div className={cn('w-full aspect-[2/3] rounded-xl mb-2', tk.skeleton)} />
@@ -1565,7 +1565,7 @@ function PopularSection({ dark, tk, books, loading }: { dark: boolean; tk: any; 
   }
   
   return (
-    <div className="flex gap-4 px-4 overflow-x-auto overscroll-x-contain pb-3" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+    <div className="flex gap-4 overflow-x-auto overscroll-x-contain pb-3 drag-scroll" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
       {items.map((b, i) => {
         const rating = Number.isFinite(b.rating) && Number(b.rating) > 0
           ? Number(b.rating).toFixed(1)

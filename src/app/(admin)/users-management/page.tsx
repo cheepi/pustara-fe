@@ -92,6 +92,42 @@ function normalizeUser(raw: Record<string, unknown>): AdminUser {
   const role = String(raw.role ?? 'reader') === 'admin' ? 'admin' : 'reader';
   const status = String(raw.status ?? 'active') === 'suspended' ? 'suspended' : 'active';
 
+  // Derive totalRead from multiple possible API shapes or shelf arrays
+  const numericCandidates = [
+    raw.totalRead,
+    raw.total_read,
+    raw.read_count,
+    raw.reads_count,
+    raw.finished_count,
+    raw.reads,
+  ];
+
+  let totalRead = 0;
+  for (const c of numericCandidates) {
+    if (typeof c === 'number' && !Number.isNaN(c)) { totalRead = Number(c); break; }
+    if (typeof c === 'string' && c.trim() !== '' && !Number.isNaN(Number(c))) { totalRead = Number(c); break; }
+  }
+
+  // If totalRead still zero, attempt to inspect common shelf/list arrays
+  const possibleArrays = ['shelf', 'shelves', 'shelf_items', 'read_history', 'history', 'activities', 'finished_books'];
+  if (totalRead === 0) {
+    for (const key of possibleArrays) {
+      const val = (raw as any)[key];
+      if (Array.isArray(val)) {
+        const count = val.reduce((acc: number, item: any) => {
+          if (!item) return acc;
+          const status = String(item.status || item.state || '').toLowerCase();
+          if (status === 'finished' || status === 'completed') return acc + 1;
+          if (typeof item.progress === 'number' && item.progress >= 100) return acc + 1;
+          if (item.finished === true || item.completed === true) return acc + 1;
+          if (item.read_at || item.completed_at || item.finished_at) return acc + 1;
+          return acc;
+        }, 0);
+        if (count > 0) { totalRead = count; break; }
+      }
+    }
+  }
+
   return {
     uid: String(raw.uid ?? raw.firebase_uid ?? raw.id ?? ''),
     email,
@@ -100,7 +136,7 @@ function normalizeUser(raw: Record<string, unknown>): AdminUser {
     avatarUrl: raw.avatarUrl ? String(raw.avatarUrl) : (raw.avatar_url ? String(raw.avatar_url) : (raw.photoURL ? String(raw.photoURL) : null)),
     role,
     status,
-    totalRead: Number(raw.totalRead ?? raw.total_read ?? 0),
+    totalRead: Number(totalRead || 0),
     createdAt: raw.createdAt ? String(raw.createdAt) : (raw.created_at ? String(raw.created_at) : null),
   };
 }
@@ -318,7 +354,30 @@ export default function UsersManagementPage() {
       const usersPayload = await usersResponse.json();
       const overviewPayload = await overviewResponse.json();
 
-      setUsers(Array.isArray(usersPayload?.data) ? usersPayload.data.map((item: Record<string, unknown>) => normalizeUser(item)) : []);
+      const initial = Array.isArray(usersPayload?.data) ? usersPayload.data.map((item: Record<string, unknown>) => normalizeUser(item)) : [];
+      setUsers(initial);
+      // For users with missing totalRead, fetch per-user admin details (uses backend logic matching /shelf/me)
+      try {
+        const needsCount = initial.filter((u: AdminUser) => !u.totalRead).slice(0, 60); // limit extra calls
+        if (needsCount.length > 0) {
+          const detailPromises = needsCount.map((u: AdminUser) => authedRequest(`${API_BASE}/admin/users/${u.uid}`).then(r => r.ok ? r.json().catch(() => null) : null).catch(() => null));
+          const details = await Promise.all(detailPromises);
+          const byUid = new Map<string, number>();
+          details.forEach((d) => {
+            const data = d && d.data ? d.data : d;
+            if (data) {
+              const uid = String(data.firebase_uid ?? data.uid ?? data.uid ?? data.firebaseUid ?? data.id ?? '');
+              const total = Number(data.total_read ?? data.totalRead ?? data.finished_count ?? data.finishedCount ?? 0);
+              if (uid) byUid.set(uid, Number(total || 0));
+            }
+          });
+          if (byUid.size > 0) {
+            setUsers((prev) => prev.map(u => ({ ...u, totalRead: byUid.has(u.uid) ? byUid.get(u.uid) as number : u.totalRead })));
+          }
+        }
+      } catch (_) {
+        // ignore per-user detail failures
+      }
       setAudit(Array.isArray(overviewPayload?.data?.recent_activity) ? overviewPayload.data.recent_activity : []);
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Gagal memuat data');
@@ -573,7 +632,8 @@ export default function UsersManagementPage() {
           </AnimatePresence>
 
           <div className="mt-5 overflow-hidden rounded-2xl border" style={{ borderColor: dark ? 'rgba(255,255,255,0.08)' : '#e0d4bb' }}>
-            <div className="overflow-x-auto">
+            {/* Desktop table (hidden on small screens) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead className={dark ? 'bg-white/5' : 'bg-[#f3ebda]'}>
                   <tr className={cn('text-left', tk.muted)}>
@@ -601,63 +661,107 @@ export default function UsersManagementPage() {
                       </td>
                     </tr>
                   ) : (
-                    filteredUsers.map((user) => (
-                      <tr key={user.uid} className={cn('border-t transition-colors', dark ? 'border-white/5 hover:bg-white/5' : 'border-[#e8dfcf] hover:bg-white/70')}>
-                        <td className="px-4 py-4">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <Link href={`/profile/@${user.username}`} className="flex-shrink-0" title={`Buka profil ${user.displayName}`}>
-                              <AvatarImage src={user.avatarUrl} alt={user.displayName} initials={getInitials(user.displayName || user.email)} size="md" />
-                            </Link>
-                            <div className="min-w-0">
-                              <p className={cn('font-semibold truncate', tk.text)}>{user.displayName}</p>
-                              <p className={cn('text-xs truncate', tk.muted)}>{user.email}</p>
-                              <p className={cn('text-[11px] truncate mt-0.5', tk.muted)}>@{user.username}</p>
+                      filteredUsers.map((user) => (
+                        <tr key={user.uid} className={cn('border-t transition-colors', dark ? 'border-white/5 hover:bg-white/5' : 'border-[#e8dfcf] hover:bg-white/70')}>
+                          <td className="px-4 py-4">
+                            <div className="hidden md:flex items-center gap-3 min-w-0">
+                              <Link href={`/profile/@${user.username}`} className="flex-shrink-0" title={`Buka profil ${user.displayName}`}>
+                                <AvatarImage src={user.avatarUrl} alt={user.displayName} initials={getInitials(user.displayName || user.email)} size="md" />
+                              </Link>
+                              <div className="min-w-0">
+                                <p className={cn('font-semibold truncate', tk.text)}>{user.displayName}</p>
+                                <p className={cn('text-xs truncate', tk.muted)}>{user.email}</p>
+                                <p className={cn('text-[11px] truncate mt-0.5', tk.muted)}>@{user.username}</p>
+                              </div>
                             </div>
-                          </div>
-                        </td>
+                            {/* desktop row actions remain; mobile cards rendered separately below */}
+                          </td>
 
-                        <td className="px-4 py-4">
-                          <span className={cn('inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold', user.role === 'admin' ? 'bg-blue-500/15 text-blue-600 dark:text-blue-300' : 'bg-slate-500/10 text-slate-600 dark:text-slate-300')}>
-                            {user.role}
-                          </span>
-                        </td>
+                          <td className="px-4 py-4 hidden md:table-cell">
+                            <span className={cn('inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold', user.role === 'admin' ? 'bg-blue-500/15 text-blue-600 dark:text-blue-300' : 'bg-slate-500/10 text-slate-600 dark:text-slate-300')}>
+                              {user.role}
+                            </span>
+                          </td>
 
-                        <td className="px-4 py-4">
-                          <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', user.status === 'active' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/15 text-rose-700 dark:text-rose-300')}>
-                            <span className={cn('h-1.5 w-1.5 rounded-full', user.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500')} />
-                            {user.status}
-                          </span>
-                        </td>
+                          <td className="px-4 py-4 hidden md:table-cell">
+                            <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold', user.status === 'active' ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/15 text-rose-700 dark:text-rose-300')}>
+                              <span className={cn('h-1.5 w-1.5 rounded-full', user.status === 'active' ? 'bg-emerald-500' : 'bg-rose-500')} />
+                              {user.status}
+                            </span>
+                          </td>
 
-                        <td className={cn('px-4 py-4 whitespace-nowrap', tk.muted)}>{formatDate(user.createdAt)}</td>
+                          <td className={cn('px-4 py-4 whitespace-nowrap hidden md:table-cell', tk.muted)}>{formatDate(user.createdAt)}</td>
 
-                        <td className={cn('px-4 py-4 font-semibold', tk.text)}>{user.totalRead}</td>
+                          <td className={cn('px-4 py-4 font-semibold hidden md:table-cell', tk.text)}>{user.totalRead}</td>
 
-                        <td className="px-4 py-4">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => openEditModal(user)}
-                              className={cn('p-2 rounded-lg border transition', tk.btnGhost)}
-                              title="Edit pengguna"
-                            >
-                              <Pencil className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleDelete(user)}
-                              className={cn('p-2 rounded-lg border transition', tk.btnGhost, 'hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20')}
-                              title="Hapus pengguna"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
+                          <td className="px-4 py-4 hidden md:table-cell">
+                            <div className="flex items-center justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openEditModal(user)}
+                                className={cn('p-2 rounded-lg border transition', tk.btnGhost)}
+                                title="Edit pengguna"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleDelete(user)}
+                                className={cn('p-2 rounded-lg border transition', tk.btnGhost, 'hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/20')}
+                                title="Hapus pengguna"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))) }
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile cards (hidden on md+) */}
+            <div className="md:hidden divide-y" style={{ borderColor: 'var(--border)' }}>
+              {filteredUsers.map((user, i) => (
+                <motion.div
+                  key={user.uid}
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.02 }}
+                  className="p-4 flex gap-3"
+                >
+                  <Link href={`/profile/@${user.username}`} className="flex-shrink-0" title={`Buka profil ${user.displayName}`}>
+                    <AvatarImage src={user.avatarUrl} alt={user.displayName} initials={getInitials(user.displayName || user.email)} size="md" />
+                  </Link>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className={cn('text-sm font-bold line-clamp-1', tk.text)}>{user.displayName}</p>
+                        <p className={cn('text-xs line-clamp-1', tk.muted)}>{user.email}</p>
+                        <p className={cn('text-[11px] mt-0.5', tk.muted)}>@{user.username}</p>
+                      </div>
+                      <span className={cn('flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold', user.status === 'active' ? 'bg-emerald-500/15 text-emerald-600' : 'bg-rose-500/15 text-rose-400')}>{user.status}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <span className={cn('px-2 py-0.5 rounded-full text-[11px] font-semibold', user.role === 'admin' ? 'bg-blue-500/15 text-blue-600' : 'bg-slate-500/10 text-slate-600')}>{user.role}</span>
+                      <span className={cn('text-[11px] font-semibold', tk.muted)}>{user.totalRead} selesai</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-3">
+                      <button onClick={() => openEditModal(user)}
+                        className="flex-1 py-1.5 rounded-lg bg-blue-500/15 text-blue-500 text-xs font-semibold flex items-center justify-center gap-1">
+                        <Pencil className="w-3 h-3" />Edit
+                      </button>
+                      <button onClick={() => void handleDelete(user)}
+                        className="flex-1 py-1.5 rounded-lg bg-red-500/15 text-red-400 text-xs font-semibold flex items-center justify-center gap-1">
+                        <Trash2 className="w-3 h-3" />Hapus
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           </div>
         </motion.section>
@@ -672,9 +776,6 @@ export default function UsersManagementPage() {
             <div>
               <h2 className={cn('text-3xl font-serif font-black', tk.text)}>Log Audit Perubahan</h2>
               <p className={cn('text-sm', tk.muted)}>Riwayat aksi perubahan dari admin Pustara</p>
-            </div>
-            <div className={cn('rounded-full border px-3 py-1 text-xs font-semibold', dark ? 'border-white/10 text-slate-200 bg-white/5' : 'border-[#dccda6] text-[#665327] bg-[#f4ecda]')}>
-              Admin only
             </div>
           </div>
 

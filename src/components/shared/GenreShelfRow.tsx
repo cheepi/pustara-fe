@@ -42,7 +42,7 @@ export function GenreShelfRow({
         </Link>
       </div>
 
-      <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+      <div className="flex gap-3 overflow-x-auto pb-1 drag-scroll" style={{ scrollbarWidth: 'none' }}>
         {shelf.books.map((book, bookIndex) => (
           <ShelfBookCard
             key={`${shelf.id}-${book.key}`}

@@ -45,7 +45,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     <ToastContext.Provider value={value}>
       {children}
 
-      <div className="fixed bottom-4 left-4 right-4 sm:left-auto sm:right-6 sm:bottom-6 z-[120] flex flex-col gap-2 pointer-events-none sm:max-w-sm">
+      <div className="fixed left-3 right-3 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:left-auto sm:right-6 sm:bottom-6 z-[120] flex flex-col gap-2 pointer-events-none sm:max-w-sm">
         <AnimatePresence>
           {toasts.map((toast) => (
             <motion.div
@@ -55,7 +55,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
               exit={{ opacity: 0, y: 10, scale: 0.97 }}
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
               className={cn(
-                'pointer-events-auto rounded-xl border px-4 py-3 shadow-[0_10px_30px_rgba(0,0,0,0.28)] backdrop-blur-sm',
+                'pointer-events-auto rounded-2xl border px-4 py-3 shadow-[0_18px_45px_rgba(0,0,0,0.34)] backdrop-blur-md',
                 toast.type === 'success' && (isLight ? 'bg-emerald-50/95 border-emerald-200 text-emerald-700' : 'bg-emerald-500/18 border-emerald-400/40 text-emerald-200'),
                 toast.type === 'error' && (isLight ? 'bg-red-50/95 border-red-200 text-red-700' : 'bg-red-500/20 border-red-400/40 text-red-200'),
                 toast.type === 'info' && (isLight ? 'bg-white/95 border-slate-200 text-slate-700' : 'bg-navy-900 border-white/15 text-slate-200')

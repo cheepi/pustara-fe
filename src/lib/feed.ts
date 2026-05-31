@@ -4,6 +4,7 @@ import type { FeedItem } from '@/types/feed';
 import { getMyProfile } from '@/lib/users';
 import { fetchShelfData } from '@/lib/shelf';
 import { formatRelativeTime } from '@/lib/reading';
+import { proxyMediaUrl } from '@/lib/media';
 
 export interface FeedSidebarProfile {
   initials: string;
@@ -96,7 +97,7 @@ function normalizeCoverUrl(input?: string | null): string {
   const value = String(input).trim();
   if (!value) return '';
   const extracted = value.match(/https?:\/\/[^\s"')]+/i)?.[0] ?? value;
-  return extracted.replace(/[),.;]+$/, '');
+  return proxyMediaUrl(extracted.replace(/[),.;]+$/, '')) || '';
 }
 
 function stripCoverLeakText(input: string): string {

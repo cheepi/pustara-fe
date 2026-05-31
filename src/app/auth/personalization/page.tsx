@@ -144,10 +144,10 @@ export default function PersonalizationPage() {
   // Note: label variable intentionally kept for potential future use
 
   return (
-    <div className={cn('min-h-screen w-full flex items-start justify-center', bg)}>
+    <div className={cn('min-h-screen w-full flex items-start justify-center lg:h-screen lg:overflow-hidden', bg)}>
       {/* ── Left decorative panel — desktop only ── */}
       <aside className={cn(
-        'hidden lg:flex flex-col justify-between sticky top-0 h-screen w-[360px] xl:w-[420px] flex-shrink-0 border-r px-10 py-12',
+        'hidden lg:flex flex-col justify-between sticky top-0 self-start h-screen w-[360px] xl:w-[420px] flex-shrink-0 border-r px-10 py-12',
         isLight ? 'border-slate-100 bg-navy-800' : 'border-white/10 bg-navy-950',
       )}>
         {/* Logo */}
@@ -218,7 +218,7 @@ export default function PersonalizationPage() {
 
       {/* ── Main content ── */}
       <main className={cn(
-        'flex flex-col flex-1 min-h-screen',
+        'flex flex-col flex-1 min-h-screen lg:h-screen lg:overflow-hidden',
         // On mobile: full width. On desktop: constrain to readable width
         'w-full lg:max-w-5xl xl:max-w-6xl',
       )}>

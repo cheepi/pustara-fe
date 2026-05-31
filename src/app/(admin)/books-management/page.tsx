@@ -13,6 +13,7 @@ import { getOrCreateDeviceId } from '@/lib/deviceDetection';
 import { uploadPdfFile } from '@/lib/supabase-admin';
 import { useTheme } from '@/components/theme/ThemeProvider';
 import { cn } from '@/lib/utils';
+import { proxyMediaUrl } from '@/lib/media';
 import { clearTopPicksCache } from '@/lib/browse';
  
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1518,11 +1519,23 @@ export default function AdminBooksPage() {
                         >
                           {/* Buku */}
                           <td className="px-4 py-3 max-w-[220px]">
-                            <div className={cn('text-sm font-semibold line-clamp-1', tk.text)}>{book.title}</div>
-                            <div className={cn('text-xs mt-0.5 line-clamp-1', tk.muted)}>
-                              {Array.isArray(book.authors) ? book.authors.join(', ') : book.authors}
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="w-12 h-16 rounded-lg overflow-hidden flex-shrink-0 bg-slate-100 dark:bg-navy-700 flex items-center justify-center">
+                                {book.cover_url ? (
+                                  // use proxied URL when available
+                                  <img src={String(proxyMediaUrl(book.cover_url) ?? book.cover_url)} alt="" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="text-xs font-bold text-slate-500 dark:text-slate-400">{(book.title || '').slice(0,2).toUpperCase()}</div>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <div className={cn('text-sm font-semibold line-clamp-1', tk.text)}>{book.title}</div>
+                                <div className={cn('text-xs mt-0.5 line-clamp-1', tk.muted)}>
+                                  {Array.isArray(book.authors) ? book.authors.join(', ') : book.authors}
+                                </div>
+                                {book.isbn && <div className={cn('text-[10px] mt-0.5 font-mono', tk.muted)}>ISBN {book.isbn}</div>}
+                              </div>
                             </div>
-                            {book.isbn && <div className={cn('text-[10px] mt-0.5 font-mono', tk.muted)}>ISBN {book.isbn}</div>}
                           </td>
                           {/* Genre */}
                           <td className="px-4 py-3">
@@ -1624,13 +1637,14 @@ export default function AdminBooksPage() {
                     >
                       {/* Cover placeholder / inisial */}
                       <div className={cn(
-                        'w-10 h-14 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-bold',
+                        'w-10 h-14 rounded-lg flex-shrink-0 flex items-center justify-center text-xs font-bold overflow-hidden',
                         dark ? 'bg-white/10 text-white/40' : 'bg-slate-100 text-slate-400'
                       )}>
-                        {book.cover_url
-                          ? <img src={book.cover_url} alt="" className="w-full h-full object-cover rounded-lg" />
-                          : book.title.slice(0, 2).toUpperCase()
-                        }
+                        {book.cover_url ? (
+                          <img src={String(proxyMediaUrl(book.cover_url) ?? book.cover_url)} alt="" className="w-full h-full object-cover rounded-lg" />
+                        ) : (
+                          book.title.slice(0, 2).toUpperCase()
+                        )}
                       </div>
 
                       {/* Info */}

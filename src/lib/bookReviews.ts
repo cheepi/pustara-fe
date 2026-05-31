@@ -1,6 +1,7 @@
 import { DUMMY_BOOKS, DUMMY_REVIEWS_BY_BOOK } from '@/data/dummyData';
 import { fetchBookById } from '@/lib/books';
 import { apiGet } from '@/lib/api';
+import { proxyMediaUrl } from '@/lib/media';
 import type { BookDetail, Review } from '@/types/book';
 
 function normalizeReview(raw: Record<string, unknown>): Review {
@@ -10,7 +11,7 @@ function normalizeReview(raw: Record<string, unknown>): Review {
     book_id: String(raw.book_id ?? ''),
     body: String(raw.text ?? raw.reviewText ?? raw.body ?? ''),
     name: String(raw.display_name ?? raw.name ?? raw.user ?? raw.username ?? ''),
-    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
+    avatar_url: raw.avatar_url ? proxyMediaUrl(String(raw.avatar_url)) : null,
     rating: Number(raw.rating ?? 0),
     text: String(raw.text ?? raw.body ?? raw.reviewText ?? ''),
     time: String(raw.time ?? raw.created_at ?? '-'),

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
+import { proxyMediaUrl } from '@/lib/media';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -10,7 +11,7 @@ function resolveAvatarSrc(src: string): string {
   const value = String(src || '').trim();
   if (!value) return '';
 
-  if (/^(https?:|data:|blob:)/i.test(value)) {
+  if (/^(data:|blob:|javascript:)/i.test(value)) {
     return value;
   }
 
@@ -18,7 +19,7 @@ function resolveAvatarSrc(src: string): string {
     return `${API_URL.replace(/\/$/, '')}${value}`;
   }
 
-  return value;
+  return proxyMediaUrl(value) || value;
 }
 
 interface AvatarImageProps {

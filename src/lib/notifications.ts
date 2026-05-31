@@ -1,6 +1,7 @@
 import { INITIAL_NOTIFICATIONS } from '@/data/notificationsFallback';
 import type { NotificationItem } from '@/types/notifications';
 import { apiDelete, apiGet, apiPatch } from '@/lib/api';
+import { proxyMediaUrl } from '@/lib/media';
 
 export const NOTIFICATIONS_CHANGED_EVENT = 'pustara:notifications-changed';
 
@@ -44,7 +45,7 @@ function normalizeNotification(raw: Record<string, unknown>, idx: number): Notif
     time: formatNotificationTime(createdAt),
     created_at: createdAt || '-',
     read: Boolean(raw.read ?? raw.is_read ?? false),
-    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
+    avatar_url: raw.avatar_url ? proxyMediaUrl(String(raw.avatar_url)) : null,
     actor_username: raw.actor_username ? String(raw.actor_username) : raw.actorUsername ? String(raw.actorUsername) : null,
     bookCover: String(raw.bookCover ?? raw.coverId ?? '') || undefined,
   };
@@ -63,9 +64,13 @@ export async function fetchNotifications(): Promise<NotificationItem[]> {
 }
 
 export async function fetchUnreadNotificationCount(): Promise<number> {
-  const payload = await apiGet<{ notifications?: Record<string, unknown>[] }>('/feed/me/notifications?limit=100');
-  const raw = Array.isArray(payload?.notifications) ? payload.notifications : [];
-  return raw.filter((item) => !Boolean(item.read ?? item.is_read ?? false)).length;
+  try {
+    const payload = await apiGet<{ notifications?: Record<string, unknown>[] }>('/feed/me/notifications?limit=100');
+    const raw = Array.isArray(payload?.notifications) ? payload.notifications : [];
+    return raw.filter((item) => !Boolean(item.read ?? item.is_read ?? false)).length;
+  } catch {
+    return 0;
+  }
 }
 
 export async function markNotificationRead(notificationId: string): Promise<void> {

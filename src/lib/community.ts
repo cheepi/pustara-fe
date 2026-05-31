@@ -1,5 +1,6 @@
 import { DUMMY_ALL_REVIEWS } from '@/data/dummyData';
 import type { CommunityReview } from '@/types/community';
+import { proxyMediaUrl } from '@/lib/media';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -12,13 +13,13 @@ function normalizeReview(raw: Record<string, unknown>): CommunityReview {
     firebase_uid: raw.firebase_uid ? String(raw.firebase_uid) : undefined,
     // display_name is the human-facing name; fall back to username then name
     user: String(raw.display_name ?? raw.user ?? raw.username ?? raw.name ?? ''),
-    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
+    avatar_url: raw.avatar_url ? proxyMediaUrl(String(raw.avatar_url)) : null,
     loc: String(raw.loc ?? '-'),
     rating: Number(raw.rating ?? 0),
     book: String(raw.book ?? raw.book_title ?? raw.bookTitle ?? '-'),
     author: String(raw.author ?? raw.bookAuthor ?? '-'),
     // Direct cover URL from books table (not OpenLibrary coverId)
-    cover_url: raw.cover_url ? String(raw.cover_url) : undefined,
+    cover_url: raw.cover_url ? proxyMediaUrl(String(raw.cover_url)) || undefined : undefined,
     key: String(raw.key ?? raw.book_id ?? raw.bookId ?? ''),
     text: String(raw.text ?? raw.reviewText ?? raw.body ?? ''),
     likes: Number(raw.likes ?? 0),

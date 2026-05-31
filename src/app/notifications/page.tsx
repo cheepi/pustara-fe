@@ -17,6 +17,7 @@ import {
   markNotificationRead,
   NOTIFICATIONS_CHANGED_EVENT,
 } from '@/lib/notifications';
+import { proxyMediaUrl } from '@/lib/media';
 import { NotificationType } from '@/types/database';
 import AvatarImage from '@/components/shared/AvatarImage';
 
@@ -268,7 +269,7 @@ export default function NotificationsPage() {
                   )}>
                     {n.bookCover ? (
                       <img
-                        src={`https://covers.openlibrary.org/b/id/${n.bookCover}-S.jpg`}
+                        src={proxyMediaUrl(`https://covers.openlibrary.org/b/id/${n.bookCover}-S.jpg`) || ''}
                         className="w-full h-full object-cover"
                         alt=""
                       />

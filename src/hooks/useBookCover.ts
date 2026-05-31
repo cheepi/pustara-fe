@@ -17,6 +17,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { proxyMediaUrl } from '@/lib/media';
 
 interface Book {
   id: string;
@@ -112,7 +113,7 @@ async function getCover(book: Book): Promise<CoverResult> {
 
   const dbCoverUrl = book.cover_url || book.coverUrl;
   if (dbCoverUrl && typeof dbCoverUrl === 'string' && dbCoverUrl.trim()) {
-    const result: CoverResult = { url: dbCoverUrl, source: 'database' };
+    const result: CoverResult = { url: proxyMediaUrl(dbCoverUrl) || dbCoverUrl, source: 'database' };
     COVER_CACHE.set(cacheKey, result);
     return result;
   }
@@ -126,8 +127,9 @@ async function getCover(book: Book): Promise<CoverResult> {
         : null;
 
   const olResult = await fetchOpenLibraryCover(book.title, author);
-  COVER_CACHE.set(cacheKey, olResult);
-  return olResult;
+  const proxied = olResult.url ? { ...olResult, url: proxyMediaUrl(olResult.url) || olResult.url } : olResult;
+  COVER_CACHE.set(cacheKey, proxied);
+  return proxied;
 }
 
 /**

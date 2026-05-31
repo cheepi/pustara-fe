@@ -444,7 +444,7 @@ function ChatAIContent() {
   const isEmpty = chatHistory.length === 0;
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--bg)' }}>
+    <div className="min-h-[100dvh] h-[100dvh] flex flex-col overflow-hidden" style={{ background: 'var(--bg)' }}>
       <Navbar />
 
       {/* Header */}
@@ -481,7 +481,7 @@ function ChatAIContent() {
       )}
 
       {/* Chat area */}
-      <div className="flex-1 max-w-3xl w-full mx-auto px-4 pb-4 overflow-y-auto">
+      <div className="flex-1 min-h-0 max-w-3xl w-full mx-auto px-4 pb-4 overflow-y-auto no-scrollbar overscroll-contain">
 
         {/* Empty state */}
         {isEmpty && (
@@ -563,7 +563,7 @@ function ChatAIContent() {
       </div>
 
       {!isEmpty && (
-        <div className="sticky bottom-0 max-w-3xl w-full mx-auto px-4 pb-6 pt-3" style={{ background: 'var(--bg)' }}>
+        <div className="relative shrink-0 max-w-3xl w-full mx-auto px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+1rem)]" style={{ background: 'var(--bg)' }}>
           <div
             className="absolute top-0 left-0 right-0 h-8 pointer-events-none"
             style={{ background: `linear-gradient(to bottom, transparent, var(--bg))`, transform: 'translateY(-100%)' }}

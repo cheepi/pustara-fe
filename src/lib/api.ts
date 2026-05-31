@@ -11,11 +11,25 @@ const TOKEN_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let cachedAuthHeader: Record<string, string> | null = null;
 let cachedAuthUid: string | null = null;
 let cachedAuthAt = 0;
+const AUTH_LOGIN_PATH = '/auth/login';
 
 function clearAuthCache() {
   cachedAuthHeader = null;
   cachedAuthUid = null;
   cachedAuthAt = 0;
+}
+
+async function handleSessionRevoked() {
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+  const shouldRedirect = typeof window !== 'undefined' && currentPath !== AUTH_LOGIN_PATH;
+
+  const { signOut } = await import('firebase/auth');
+  if (auth) await signOut(auth).catch(() => {});
+  clearAuthCache();
+
+  if (shouldRedirect) {
+    window.location.replace(AUTH_LOGIN_PATH);
+  }
 }
 
 async function resolveCurrentUser(): Promise<User | null> {
@@ -139,16 +153,13 @@ export async function apiGet<T>(path: string): Promise<T> {
   });
   if (!res.ok) {
     const errJson = await res.json().catch(() => ({}));
-    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     if (res.status === 401) {
       if (errJson?.error === 'SESSION_REVOKED') {
-        // Import lazy biar ga circular, lalu force logout
-        const { signOut } = await import('firebase/auth');
-        if (auth) await signOut(auth).catch(() => {});
-        window.location.href = '/auth/login';
+        await handleSessionRevoked();
         throw new Error('SESSION_REVOKED');
       }
     }
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
   }
   const json = await res.json();
@@ -164,16 +175,13 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   });
   if (!res.ok) {
     const errJson = await res.json().catch(() => ({}));
-    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     if (res.status === 401) {
       if (errJson?.error === 'SESSION_REVOKED') {
-        // Import lazy biar ga circular, lalu force logout
-        const { signOut } = await import('firebase/auth');
-        if (auth) await signOut(auth).catch(() => {});
-        window.location.href = '/auth/login';
+        await handleSessionRevoked();
         throw new Error('SESSION_REVOKED');
       }
     }
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
   }  
   const json = await res.json();
@@ -189,16 +197,13 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   });
   if (!res.ok) {
     const errJson = await res.json().catch(() => ({}));
-    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     if (res.status === 401) {
       if (errJson?.error === 'SESSION_REVOKED') {
-        // Import lazy biar ga circular, lalu force logout
-        const { signOut } = await import('firebase/auth');
-        if (auth) await signOut(auth).catch(() => {});
-        window.location.href = '/auth/login';
+        await handleSessionRevoked();
         throw new Error('SESSION_REVOKED');
       }
     }
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
   }  
   const json = await res.json();
@@ -214,16 +219,13 @@ export async function apiPostAllowAnonymous<T>(path: string, body: unknown): Pro
   });
   if (!res.ok) {
     const errJson = await res.json().catch(() => ({}));
-    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     if (res.status === 401) {
       if (errJson?.error === 'SESSION_REVOKED') {
-        // Import lazy biar ga circular, lalu force logout
-        const { signOut } = await import('firebase/auth');
-        if (auth) await signOut(auth).catch(() => {});
-        window.location.href = '/auth/login';
+        await handleSessionRevoked();
         throw new Error('SESSION_REVOKED');
       }
     }
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
   }  
   const json = await res.json();
@@ -238,16 +240,13 @@ export async function apiDelete<T>(path: string): Promise<T> {
   });
   if (!res.ok) {
     const errJson = await res.json().catch(() => ({}));
-    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     if (res.status === 401) {
       if (errJson?.error === 'SESSION_REVOKED') {
-        // Import lazy biar ga circular, lalu force logout
-        const { signOut } = await import('firebase/auth');
-        if (auth) await signOut(auth).catch(() => {});
-        window.location.href = '/auth/login';
+        await handleSessionRevoked();
         throw new Error('SESSION_REVOKED');
       }
     }
+    console.error(`[API] ${res.status} Error on ${path}:`, errJson);
     throw new Error(errJson?.message || errJson?.error?.code || `API error: ${res.status} (${path})`);
   }  
   const json = await res.json();

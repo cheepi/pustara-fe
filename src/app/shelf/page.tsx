@@ -838,8 +838,9 @@ export default function RakBukuPage() {
     setReturningBookKey(bookKey);
     try {
       await returnBorrowedBookForMe(bookKey);
-      await refreshShelf(true);
+      void refreshShelf(true);
       setSelectedKey(null);
+      setPendingReturnBook(null);
       showToast('Buku berhasil dikembalikan.', 'success');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Gagal mengembalikan buku.';
