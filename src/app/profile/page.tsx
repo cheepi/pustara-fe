@@ -165,7 +165,7 @@ function StatCard({
 
 export default function ProfilePage() {
   const { theme } = useTheme();
-  const { user }  = useAuthStore();
+  const { user, setProfileCache }  = useAuthStore();
   const isLight   = theme === 'light';
 
   const [editing,   setEditing]   = useState(false);
@@ -419,6 +419,17 @@ export default function ProfilePage() {
         setBio(updated.bio || draftBio);
         setDraftName(finalName);
         setDraftBio(updated.bio || draftBio);
+        if (updated.avatar_url) {
+          setAvatarUrl(updated.avatar_url);
+        }
+        if (user) {
+          setProfileCache({
+            uid: user.uid,
+            displayName: finalName,
+            avatarUrl: updated.avatar_url || avatarUrl,
+            email: user.email || null,
+          });
+        }
       } else {
         setName(draftName);
         setBio(draftBio);
@@ -560,7 +571,7 @@ export default function ProfilePage() {
               {editing && (
                 <button 
                   onClick={() => setUploadDialogOpen(true)}
-                  className="absolute -bottom-1.5 -right-1.5 w-7 h-7 rounded-xl bg-gold text-navy-900 flex items-center justify-center shadow-md hover:bg-gold-light transition-colors"
+                  className="absolute -bottom-1.5 -right-1.5 z-20 w-7 h-7 rounded-xl bg-gold text-navy-900 flex items-center justify-center shadow-md hover:bg-gold-light transition-colors"
                 >
                   <Camera className="w-3.5 h-3.5" />
                 </button>
@@ -568,7 +579,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Info */}
-            <div className="flex-1 min-w-0">
+            <div className="flex-1 min-w-0 w-full sm:w-auto">
               <AnimatePresence mode="wait">
                 {editing ? (
                   <motion.div key="edit" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -608,7 +619,7 @@ export default function ProfilePage() {
             </div>
 
             {/* Follow counts — clickable, opens modal */}
-            <div className="flex gap-5 flex-shrink-0">
+            <div className="flex gap-5 flex-shrink-0 mt-4 sm:mt-0">
               {([
                 { val: String(profileCounts.following), lbl: 'Mengikuti', tab: 'following' },
                 { val: String(profileCounts.followers), lbl: 'Pengikut',  tab: 'followers' },
