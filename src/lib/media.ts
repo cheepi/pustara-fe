@@ -67,7 +67,25 @@ export function avatarProxyUrl(original?: string | null, userId?: string | null)
 
   // Build a fresh proxy URL using the canonical /users/:id/avatar route
   if (userId) {
-    return `${base}/users/${encodeURIComponent(String(userId))}/avatar`;
+    let buster = '';
+    try {
+      const parts = value.split('/');
+      const last = parts[parts.length - 1];
+      if (last) {
+        const match = last.match(/^(\d+)/);
+        if (match) {
+          buster = `?v=${match[1]}`;
+        } else {
+          let hash = 0;
+          for (let i = 0; i < last.length; i++) {
+            hash = (hash << 5) - hash + last.charCodeAt(i);
+            hash |= 0;
+          }
+          buster = `?v=${Math.abs(hash)}`;
+        }
+      }
+    } catch (_) {}
+    return `${base}/users/${encodeURIComponent(String(userId))}/avatar${buster}`;
   }
 
   // Fallback to regular proxy for unknown user id

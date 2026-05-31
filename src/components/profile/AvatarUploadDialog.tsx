@@ -3,19 +3,21 @@
 import { useState, useRef } from 'react';
 import { Camera, X, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { uploadAvatarToSupabase } from '@/lib/avatarUpload';
+import { uploadAvatarToSupabase, uploadAvatarDraft } from '@/lib/avatarUpload';
 import { useAuthStore } from '@/store/authStore';
 
 interface Props {
   userId: string;
   onUploadSuccess: (newAvatarUrl: string) => void;
   isLight: boolean;
+  draftMode?: boolean;
 }
 
 export default function AvatarUploadDialog({
   userId,
   onUploadSuccess,
   isLight,
+  draftMode = false,
 }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -32,7 +34,8 @@ export default function AvatarUploadDialog({
     setUploading(true);
 
     try {
-      const result = await uploadAvatarToSupabase(file, userId);
+      const uploadFn = draftMode ? uploadAvatarDraft : uploadAvatarToSupabase;
+      const result = await uploadFn(file, userId);
 
       if (!result.success) {
         setError(result.error || 'Upload gagal');
@@ -40,17 +43,23 @@ export default function AvatarUploadDialog({
       }
 
       // Success
-      setSuccess('Avatar berhasil diperbarui!');
-      const cacheBustedUrl = `${result.avatarUrl!}${result.avatarUrl!.includes('?') ? '&' : '?'}t=${Date.now()}`;
-      if (user) {
-        setProfileCache({
-          uid: user.uid,
-          displayName: user.displayName || user.email || 'Pengguna',
-          avatarUrl: cacheBustedUrl,
-          email: user.email || null,
-        });
+      setSuccess(draftMode ? 'Gambar berhasil diunggah!' : 'Avatar berhasil diperbarui!');
+      
+      let finalUrl = result.avatarUrl!;
+      if (!draftMode) {
+        const cacheBustedUrl = `${finalUrl}${finalUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+        if (user) {
+          setProfileCache({
+            uid: user.uid,
+            displayName: user.displayName || user.email || 'Pengguna',
+            avatarUrl: cacheBustedUrl,
+            email: user.email || null,
+          });
+        }
+        finalUrl = cacheBustedUrl;
       }
-      onUploadSuccess(cacheBustedUrl);
+      
+      onUploadSuccess(finalUrl);
 
       // Clear success message after 2s
       setTimeout(() => setSuccess(null), 2000);
