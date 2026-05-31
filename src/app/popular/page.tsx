@@ -130,7 +130,7 @@ export default function PopularPage() {
         </div>
 
         {/* Genre chips */}
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-6" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-6 scrollbar-none">
           {GENRES.map(g => (
             <button key={g} onClick={() => setGenre(g)}
               className={cn('flex-shrink-0 px-4 py-2 rounded-full border text-xs font-semibold transition-all', genre === g ? tk.chipAct : tk.chip)}>

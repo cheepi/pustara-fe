@@ -13,7 +13,7 @@ import PopularCarousel from '@/components/shared/PopularCarousel';
 import Link from 'next/link';
 import { useRecommendations } from '@/hooks/useRecommendations';
 import { useTrendingBooks } from '@/hooks/useTrendingBooks';
-import AiRecoCard from '@/components/ai/AiRecoCard';
+import AiRecoCard from '../ai/AiRecoCard';
 import AvatarImage from '@/components/shared/AvatarImage';
 import {
   batchFetchCovers,
@@ -444,7 +444,7 @@ export default function HomePage() {
           </div>
           <Link href="/browse#ai-reco" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
         </div>
-        <div className="flex gap-4 px-4 overflow-x-auto pb-3 drag-scroll" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-4 px-4 overflow-x-auto pb-3 drag-scroll scrollbar-none">
           {aiLoading
             ? Array(8).fill(0).map((_, i) => <AiRecoCardSkeleton key={i} isLight={isLight} />)
             : aiReco.length > 0
@@ -487,7 +487,7 @@ export default function HomePage() {
           /* ── Skeleton ── */
           <>
             {/* Mobile skeleton */}
-            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-2 drag-scroll" style={{ scrollbarWidth: 'none' }}>
+            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-2 drag-scroll scrollbar-none">
               {Array(4).fill(0).map((_, i) => (
                 <div key={i} className="flex-shrink-0 w-32">
                   <div className={cn('w-32 h-48 rounded-xl animate-pulse mb-2', isLight ? 'bg-parchment-darker' : 'bg-navy-700/60')} />
@@ -512,7 +512,7 @@ export default function HomePage() {
         ) : (
           <>
             {/* ══ MOBILE: horizontal card scroll (same pattern as AI reco) ══ */}
-            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-3 drag-scroll" style={{ scrollbarWidth: 'none' }}>
+            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-3 drag-scroll scrollbar-none">
               {recentBooks.map((book, idx) => (
                 <Link key={book.book_id} href={`/book/${book.key}`}>
                   <motion.div
@@ -868,8 +868,7 @@ function CommunitySection({
       {loading ? (
         <>
           <div
-            className="lg:hidden w-full max-w-full px-4 flex gap-3 overflow-x-auto overscroll-x-contain pb-2 snap-x snap-mandatory scroll-px-4"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            className="lg:hidden w-full max-w-full px-4 flex gap-3 overflow-x-auto overscroll-x-contain pb-2 snap-x snap-mandatory scroll-px-4 scrollbar-none"
           >
             {Array.from({ length: 3 }).map((_, i) => <CommunityCardSkeleton key={i} isLight={isLight} />)}
           </div>
@@ -884,8 +883,7 @@ function CommunitySection({
       ) : (
         <>
           <div
-            className="lg:hidden w-full max-w-full px-4 flex gap-3 overflow-x-auto overscroll-x-contain pb-2 snap-x snap-mandatory scroll-px-4"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            className="lg:hidden w-full max-w-full px-4 flex gap-3 overflow-x-auto overscroll-x-contain pb-2 snap-x snap-mandatory scroll-px-4 scrollbar-none"
           >
             {reviews.slice(0, 5).map((r, i) => (
               <div
