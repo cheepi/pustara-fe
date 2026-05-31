@@ -25,6 +25,7 @@ import { fetchFeedSidebarPayload } from '@/lib/feed';
 import type { FeedSidebarPayload } from '@/lib/feed';
 import type { CommunityReview } from "@/types/community";
 import ReviewCard from '@/components/shared/ReviewCard';
+import { proxyMediaUrl } from '@/lib/media';
 
 type RecentBook = {
   book_id: string;
@@ -68,7 +69,7 @@ function formatTooltipDay(dayKey?: string | null): string {
 }
 
 const coverUrl = (id?: number, s = 'M') =>
-  id ? `https://covers.openlibrary.org/b/id/${id}-${s}.jpg` : null;
+  id ? proxyMediaUrl(`https://covers.openlibrary.org/b/id/${id}-${s}.jpg`) : null;
 
 const EMPTY_SIDEBAR: FeedSidebarPayload = {
   profile: {
@@ -103,7 +104,7 @@ function normalizeRecentBook(raw: Record<string, unknown>): RecentBook {
       : String(raw.genre ?? raw.genres ?? '-'),
     rating: Number.isFinite(ratingValue) ? ratingValue : 0,
     avg_rating: Number.isFinite(ratingValue) ? ratingValue : 0,
-    cover_url: raw.cover_url != null ? String(raw.cover_url) : null,
+    cover_url: raw.cover_url != null ? proxyMediaUrl(String(raw.cover_url)) : null,
     description: String(raw.description ?? ''),
     status: String(raw.status ?? 'Tersedia'),
     added_at: String(raw.added_at ?? raw.created_at ?? ''),
@@ -443,7 +444,7 @@ export default function HomePage() {
           </div>
           <Link href="/browse#ai-reco" className="text-gold text-xs font-medium hover:underline">Lihat semua →</Link>
         </div>
-        <div className="flex gap-4 px-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-4 px-4 overflow-x-auto pb-3 drag-scroll" style={{ scrollbarWidth: 'none' }}>
           {aiLoading
             ? Array(8).fill(0).map((_, i) => <AiRecoCardSkeleton key={i} isLight={isLight} />)
             : aiReco.length > 0
@@ -486,7 +487,7 @@ export default function HomePage() {
           /* ── Skeleton ── */
           <>
             {/* Mobile skeleton */}
-            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none' }}>
+            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-2 drag-scroll" style={{ scrollbarWidth: 'none' }}>
               {Array(4).fill(0).map((_, i) => (
                 <div key={i} className="flex-shrink-0 w-32">
                   <div className={cn('w-32 h-48 rounded-xl animate-pulse mb-2', isLight ? 'bg-parchment-darker' : 'bg-navy-700/60')} />
@@ -511,7 +512,7 @@ export default function HomePage() {
         ) : (
           <>
             {/* ══ MOBILE: horizontal card scroll (same pattern as AI reco) ══ */}
-            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-3" style={{ scrollbarWidth: 'none' }}>
+            <div className="lg:hidden flex gap-3 px-4 overflow-x-auto pb-3 drag-scroll" style={{ scrollbarWidth: 'none' }}>
               {recentBooks.map((book, idx) => (
                 <Link key={book.book_id} href={`/book/${book.key}`}>
                   <motion.div

@@ -396,20 +396,22 @@ export default function LoansManagementPage() {
           </AnimatePresence>
 
           {/* Table */}
-          <div className="overflow-x-auto">
-            {loading ? (
+          <div>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              {loading ? (
               <div className="p-6 space-y-3">
                 {[...Array(6)].map((_, i) => (
                   <div key={i} className="h-14 rounded-xl animate-pulse" style={{ background: dark ? 'rgba(255,255,255,0.05)' : '#f1f5f9' }} />
                 ))}
               </div>
-            ) : loans.length === 0 ? (
-              <div className="p-12 text-center">
-                <BookOpen className={cn('w-10 h-10 mx-auto mb-3 opacity-30', tk.muted)} />
-                <p className={cn('text-sm', tk.muted)}>Tidak ada peminjaman yang cocok.</p>
-              </div>
-            ) : (
-              <table className="w-full min-w-[900px]">
+              ) : loans.length === 0 ? (
+                <div className="p-12 text-center">
+                  <BookOpen className={cn('w-10 h-10 mx-auto mb-3 opacity-30', tk.muted)} />
+                  <p className={cn('text-sm', tk.muted)}>Tidak ada peminjaman yang cocok.</p>
+                </div>
+              ) : (
+                <table className="w-full min-w-[900px]">
                 <thead>
                   <tr className="border-b text-xs font-semibold uppercase tracking-wider"
                     style={{ borderColor: 'var(--border)', background: dark ? 'rgba(255,255,255,0.04)' : '#f8fafc' }}>
@@ -509,7 +511,65 @@ export default function LoansManagementPage() {
                   ))}
                 </tbody>
               </table>
-            )}
+              )}
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden">
+              {loading ? (
+                <div className="p-4 space-y-3">
+                  {[...Array(6)].map((_, i) => (
+                    <div key={i} className="h-20 rounded-xl animate-pulse" style={{ background: dark ? 'rgba(255,255,255,0.05)' : '#f1f5f9' }} />
+                  ))}
+                </div>
+              ) : loans.length === 0 ? (
+                <div className="p-6 text-center">
+                  <BookOpen className={cn('w-10 h-10 mx-auto mb-3 opacity-30', tk.muted)} />
+                  <p className={cn('text-sm', tk.muted)}>Tidak ada peminjaman yang cocok.</p>
+                </div>
+              ) : (
+                <div className="divide-y" style={{ borderColor: 'var(--border)' }}>
+                  {loans.map((loan) => (
+                    <div key={loan.loan_id} className={cn('p-4 flex gap-3 items-start', tk.row)}>
+                      <div className="w-12 h-16 rounded-md overflow-hidden flex-shrink-0 bg-slate-100 dark:bg-navy-700">
+                        {loan.book_cover_url ? (
+                          <img src={loan.book_cover_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs font-bold text-slate-400">{(loan.book_title || '').slice(0,2).toUpperCase()}</div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className={cn('text-sm font-bold line-clamp-1', tk.text)}>{loan.book_title}</p>
+                            <p className={cn('text-xs line-clamp-1', tk.muted)}>{Array.isArray(loan.book_authors) ? loan.book_authors.join(', ') : loan.book_authors}</p>
+                            <p className={cn('text-xs mt-1', tk.muted)}>{loan.user_name} · {loan.user_email}</p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <StatusBadge status={loan.status} daysLeft={loan.days_left} />
+                            <p className={cn('text-[11px] mt-1', tk.muted)}>{formatDate(loan.borrowed_at)}</p>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 flex items-center gap-2">
+                          <button onClick={() => setDrillBook({ id: loan.book_id, title: loan.book_title })}
+                            className={cn('px-3 py-1.5 rounded-lg border text-xs font-semibold', tk.btnGhost)}>
+                            Pinjam Lainnya
+                          </button>
+                          {loan.status !== 'returned' && (
+                            <button onClick={() => handleForceReturn(loan.loan_id, loan.book_title)}
+                              disabled={returningId === loan.loan_id}
+                              className={cn('px-3 py-1.5 rounded-lg text-xs font-semibold', loan.status === 'overdue' ? 'bg-red-500/15 text-red-400' : 'bg-navy-800 text-white')}>
+                              {returningId === loan.loan_id ? 'Memproses...' : 'Kembalikan'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Pagination */}

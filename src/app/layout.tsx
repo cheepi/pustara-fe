@@ -4,6 +4,7 @@ import './globals.css';
 import { AuthProvider } from '@/components/auth/AuthProvider';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { ToastProvider } from '@/components/feedback/ToastProvider';
+import DragScrollProvider from '@/components/shared/DragScrollProvider';
 import FABGuard from '@/components/layout/FABGuard';
 
 export const metadata: Metadata = {
@@ -41,10 +42,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="id" suppressHydrationWarning>
       <head />
-      <body className="min-h-screen overflow-x-hidden overflow-y-auto no-scrollbar">
+      <body className="min-h-[100dvh] overflow-y-auto overflow-x-hidden no-scrollbar">
         <ThemeProvider>
           <ToastProvider>
-            <div className="min-h-screen w-full max-w-full overflow-x-hidden flex flex-col">
+            <DragScrollProvider />
+            <div className="min-h-[100dvh] w-full max-w-full overflow-y-auto flex flex-col">
               <AuthProvider>{children}</AuthProvider>
               <FABGuard />
             </div>

@@ -114,6 +114,7 @@ export default function BookDetailPage() {
   const [queued, setQueued] = useState(false);
   const [queuePosition, setQueuePosition] = useState<number | null>(null);
   const [queueCount, setQueueCount] = useState(0);
+  const [shelfStatusLoaded, setShelfStatusLoaded] = useState(false);
   const [actionLoading, setActionLoading] = useState<'borrow' | 'wishlist' | 'queue' | null>(null);
 
   async function refreshBookSnapshot() {
@@ -123,6 +124,30 @@ export default function BookDetailPage() {
       if (latest) setBook(latest);
     } catch {
       // Keep existing UI snapshot when refresh fails.
+    }
+  }
+
+  async function refreshLiveBookState() {
+    if (!book || !user) {
+      await refreshBookSnapshot();
+      return;
+    }
+
+    const [latestBook, latestStatus] = await Promise.all([
+      getBookById(book.id).catch(() => null),
+      fetchMyBookShelfStatus(book.id).catch(() => null),
+    ]);
+
+    if (latestBook) {
+      setBook(latestBook);
+    }
+
+    if (latestStatus) {
+      setWishlisted(Boolean(latestStatus.wishlisted));
+      setBorrowed(Boolean(latestStatus.borrowed));
+      setQueued(Boolean(latestStatus.queued));
+      setQueuePosition(latestStatus.queue_position ?? null);
+      setQueueCount(Number(latestStatus.queue_count ?? 0));
     }
   }
 
@@ -162,10 +187,13 @@ export default function BookDetailPage() {
       setBorrowed(false);
       setQueued(false);
       setQueuePosition(null);
+      setQueueCount(0);
+      setShelfStatusLoaded(true);
       return;
     }
 
     let active = true;
+    setShelfStatusLoaded(false);
     fetchMyBookShelfStatus(book.id)
       .then((status) => {
         if (!active) return;
@@ -174,6 +202,7 @@ export default function BookDetailPage() {
         setQueued(Boolean(status.queued));
         setQueuePosition(status.queue_position ?? null);
         setQueueCount(Number(status.queue_count ?? 0));
+        setShelfStatusLoaded(true);
       })
       .catch(() => {
         if (!active) return;
@@ -182,6 +211,7 @@ export default function BookDetailPage() {
         setQueued(false);
         setQueuePosition(null);
         setQueueCount(0);
+        setShelfStatusLoaded(true);
       });
 
     return () => {
@@ -194,6 +224,35 @@ export default function BookDetailPage() {
     document.title = `Pustara | ${book.title}`;
     return () => { document.title = 'Pustara'; };
   }, [book?.title]);
+
+  useEffect(() => {
+    if (!book || !user) return;
+
+    let active = true;
+    const pollIntervalMs = 5000;
+
+    const sync = async () => {
+      if (!active) return;
+      await refreshLiveBookState();
+    };
+
+    sync();
+    const intervalId = window.setInterval(sync, pollIntervalMs);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        void sync();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      active = false;
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [book?.id, user]);
 
   async function toggleWishlist() {
     if (!book) return;
@@ -303,6 +362,7 @@ export default function BookDetailPage() {
 
       setQueued(Boolean(result.queued ?? true));
       setQueuePosition(result.queue_position ?? null);
+      setQueueCount(nextQueueCount);
       setBook((prev) => {
         if (!prev) return prev;
         return {
@@ -349,7 +409,10 @@ export default function BookDetailPage() {
   const activeQueueCount = Math.max(queueCount, Number(book.queue || 0));
   const hasQueue = activeQueueCount > 0;
   const queuePositionLabel = queuePosition ? `#${queuePosition}` : '';
-  const canBorrowNow = borrowed || (!hasQueue && isAvailable) || (queued && queuePosition === 1 && isAvailable);
+  const queueStatusReady = !user || shelfStatusLoaded;
+  const isQueueHead = Boolean(queued && queuePosition === 1);
+  const isQueueHeadWithStock = Boolean(isQueueHead && isAvailable);
+  const canBorrowNow = queueStatusReady && (borrowed || (!hasQueue && isAvailable) || isQueueHead);
 
   const borrowDate = new Date();
   const returnDate = new Date(borrowDate);
@@ -476,6 +539,41 @@ export default function BookDetailPage() {
                   {canBorrowNow ? <BookOpen className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
                   {canBorrowNow ? 'Login untuk Pinjam' : 'Login untuk Antre'}
                 </motion.button>
+              ) : !queueStatusReady ? (
+                <motion.button
+                  disabled
+                  className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-500 text-white/90 cursor-not-allowed shadow-lg"
+                  whileTap={{ scale: 0.98 }}>
+                  <Clock className="w-4 h-4" />
+                  Memuat status antrean...
+                </motion.button>
+              ) : queued && queuePosition && queuePosition > 1 ? (
+                <motion.button
+                  disabled
+                  className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-500 text-white/95 cursor-not-allowed shadow-lg"
+                  whileTap={{ scale: 0.98 }}>
+                  <Clock className="w-4 h-4" />
+                  {queuePosition ? `Dalam Antrean ${queuePositionLabel}` : 'Dalam Antrean'}
+                </motion.button>
+              ) : queued && queuePosition === 1 ? (
+                isQueueHeadWithStock ? (
+                  <motion.button
+                    onClick={handleBorrow}
+                    disabled={actionLoading === 'borrow'}
+                    className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-navy-800 text-white hover:bg-navy-700 transition-colors shadow-lg shadow-navy-900/30"
+                    whileTap={{ scale: 0.98 }}>
+                    <BookOpen className="w-4 h-4" />
+                    {actionLoading === 'borrow' ? 'Memproses...' : 'Pinjam Buku'}
+                  </motion.button>
+                ) : (
+                  <motion.button
+                    disabled
+                    className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-600 text-white/95 cursor-not-allowed shadow-lg"
+                    whileTap={{ scale: 0.98 }}>
+                    <Clock className="w-4 h-4" />
+                    {queuePosition ? `Dalam Antrean ${queuePositionLabel}` : 'Dalam Antrean'}
+                  </motion.button>
+                )
               ) : canBorrowNow ? (
                 <motion.button
                   onClick={handleBorrow}
@@ -484,14 +582,6 @@ export default function BookDetailPage() {
                   whileTap={{ scale: 0.98 }}>
                   <BookOpen className="w-4 h-4" />
                   {actionLoading === 'borrow' ? 'Memproses...' : 'Pinjam Buku'}
-                </motion.button>
-              ) : queued && queuePosition && queuePosition > 1 ? (
-                <motion.button
-                  disabled
-                  className="w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 bg-slate-500 text-white/95 cursor-not-allowed shadow-lg"
-                  whileTap={{ scale: 0.98 }}>
-                  <Clock className="w-4 h-4" />
-                  Dalam Antrean {queuePositionLabel}
                 </motion.button>
               ) : (
                 <motion.button

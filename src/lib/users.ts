@@ -1,5 +1,6 @@
 import { auth } from '@/lib/firebase';
 import type { FollowActionResult, RecommendedUser, UserProfile } from '@/types/user';
+import { proxyMediaUrl } from '@/lib/media';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -121,7 +122,7 @@ function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
       const coverId = rec.cover_id ?? rec.coverId ?? rec.coverId;
       return {
         ...(rec as Record<string, unknown>),
-        cover_url: coverUrl || (coverId ? toCoverUrlFromId(coverId) : null),
+          cover_url: coverUrl || (coverId ? proxyMediaUrl(toCoverUrlFromId(coverId)) : null),
       } as unknown;
     });
   }
@@ -133,7 +134,7 @@ function normalizeUserProfile(raw: Record<string, unknown>): UserProfile {
     name: identity.displayName,
     email: raw.email ? String(raw.email) : null,
     bio: String(raw.bio ?? ''),
-    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
+    avatar_url: raw.avatar_url ? proxyMediaUrl(String(raw.avatar_url)) : null,
     preferred_genres: parseStringArray(raw.preferred_genres),
     total_read: Number(raw.total_read ?? 0),
     reading_streak: Number(raw.reading_streak ?? 0),
@@ -170,7 +171,7 @@ function normalizeRecommendedUser(raw: Record<string, unknown>): RecommendedUser
     display_name: identity.displayName,
     name: identity.displayName,
     bio: String(raw.bio ?? ''),
-    avatar_url: raw.avatar_url ? String(raw.avatar_url) : null,
+    avatar_url: raw.avatar_url ? proxyMediaUrl(String(raw.avatar_url)) : null,
     preferred_genres: parseStringArray(raw.preferred_genres),
     followers_count: Number(raw.followers_count ?? 0),
     total_read: Number(raw.total_read ?? 0),

@@ -10,6 +10,7 @@
 
 import type { BookDetail } from '@/types/book';
 import { DUMMY_BOOKS } from '@/data/dummyData';
+import { proxyMediaUrl } from '@/lib/media';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -73,7 +74,7 @@ function normalizeBook(raw: Record<string, unknown>): BookDetail {
     is_active:    Boolean(raw.is_active ?? true),
     created_at:   String(raw.created_at ?? ''),
     updated_at:   String(raw.updated_at ?? ''),
-    file_url:     raw.file_url != null ? String(raw.file_url) : null,
+    file_url:     raw.file_url != null ? proxyMediaUrl(String(raw.file_url)) : null,
     file_type:    String(raw.file_type ?? 'pdf'),
     total_pages:  raw.total_pages != null ? Number(raw.total_pages) : null,
   };

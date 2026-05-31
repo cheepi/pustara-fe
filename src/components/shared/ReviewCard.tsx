@@ -22,6 +22,7 @@ import { useTheme } from '@/components/theme/ThemeProvider';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { toggleReviewLike, getReviewLikeStatus } from '@/lib/reviewLikes';
+import { proxyMediaUrl } from '@/lib/media';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -117,6 +118,7 @@ export default function ReviewCard({
   const [liked,     setLiked]     = useState(initialLiked);
   const [likeCount, setLikeCount] = useState(initialLikes);
   const [liking,    setLiking]    = useState(false);
+  const resolvedBookCoverUrl = proxyMediaUrl(bookCoverUrl);
   // Track whether we've fetched the real like status yet
   const [statusFetched, setStatusFetched] = useState(!user);
   const [currentRating, setCurrentRating] = useState(rating);
@@ -313,12 +315,12 @@ export default function ReviewCard({
             bookId ? (
               <Link href={`/book/${bookId}`} className="flex-shrink-0">
                 <div className={cn('w-9 h-12 rounded-lg overflow-hidden shadow-md', tk.coverBg)}>
-                  {bookCoverUrl ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-3.5 h-3.5 text-gold/30 m-auto mt-3.5" />}
+                  {resolvedBookCoverUrl ? <img src={resolvedBookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-3.5 h-3.5 text-gold/30 m-auto mt-3.5" />}
                 </div>
               </Link>
             ) : (
               <div className={cn('flex-shrink-0 w-9 h-12 rounded-lg overflow-hidden shadow-md', tk.coverBg)}>
-                {bookCoverUrl ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-3.5 h-3.5 text-gold/30 m-auto mt-3.5" />}
+                {resolvedBookCoverUrl ? <img src={resolvedBookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-3.5 h-3.5 text-gold/30 m-auto mt-3.5" />}
               </div>
             )
           )}
@@ -417,12 +419,12 @@ export default function ReviewCard({
               bookId ? (
                 <Link href={`/book/${bookId}`} className="flex-shrink-0">
                   <div className={cn('w-12 h-16 rounded-xl overflow-hidden shadow-lg flex items-center justify-center', tk.coverBg)}>
-                    {bookCoverUrl ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-gold/30" />}
+                    {resolvedBookCoverUrl ? <img src={resolvedBookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-gold/30" />}
                   </div>
                 </Link>
               ) : (
                 <div className={cn('flex-shrink-0 w-12 h-16 rounded-xl overflow-hidden shadow-lg flex items-center justify-center', tk.coverBg)}>
-                  {bookCoverUrl ? <img src={bookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-gold/30" />}
+                  {resolvedBookCoverUrl ? <img src={resolvedBookCoverUrl} alt={bookTitle || ''} className="w-full h-full object-cover" /> : <BookOpen className="w-4 h-4 text-gold/30" />}
                 </div>
               )
             )}
