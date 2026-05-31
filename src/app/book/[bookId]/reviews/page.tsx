@@ -163,7 +163,7 @@ export default function ReviewsPage() {
         </motion.div>
 
         {/* Filter chips */}
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-5" style={{ scrollbarWidth: 'none' }}>
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-5 scrollbar-none">
           {RATING_FILTERS.map(f => (
             <button key={f} onClick={() => setFilter(f)}
               className={cn('flex-shrink-0 px-3 py-1.5 rounded-full border text-xs font-semibold transition-all',

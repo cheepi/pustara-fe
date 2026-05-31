@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, BookOpen, Users, BarChart2, X, Info } from 'lucide-react';
 import Link from 'next/link';
@@ -128,6 +129,16 @@ export default function AiRecoCard({ reco, index = 0, isLight, coverUrl: propCov
   const [showSignalTooltip, setShowSignalTooltip] = useState(false);
   const [phaseInfoOpen, setPhaseInfoOpen] = useState(false);
   const [showPhaseTooltip, setShowPhaseTooltip] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  function renderModal(content: ReactNode) {
+    if (!mounted) return null;
+    return createPortal(content, document.body);
+  }
 
   const hasPropCover = typeof propCoverUrl === 'string' && propCoverUrl.trim().length > 0;
   const { url: resolvedCoverSrc, loading: resolvedCoverLoading } = useBookCover({
@@ -308,258 +319,202 @@ export default function AiRecoCard({ reco, index = 0, isLight, coverUrl: propCov
       </button>
 
       {/* ── Modal Analisis ── */}
-      <AnimatePresence>
-        {open && (
+      {open && renderModal(
+        <motion.div
+          className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
           <motion.div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+          />
+
+          <motion.div
+            className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            initial={{ opacity: 0, y: 32, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
           >
-            <motion.div
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => setOpen(false)}
-            />
-
-            <motion.div
-              className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-              initial={{ opacity: 0, y: 32, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-            >
-              {/* Header */}
-              <div
-                className="flex items-center justify-between px-5 py-4 border-b"
-                style={{ borderColor: 'var(--border)' }}
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-gold" />
-                  <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
-                    Analisis PustarAI
-                  </p>
-                </div>
-                <button
-                  onClick={() => setOpen(false)}
-                  className="p-1 rounded-lg hover:opacity-60 transition-opacity"
-                  style={{ color: 'var(--muted)' }}
-                >
-                  <X className="w-4 h-4" />
-                </button>
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-gold" />
+                <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+                  Analisis PustarAI
+                </p>
               </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="p-1 rounded-lg hover:opacity-60 transition-opacity"
+                style={{ color: 'var(--muted)' }}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-              <div className="p-5">
-                {/* Book preview */}
-                <div className="flex items-center gap-3 mb-5">
-                  <div className={cn(
-                    'w-12 h-16 rounded-xl overflow-hidden shadow flex-shrink-0',
-                    isLight ? 'bg-parchment-darker' : 'bg-navy-700',
-                  )}>
-                    {coverSrc
-                      ? <img src={coverSrc} alt={reco.title} className="w-full h-full object-cover" />
-                      : <div className="w-full h-full flex items-center justify-center">
-                          <BookOpen className="w-4 h-4 opacity-20" style={{ color: 'var(--text)' }} />
-                        </div>
-                    }
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm leading-tight" style={{ color: 'var(--text)' }}>
-                      {reco.title}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{authorDisplay}</p>
-                    <span
-                      className="text-[10px] font-medium px-2 py-0.5 rounded-full mt-1 inline-block"
-                      style={{ background: 'var(--surface2)', color: 'var(--muted)' }}
-                    >
-                      {reco.phase} · {reco.dominant_signal ? `Sinyal dominan: ${label}` : 'Sinyal dominan: -'}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Reasons */}
-                <div className="mb-4 p-3 rounded-2xl" style={{ background: 'var(--surface2)' }}>
-                  <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--text)' }}>
-                    ✦ {reco.reason_primary}
-                  </p>
-                  {reco.reason_secondary && (
-                    <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                      ✧ {reco.reason_secondary}
-                    </p>
+            <div className="p-5">
+              <div className="flex items-center gap-3 mb-5">
+                <div className={cn('w-12 h-16 rounded-xl overflow-hidden shadow flex-shrink-0', isLight ? 'bg-parchment-darker' : 'bg-navy-700')}>
+                  {coverSrc ? (
+                    <img src={coverSrc} alt={reco.title} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <BookOpen className="w-4 h-4 opacity-20" style={{ color: 'var(--text)' }} />
+                    </div>
                   )}
                 </div>
+                <div>
+                  <p className="font-semibold text-sm leading-tight" style={{ color: 'var(--text)' }}>
+                    {reco.title}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{authorDisplay}</p>
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full mt-1 inline-block" style={{ background: 'var(--surface2)', color: 'var(--muted)' }}>
+                    {reco.phase} · {reco.dominant_signal ? `Sinyal dominan: ${label}` : 'Sinyal dominan: -'}
+                  </span>
+                </div>
+              </div>
 
-                {/* Breakdown Sinyal */}
-                <p
-                  className="text-[10px] font-semibold uppercase tracking-widest mb-3"
-                  style={{ color: 'var(--muted)' }}
-                >
-                  Breakdown Sinyal
+              <div className="mb-4 p-3 rounded-2xl" style={{ background: 'var(--surface2)' }}>
+                <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--text)' }}>
+                  ✦ {reco.reason_primary}
                 </p>
-                <div className="flex flex-col gap-2.5">
-                  {Object.entries(safeSignals).map(([key, sig]) => {
-                    const cfg = SIGNAL_CONFIG[key as keyof typeof SIGNAL_CONFIG];
-                    if (!cfg) return null;
-                    const rawScore = Number(sig?.score);
-                    const pct = Number.isFinite(rawScore)
-                      ? Math.max(0, Math.min(100, Math.round(rawScore * 100)))
-                      : 0;
-                    return (
-                      <div key={key}>
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center gap-1.5">
-                            <cfg.Icon className={cn('w-3 h-3', cfg.textColor)} />
-                            <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                              {sig.label}
-                            </span>
-                          </div>
-                          <span className="text-[11px] font-bold" style={{ color: 'var(--text)' }}>
-                            {pct}%
+                {reco.reason_secondary && (
+                  <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                    ✧ {reco.reason_secondary}
+                  </p>
+                )}
+              </div>
+
+              <p className="text-[10px] font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--muted)' }}>
+                Breakdown Sinyal
+              </p>
+              <div className="flex flex-col gap-2.5">
+                {Object.entries(safeSignals).map(([key, sig]) => {
+                  const cfg = SIGNAL_CONFIG[key as keyof typeof SIGNAL_CONFIG];
+                  if (!cfg) return null;
+                  const rawScore = Number(sig?.score);
+                  const pct = Number.isFinite(rawScore)
+                    ? Math.max(0, Math.min(100, Math.round(rawScore * 100)))
+                    : 0;
+                  return (
+                    <div key={key}>
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-1.5">
+                          <cfg.Icon className={cn('w-3 h-3', cfg.textColor)} />
+                          <span className="text-xs" style={{ color: 'var(--muted)' }}>
+                            {sig.label}
                           </span>
                         </div>
-                        <div
-                          className="h-1.5 rounded-full overflow-hidden"
-                          style={{ background: 'var(--surface2)' }}
-                        >
-                          <motion.div
-                            className="h-full rounded-full"
-                            style={{ background: cfg.barColor }}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${pct}%` }}
-                            transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' }}
-                          />
-                        </div>
+                        <span className="text-[11px] font-bold" style={{ color: 'var(--text)' }}>
+                          {pct}%
+                        </span>
                       </div>
-                    );
-                  })}
-                </div>
-
-                <Link
-                  href={`/book/${reco.book_id}`}
-                  onClick={() => setOpen(false)}
-                  className="mt-5 w-full py-3 rounded-2xl bg-navy-800 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-navy-700 transition-colors"
-                >
-                  <BookOpen className="w-4 h-4" /> Lihat Detail Buku
-                </Link>
+                      <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--surface2)' }}>
+                        <motion.div
+                          className="h-full rounded-full"
+                          style={{ background: cfg.barColor }}
+                          initial={{ width: 0 }}
+                          animate={{ width: `${pct}%` }}
+                          transition={{ delay: 0.1, duration: 0.5, ease: 'easeOut' }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            </motion.div>
+
+              <Link
+                href={`/book/${reco.book_id}`}
+                onClick={() => setOpen(false)}
+                className="mt-5 w-full py-3 rounded-2xl bg-navy-800 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-navy-700 transition-colors"
+              >
+                <BookOpen className="w-4 h-4" /> Lihat Detail Buku
+              </Link>
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>,
+      )}
 
       {/* ── Modal Info Phase ── */}
-      <AnimatePresence>
-        {phaseInfoOpen && (
+      {phaseInfoOpen && renderModal(
+        <motion.div
+          className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setPhaseInfoOpen(false)} />
           <motion.div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            initial={{ opacity: 0, y: 32, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
           >
-            <motion.div
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => setPhaseInfoOpen(false)}
-            />
-
-            <motion.div
-              className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-              initial={{ opacity: 0, y: 32, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
-                <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-gold" />
-                  <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
-                    Arti Phase Rekomendasi
-                  </p>
-                </div>
-                <button
-                  onClick={() => setPhaseInfoOpen(false)}
-                  className="p-1 rounded-lg hover:opacity-60 transition-opacity"
-                  style={{ color: 'var(--muted)' }}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-5">
-                <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: 'var(--surface2)' }}>
-                  <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{phaseInfo.title}</span>
-                </div>
-                <p className="text-sm mb-3" style={{ color: 'var(--text)' }}>{phaseInfo.short}</p>
-                <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--muted)' }}>
-                  {phaseInfo.description}
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-gold" />
+                <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+                  Arti Phase Rekomendasi
                 </p>
-                <div className="rounded-2xl p-3" style={{ background: 'var(--surface2)' }}>
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                    💡 {phaseInfo.tip}
-                  </p>
-                </div>
               </div>
-            </motion.div>
+              <button onClick={() => setPhaseInfoOpen(false)} className="p-1 rounded-lg hover:opacity-60 transition-opacity" style={{ color: 'var(--muted)' }}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5">
+              <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: 'var(--surface2)' }}>
+                <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{phaseInfo.title}</span>
+              </div>
+              <p className="text-sm mb-3" style={{ color: 'var(--text)' }}>{phaseInfo.short}</p>
+              <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--muted)' }}>{phaseInfo.description}</p>
+              <div className="rounded-2xl p-3" style={{ background: 'var(--surface2)' }}>
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>💡 {phaseInfo.tip}</p>
+              </div>
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>,
+      )}
 
       {/* ── Modal Info Signal ── */}
-      <AnimatePresence>
-        {signalInfoOpen && (
+      {signalInfoOpen && renderModal(
+        <motion.div
+          className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+        >
+          <motion.div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSignalInfoOpen(false)} />
           <motion.div
-            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
+            style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
+            initial={{ opacity: 0, y: 32, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 28 }}
           >
-            <motion.div
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-              onClick={() => setSignalInfoOpen(false)}
-            />
-
-            <motion.div
-              className="relative w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl"
-              style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}
-              initial={{ opacity: 0, y: 32, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.97 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 28 }}
-            >
-              <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
-                <div className="flex items-center gap-2">
-                  <BarChart2 className="w-4 h-4 text-gold" />
-                  <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
-                    Arti Sinyal Rekomendasi
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSignalInfoOpen(false)}
-                  className="p-1 rounded-lg hover:opacity-60 transition-opacity"
-                  style={{ color: 'var(--muted)' }}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              <div className="p-5">
-                <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: 'var(--surface2)' }}>
-                  <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{signalInfo.title}</span>
-                </div>
-                <p className="text-sm mb-3" style={{ color: 'var(--text)' }}>{signalInfo.short}</p>
-                <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--muted)' }}>
-                  {signalInfo.description}
+            <div className="flex items-center justify-between px-5 py-4 border-b" style={{ borderColor: 'var(--border)' }}>
+              <div className="flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-gold" />
+                <p className="font-semibold text-sm" style={{ color: 'var(--text)' }}>
+                  Arti Sinyal Rekomendasi
                 </p>
-                <div className="rounded-2xl p-3" style={{ background: 'var(--surface2)' }}>
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                    💡 {signalInfo.tip}
-                  </p>
-                </div>
               </div>
-            </motion.div>
+              <button onClick={() => setSignalInfoOpen(false)} className="p-1 rounded-lg hover:opacity-60 transition-opacity" style={{ color: 'var(--muted)' }}>
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5">
+              <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full" style={{ background: 'var(--surface2)' }}>
+                <span className="text-xs font-semibold" style={{ color: 'var(--text)' }}>{signalInfo.title}</span>
+              </div>
+              <p className="text-sm mb-3" style={{ color: 'var(--text)' }}>{signalInfo.short}</p>
+              <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--muted)' }}>{signalInfo.description}</p>
+              <div className="rounded-2xl p-3" style={{ background: 'var(--surface2)' }}>
+                <p className="text-xs" style={{ color: 'var(--muted)' }}>💡 {signalInfo.tip}</p>
+              </div>
+            </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </motion.div>,
+      )}
     </motion.div>
   );
 }
